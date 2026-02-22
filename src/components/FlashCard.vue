@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted } from "vue";
 import { playClickSoundBasic, playClickSoundMelodic } from "../utils/sound";
-
-export type Answer = "again" | "hard" | "good" | "easy";
+import type { Answer } from "../scheduler/types";
 
 const props = defineProps<{
   activeSide: "front" | "back";

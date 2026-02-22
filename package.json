@@ -13,7 +13,6 @@
     "lint:knip": "knip",
     "format": "oxfmt src",
     "format:check": "oxfmt --check src",
-    "format:write": "oxfmt src",
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:run": "vitest run",

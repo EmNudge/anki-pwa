@@ -9,8 +9,6 @@ import {
   toggleSoundEffects,
   schedulerSettingsModalOpenSig,
   resetScheduler,
-  backgroundFxEnabledSig,
-  toggleBackgroundFx,
   deckInfoSig,
   selectedDeckIdSig,
   selectedCardSig,
@@ -34,6 +32,7 @@ import {
   Grid3x3,
   Hash,
 } from "lucide-vue-next";
+import { useTheme } from "../design-system/hooks/useTheme";
 import { getRenderedCardString } from "../utils/render";
 
 function icon(comp: Component): Component {
@@ -59,6 +58,29 @@ function cardPreview(cardHtml: string): VNode {
       h("div", { class: "card-preview-content", innerHTML: cardHtml }),
     ]),
   ]);
+}
+
+function getCardTextPreview(card: { values: Record<string, string | null> }, maxLen: number): string {
+  const firstFieldValue = Object.values(card.values)[0];
+  const raw = typeof firstFieldValue === "string" ? firstFieldValue : "";
+  const text = raw.replace(/<[^>]*>/g, "").trim();
+  return text.length > maxLen ? `${text.slice(0, maxLen)}...` : text;
+}
+
+function renderFirstCardPreview(
+  cards: { values: Record<string, string | null>; templates: { qfmt: string }[] }[],
+  mediaFiles: Map<string, string>,
+): VNode | null {
+  const firstCard = cards[0];
+  if (!firstCard || firstCard.templates.length === 0) return null;
+  const firstTemplate = firstCard.templates[0];
+  if (!firstTemplate) return null;
+  const renderedFront = getRenderedCardString({
+    templateString: firstTemplate.qfmt,
+    variables: firstCard.values,
+    mediaFiles,
+  });
+  return cardPreview(renderedFront);
 }
 
 export function useCommands() {
@@ -108,11 +130,8 @@ export function useCommands() {
               icon: icon(Hash),
               hotkey: "ctrl+J",
               children: cardsSig.value.map((card, index) => {
-                const firstFieldValue = Object.values(card.values)[0];
-                const raw = typeof firstFieldValue === "string" ? firstFieldValue : "";
-                const text = raw.replace(/<[^>]*>/g, "").trim();
-                const preview = text.length > 40 ? `${text.slice(0, 40)}...` : text;
-                const title = text ? `Card ${index + 1}: ${preview}` : `Card ${index + 1}`;
+                const preview = getCardTextPreview(card, 40);
+                const title = preview ? `Card ${index + 1}: ${preview}` : `Card ${index + 1}`;
                 const isCurrentCard = selectedCardSig.value === index;
 
                 return {
@@ -142,10 +161,8 @@ export function useCommands() {
         icon: icon(Moon),
         hotkey: "ctrl+T",
         handler: () => {
-          const currentTheme = document.documentElement.getAttribute("data-theme");
-          const newTheme = currentTheme === "light" ? "dark" : "light";
-          document.documentElement.setAttribute("data-theme", newTheme);
-          localStorage.setItem("theme", newTheme);
+          const { toggleTheme } = useTheme();
+          toggleTheme();
         },
       },
       {
@@ -155,14 +172,6 @@ export function useCommands() {
         hotkey: "ctrl+E",
         handler: () => {
           toggleSoundEffects();
-        },
-      },
-      {
-        id: "toggle-background-fx",
-        title: `${backgroundFxEnabledSig.value ? "Disable" : "Enable"} Background Animation`,
-        icon: icon(backgroundFxEnabledSig.value ? Pause : Play),
-        handler: () => {
-          toggleBackgroundFx();
         },
       },
       {
@@ -208,18 +217,7 @@ export function useCommands() {
                     const allTemplateNames = Array.from(
                       new Set(ankiData.cards.flatMap((c) => c.templates.map((t) => t.name))),
                     );
-                    const firstCard = ankiData.cards[0];
-                    const preview = (() => {
-                      if (!firstCard || firstCard.templates.length === 0) return null;
-                      const firstTemplate = firstCard.templates[0];
-                      if (!firstTemplate) return null;
-                      const renderedFront = getRenderedCardString({
-                        templateString: firstTemplate.qfmt,
-                        variables: firstCard.values,
-                        mediaFiles: mediaFilesSig.value,
-                      });
-                      return cardPreview(renderedFront);
-                    })();
+                    const preview = renderFirstCardPreview(ankiData.cards, mediaFilesSig.value);
                     return [
                       { label: "Cards", value: deckInfo.cardCount.toString() },
                       { label: "Templates", value: allTemplateNames.join(", ") },
@@ -238,18 +236,7 @@ export function useCommands() {
                   const templateNames = Array.from(
                     new Set(subdeckCards.flatMap((c) => c.templates.map((t) => t.name))),
                   );
-                  const firstCard = subdeckCards[0];
-                  const preview = (() => {
-                    if (!firstCard || firstCard.templates.length === 0) return null;
-                    const firstTemplate = firstCard.templates[0];
-                    if (!firstTemplate) return null;
-                    const renderedFront = getRenderedCardString({
-                      templateString: firstTemplate.qfmt,
-                      variables: firstCard.values,
-                      mediaFiles: mediaFilesSig.value,
-                    });
-                    return cardPreview(renderedFront);
-                  })();
+                  const preview = renderFirstCardPreview(subdeckCards, mediaFilesSig.value);
                   return {
                     id: subdeck.id,
                     title: subdeck.name,
@@ -276,11 +263,8 @@ export function useCommands() {
               title: "Browse All Notes",
               icon: icon(Layers),
               children: ankiData.cards.map((card, index) => {
-                const firstFieldValue = Object.values(card.values)[0];
-                const raw = typeof firstFieldValue === "string" ? firstFieldValue : "";
-                const text = raw.replace(/<[^>]*>/g, "").trim();
-                const previewText = text.length > 30 ? `${text.slice(0, 30)}...` : text;
-                const title = text ? `Note ${index + 1}: ${previewText}` : `Note ${index + 1}`;
+                const previewText = getCardTextPreview(card, 30);
+                const title = previewText ? `Note ${index + 1}: ${previewText}` : `Note ${index + 1}`;
                 const label =
                   currentDeckName && card.deckName === currentDeckName
                     ? "In current deck"

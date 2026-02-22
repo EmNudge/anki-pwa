@@ -112,6 +112,9 @@ All SM-2 parsing errors are caught and logged to the console with details. Cards
 - `Cmd+K` / `Ctrl+K`: Open command palette
 - `Ctrl+R`: Toggle scheduler on/off
 
-## Future Enhancements
+## Supported Algorithms
 
-The architecture is designed to support multiple scheduling algorithms. FSRS (Free Spaced Repetition Scheduler) support can be added alongside SM-2 in the future!
+- **SM-2**: Classic SuperMemo-2 algorithm (default)
+- **FSRS**: Free Spaced Repetition Scheduler - a modern, machine learning-based algorithm with configurable parameters
+
+Switch between algorithms via the Scheduler Settings (Cmd+K → "Scheduler Settings").

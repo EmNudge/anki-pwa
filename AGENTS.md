@@ -20,6 +20,8 @@
 - Avoid using TS enum types, use string unions
 - Avoid using TS decorators or "private/public" descriptors
 
-# Solid style guide
+# Vue style guide
+- Use Vue 3 Composition API with `<script setup lang="ts">`
 - Try to use props instead of global stores unless data needs to be shared between many components
 - If a method handler is only a few lines long and only used once, inline it in the place it's used
+- Use design system components from `src/design-system/` instead of raw HTML elements

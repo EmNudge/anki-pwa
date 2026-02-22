@@ -1,7 +1,6 @@
 import { getNotesType } from "./proto";
-
 import { Database } from "sql.js";
-import { executeQueryAll } from "~/utils/sql";
+import { executeQueryAll, buildNoteToDeckMap, resolveDeckName } from "~/utils/sql";
 import { parseFieldConfigProto, parseTemplatesProto } from "./proto";
 import { assertTruthy } from "~/utils/assert";
 
@@ -97,19 +96,7 @@ export function getDataFromAnki21b(db: Database): AnkiDB21bData {
       mid: string;
     }>(db, "SELECT id, flds, tags, cast(mid as text) as mid FROM notes");
 
-    // Query cards table to get deck IDs for each note
-    const cardsDeckInfo = executeQueryAll<{ nid: number; did: number }>(
-      db,
-      "SELECT nid, did FROM cards",
-    );
-
-    // Create a map from note ID to deck ID (use first card's deck if multiple cards per note)
-    const noteToDeckId = new Map<number, number>();
-    for (const card of cardsDeckInfo) {
-      if (!noteToDeckId.has(card.nid)) {
-        noteToDeckId.set(card.nid, card.did);
-      }
-    }
+    const noteToDeckId = buildNoteToDeckMap(db);
 
     return notes.map((note) => {
       const fieldNames = fields
@@ -119,10 +106,7 @@ export function getDataFromAnki21b(db: Database): AnkiDB21bData {
       const templates = templatesMap.get(note.mid);
       assertTruthy(templates, `Template for note ${note.mid} not found`);
 
-      // Get deck name for this note
-      const deckId = noteToDeckId.get(note.id);
-      const cardDeckName =
-        deckId !== undefined ? (decks[deckId.toString()]?.name ?? "Unknown") : "Unknown";
+      const cardDeckName = resolveDeckName(note.id, noteToDeckId, decks);
 
       return {
         values: Object.fromEntries(
@@ -137,6 +121,5 @@ export function getDataFromAnki21b(db: Database): AnkiDB21bData {
   })();
 
   const notesTypes = getNotesType(db);
-
   return { cards, notesTypes, deckName, decks };
 }

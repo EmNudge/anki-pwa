@@ -5,7 +5,6 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "node",
-    setupFiles: [],
     exclude: ['**/node_modules/**', '**/dist/**', '**/e2e/**'],
   },
   resolve: {

@@ -292,23 +292,6 @@ export class ReviewQueue {
   }
 
   /**
-   * Update settings
-   */
-  updateSettings(settings: SchedulerSettings): void {
-    const oldAlgorithm = this.settings.algorithm;
-    this.settings = settings;
-
-    // Recreate the algorithm if it changed
-    if (settings.algorithm !== oldAlgorithm) {
-      if (settings.algorithm === "fsrs") {
-        this.algorithm = new FSRSAlgorithm(settings.fsrsParams);
-      } else {
-        this.algorithm = new SM2Algorithm();
-      }
-    }
-  }
-
-  /**
    * Get display info for a card (for UI visualization)
    */
   getCardDisplayInfo(reviewCard: ReviewCard): {
