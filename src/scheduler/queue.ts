@@ -106,16 +106,14 @@ export class ReviewQueue {
         const cardId = this.generateCardId(cardIndex, templateIndex);
         const existing = stateMap.get(cardId);
         const isNew = !existing;
-        const reviewState: CardReviewState =
-          existing ??
-          {
-            cardId,
-            deckId: this.deckId,
-            algorithm: this.settings.algorithm,
-            cardState: this.algorithm.createCard(),
-            createdAt: now.getTime(),
-            lastReviewed: null,
-          };
+        const reviewState: CardReviewState = existing ?? {
+          cardId,
+          deckId: this.deckId,
+          algorithm: this.settings.algorithm,
+          cardState: this.algorithm.createCard(),
+          createdAt: now.getTime(),
+          lastReviewed: null,
+        };
 
         return {
           cardId,
@@ -147,16 +145,11 @@ export class ReviewQueue {
       .filter((x): x is { card: ReviewCard; isDue: boolean } => Boolean(x));
 
     const newLeft = Math.max(0, this.settings.dailyNewLimit - this.todayStats.newCount);
-    const reviewLeft = Math.max(
-      0,
-      this.settings.dailyReviewLimit - this.todayStats.reviewCount,
-    );
+    const reviewLeft = Math.max(0, this.settings.dailyReviewLimit - this.todayStats.reviewCount);
 
     const newCandidates = safe.filter((x) => x.card.isNew).map((x) => x.card);
     const dueReviewCandidates = safe.filter((x) => !x.card.isNew && x.isDue).map((x) => x.card);
-    const aheadCandidates = safe
-      .filter((x) => !x.card.isNew && !x.isDue)
-      .map((x) => x.card);
+    const aheadCandidates = safe.filter((x) => !x.card.isNew && !x.isDue).map((x) => x.card);
 
     const selectedNew = newCandidates.slice(0, newLeft);
     const extraNew = newCandidates.slice(newLeft);
@@ -170,8 +163,7 @@ export class ReviewQueue {
     const coreDue = [...selectedNew, ...selectedReviews, ...includeAhead];
     const extras = [...extraNew, ...extraReviews];
 
-    const finalDue =
-      coreDue.length > 0 && extras.length > 0 ? [...coreDue, ...extras] : coreDue;
+    const finalDue = coreDue.length > 0 && extras.length > 0 ? [...coreDue, ...extras] : coreDue;
 
     return finalDue.sort((a, b) => {
       if (a.isNew && !b.isNew) return -1;

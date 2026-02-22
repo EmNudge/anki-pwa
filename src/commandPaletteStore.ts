@@ -1,28 +1,24 @@
-import { createSignal } from "solid-js";
-import type { JSX } from "solid-js";
+import { ref } from "vue";
+import type { Component, VNode } from "vue";
 
 export interface Command {
   id: string;
   title: string;
-  icon?: JSX.Element;
+  icon?: Component;
   hotkey?: string;
   label?: string;
   children?: Command[];
   handler?: () => void | { keepOpen: boolean };
   metadata?: {
     label: string;
-    value: string | JSX.Element;
+    value: string | VNode;
   }[];
 }
 
-const [commandPaletteOpenSig, setCommandPaletteOpenSig] = createSignal(false);
-const [commandPaletteInitialParentSig, setCommandPaletteInitialParentSig] = createSignal<
-  string | null
->(null);
+export const commandPaletteOpenSig = ref(false);
+export const commandPaletteInitialParentSig = ref<string | null>(null);
 
 export function openCommandPalette(initialParent?: string) {
-  setCommandPaletteInitialParentSig(initialParent ?? null);
-  setCommandPaletteOpenSig(true);
+  commandPaletteInitialParentSig.value = initialParent ?? null;
+  commandPaletteOpenSig.value = true;
 }
-
-export { commandPaletteOpenSig, setCommandPaletteOpenSig, commandPaletteInitialParentSig };

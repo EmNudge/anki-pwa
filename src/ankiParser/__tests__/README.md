@@ -70,6 +70,7 @@ End-to-end tests covering:
 Tests parsing of actual .apkg files with different format versions:
 
 **example_music_intervals.apkg (Anki 2.1+, version 18):**
+
 - Basic deck parsing and structure validation
 - Card data extraction with correct field mapping
 - Template parsing with required fields
@@ -80,6 +81,7 @@ Tests parsing of actual .apkg files with different format versions:
 - Field structure consistency across cards
 
 **ap_gov_vocab_anki11.apkg (Legacy Anki 2.0/2.1, version 11):**
+
 - Legacy format parsing and compatibility
 - Collection version 11 detection (V1 scheduler)
 - Card data extraction from older format
@@ -106,6 +108,7 @@ console.log(`Fields:`, Object.keys(result.cards[0].values));
 ### Test Files
 
 **example_music_intervals.apkg:**
+
 - Anki 2.1+ format (collection version 18)
 - 1 card with Front/Back fields
 - Modern Anki2 format database
@@ -113,6 +116,7 @@ console.log(`Fields:`, Object.keys(result.cards[0].values));
 - Basic card template
 
 **ap_gov_vocab_anki11.apkg:**
+
 - Legacy Anki 2.0/2.1 format (collection version 11)
 - 242 vocabulary cards with Front/Back fields
 - Chapter-based tagging system (Ch.1 through Ch.16)

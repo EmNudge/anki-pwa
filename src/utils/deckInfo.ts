@@ -1,4 +1,4 @@
-import type { SubDeckInfo } from "../stores";
+import type { SubDeckInfo } from "../types";
 import type { AnkiDB2Data } from "../ankiParser/anki2";
 import type { AnkiDB21bData } from "../ankiParser/anki21b";
 
@@ -27,9 +27,7 @@ export function computeDeckInfo(ankiData: AnkiData) {
       );
 
       // Extract just the last segment after the final "::" for display
-      const displayName = deck.name.includes("::")
-        ? deck.name.split("::").pop()!
-        : deck.name;
+      const displayName = deck.name.includes("::") ? deck.name.split("::").pop()! : deck.name;
 
       return {
         id: deckId,
@@ -66,7 +64,8 @@ function getDisplayName(deckName: string, subdecks: SubDeckInfo[]) {
     })
     .filter((name): name is string => name !== null);
 
-  const allSameParent = parentNames.length > 0 && parentNames.every((name) => name === parentNames[0]);
+  const allSameParent =
+    parentNames.length > 0 && parentNames.every((name) => name === parentNames[0]);
 
   return allSameParent ? parentNames[0]! : deckName;
 }

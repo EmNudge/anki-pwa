@@ -27,7 +27,10 @@ function readVarint(buffer: Uint8Array, offset: number): { value: number; newOff
   return { value, newOffset };
 }
 
-function readLengthDelimited(buffer: Uint8Array, offset: number): { data: Uint8Array; newOffset: number } {
+function readLengthDelimited(
+  buffer: Uint8Array,
+  offset: number,
+): { data: Uint8Array; newOffset: number } {
   const { value: length, newOffset: afterLength } = readVarint(buffer, offset);
   const data = buffer.slice(afterLength, afterLength + length);
   return { data, newOffset: afterLength + length };
@@ -55,7 +58,7 @@ export function parseMediaProto(buffer: Uint8Array): Record<string, string> {
 
       // Parse the entry message
       let entryOffset = 0;
-      let filename = '';
+      let filename = "";
 
       while (entryOffset < entryData.length) {
         const entryTag = entryData[entryOffset++];
@@ -67,7 +70,10 @@ export function parseMediaProto(buffer: Uint8Array): Record<string, string> {
 
         if (entryFieldNumber === 1 && entryWireType === 2) {
           // Filename (string, length-delimited)
-          const { data: filenameData, newOffset: afterFilename } = readLengthDelimited(entryData, entryOffset);
+          const { data: filenameData, newOffset: afterFilename } = readLengthDelimited(
+            entryData,
+            entryOffset,
+          );
           filename = new TextDecoder().decode(filenameData);
           entryOffset = afterFilename;
         } else if (entryFieldNumber === 2 && entryWireType === 0) {

@@ -13,7 +13,7 @@ function playSound(filename: Sound) {
 }
 
 export function playClickSoundMelodic() {
-  if (!soundEffectsEnabledSig()) {
+  if (!soundEffectsEnabledSig.value) {
     return;
   }
 
@@ -21,7 +21,7 @@ export function playClickSoundMelodic() {
 }
 
 export function playClickSoundBasic() {
-  if (!soundEffectsEnabledSig()) {
+  if (!soundEffectsEnabledSig.value) {
     return;
   }
 

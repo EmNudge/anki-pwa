@@ -1,15 +1,17 @@
 // Primitive Components
-export { Button, type ButtonProps, type ButtonVariant, type ButtonSize } from "./primitives/Button";
-export { Input, type InputProps } from "./primitives/Input";
-export { Select, type SelectProps } from "./primitives/Select";
-export { Label, type LabelProps } from "./primitives/Label";
-export { IconButton, type IconButtonProps, type IconButtonVariant, type IconButtonSize } from "./primitives/IconButton";
-export { Badge, type BadgeProps, type BadgeVariant, type BadgeSize, type BadgeStyle } from "./primitives/Badge";
-export { Card, type CardProps, type CardVariant, type CardPadding } from "./primitives/Card";
-export { Modal, type ModalProps, type ModalSize } from "./primitives/Modal";
+export { default as Button } from "./primitives/Button.vue";
+export { default as Input } from "./primitives/Input.vue";
+export { default as Select } from "./primitives/Select.vue";
+export { default as Label } from "./primitives/Label.vue";
+export { default as IconButton } from "./primitives/IconButton.vue";
+export { default as Badge } from "./primitives/Badge.vue";
+export { default as DsCard } from "./primitives/Card.vue";
+export { default as Modal } from "./primitives/Modal.vue";
+export { default as StatItem } from "./primitives/StatItem.vue";
 
 // Layout Components
-export { Stack, type StackProps, type StackDirection, type StackAlign, type StackJustify, type StackSpacing } from "./layout/Stack";
-export { Grid, type GridProps, type GridColumns, type GridGap } from "./layout/Grid";
-export { Flex, type FlexProps, type FlexDirection, type FlexAlign, type FlexJustify, type FlexGap } from "./layout/Flex";
-export { Container, type ContainerProps, type ContainerSize } from "./layout/Container";
+export { default as Stack } from "./layout/Stack.vue";
+export { default as DsGrid } from "./layout/Grid.vue";
+export { default as Flex } from "./layout/Flex.vue";
+export { default as Container } from "./layout/Container.vue";
+export { default as SidePanel } from "./layout/SidePanel.vue";
