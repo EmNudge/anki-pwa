@@ -65,9 +65,12 @@ const emit = defineEmits<{
   display: flex;
   justify-content: center;
   gap: var(--spacing-4);
-  flex-wrap: wrap;
   width: 500px;
   max-width: 100%;
+}
+.button-set > * {
+  flex: 1 1 0;
+  min-width: 0;
 }
 .button-set .time { opacity: 0.5; }
 @media (max-width: 1200px) { .button-set { width: 800px; } }
