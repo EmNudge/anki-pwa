@@ -6,9 +6,8 @@ import CardButtons from "./components/CardButtons.vue";
 import type { Answer } from "./scheduler/types";
 import { getRenderedCardString } from "./utils/render";
 import { computeDeckInfo } from "./utils/deckInfo";
-import FilePicker from "./components/FilePicker.vue";
 import {
-  ankiCachePromise,
+  activeViewSig,
   ankiDataSig,
   cardsSig,
   currentReviewCardSig,
@@ -22,9 +21,11 @@ import {
   selectedCardSig,
   selectedDeckIdSig,
   selectedTemplateSig,
-  blobSig,
   templatesSig,
 } from "./stores";
+import StatusBar from "./components/StatusBar.vue";
+import FileLibrary from "./components/FileLibrary.vue";
+import DeckCreator from "./components/DeckCreator.vue";
 import SRSVisualization from "./components/SRSVisualization.vue";
 import SchedulerSettings from "./components/SchedulerSettings.vue";
 import CommandPalette from "./components/CommandPalette.vue";
@@ -147,12 +148,6 @@ const intervals = computed(() => {
   return queue.getNextIntervals(reviewCard);
 });
 
-async function handleFileChange(file: File) {
-  const cache = await ankiCachePromise;
-  await cache.put("anki-deck", new Response(file));
-  blobSig.value = file;
-}
-
 function handleReveal() {
   updateActiveSide("back");
   reviewStartTime.value = Date.now();
@@ -178,7 +173,16 @@ async function handleChooseAnswer(answer: Answer) {
 </script>
 
 <template>
-  <main>
+  <StatusBar />
+
+  <!-- FILES VIEW -->
+  <FileLibrary v-if="activeViewSig === 'files'" />
+
+  <!-- CREATE DECK VIEW -->
+  <DeckCreator v-else-if="activeViewSig === 'create'" />
+
+  <!-- REVIEW VIEW -->
+  <main v-else>
     <!-- LEFT COLUMN: File Info -->
     <div class="layout-left-column">
       <FileInfo v-if="deckInfoSig" />
@@ -207,7 +211,9 @@ async function handleChooseAnswer(answer: Answer) {
           @choose-answer="handleChooseAnswer"
         />
       </template>
-      <FilePicker v-else-if="cardsSig.length === 0" @file-change="handleFileChange" />
+      <p v-else-if="cardsSig.length === 0" class="no-deck-message">
+        No deck loaded. Switch to the <button class="link-btn" @click="activeViewSig = 'files'">Files</button> tab to open one.
+      </p>
     </div>
 
     <!-- RIGHT COLUMN: SRS Visualization -->
@@ -227,7 +233,7 @@ async function handleChooseAnswer(answer: Answer) {
 main {
   display: grid;
   grid-template-columns: 300px 1fr 400px;
-  min-height: 100vh;
+  min-height: calc(100vh - 44px);
 }
 
 :global(hr) { margin: var(--spacing-4) 0; }
@@ -236,8 +242,8 @@ main {
   grid-column: 1;
   grid-row: 1;
   position: sticky;
-  top: 0;
-  height: 100vh;
+  top: 44px;
+  height: calc(100vh - 44px);
   overflow-y: auto;
   background: var(--color-surface);
   border-right: 1px solid var(--color-border);
@@ -259,13 +265,30 @@ main {
   grid-column: 3;
   grid-row: 1;
   position: sticky;
-  top: 0;
-  height: 100vh;
+  top: 44px;
+  height: calc(100vh - 44px);
   overflow-y: auto;
   background: var(--color-surface);
   border-left: 1px solid var(--color-border);
   padding: var(--spacing-4);
   text-align: left;
+}
+
+.no-deck-message {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-base);
+}
+
+.link-btn {
+  display: inline;
+  padding: 0;
+  font: inherit;
+  color: var(--color-primary);
+  background: none;
+  border: none;
+  box-shadow: none;
+  cursor: pointer;
+  text-decoration: underline;
 }
 
 @media (max-width: 1200px) {
