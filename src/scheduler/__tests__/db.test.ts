@@ -4,18 +4,7 @@ import { ref, reactive } from "vue";
 import type { SchedulerSettings } from "../types";
 import { DEFAULT_SCHEDULER_SETTINGS } from "../types";
 
-// Each test gets a fresh IndexedDB, so we re-instantiate ReviewDB per test.
-// We dynamically import to pick up the fresh fake-indexeddb global.
 async function createReviewDB() {
-  // fake-indexeddb/auto replaces the global, but the module-level singleton
-  // in db.ts caches its connection. Re-import with a cache-bust to get a
-  // fresh instance that connects to the current fake-indexeddb.
-  const { ReviewDB } = await import("../db") as any;
-
-  // The module only exports the singleton. Construct a new instance instead
-  // by reaching into the class (it's the default export of the module scope).
-  // Since ReviewDB is not exported, we instantiate via the module's singleton
-  // pattern. For testability, we just use the singleton and call clearAll.
   const { reviewDB } = await import("../db");
   await reviewDB.clearAll();
   return reviewDB;
