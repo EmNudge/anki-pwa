@@ -17,6 +17,7 @@ export function getNotesType(db: Database) {
     }>(db, "SELECT cast(id as text) as id, name, config FROM notetypes");
 
     return notesTypes.map((notesType) => ({
+      id: String(notesType.id),
       name: notesType.name,
       ...parseNotesTypeConfigProto(notesType.config),
     }));

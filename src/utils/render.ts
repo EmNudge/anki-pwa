@@ -139,11 +139,10 @@ const SOUND_ICON_SVG =
 function replaceTemplatingSyntax(renderedString: string) {
   return renderedString
     .replace(/\[sound:(.+?)\]/g, (_match, filename) => {
-      const randomUuid = crypto.randomUUID();
       return [
         `<div class='audio-container' data-autoplay>`,
-        `<button onclick="document.getElementById('audio-${randomUuid}').play()" data-autoplay>${SOUND_ICON_SVG}</button>`,
-        `<audio src="${filename}" id="audio-${randomUuid}"></audio>`,
+        `<button data-autoplay>${SOUND_ICON_SVG}</button>`,
+        `<audio src="${filename}"></audio>`,
         "</div>",
       ].join("");
     })

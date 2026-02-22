@@ -21,9 +21,10 @@ test.describe('Card Display', () => {
     const cardContent = page.locator('.card-content');
     await expect(cardContent).toBeVisible();
 
-    // Content should not be empty
-    const textContent = await cardContent.textContent();
-    expect(textContent?.trim()).not.toBe('');
+    // Content is rendered inside a sandboxed iframe
+    const iframe = page.frameLocator('.card-content iframe.sandboxed-card');
+    const body = iframe.locator('body');
+    await expect(body).not.toBeEmpty();
   });
 
   test('should reveal back side when Reveal button is clicked', async ({ loadedDeckPage: page }) => {
@@ -41,14 +42,17 @@ test.describe('Card Display', () => {
   });
 
   test('should display different content on front and back', async ({ loadedDeckPage: page }) => {
+    const iframe = page.frameLocator('.card-content iframe.sandboxed-card');
+
     // Get front content
-    const frontContent = await page.locator('.card-content').textContent();
+    const frontContent = await iframe.locator('body').textContent();
 
     // Reveal back
     await page.click('button:has-text("Reveal")');
 
-    // Get back content
-    const backContent = await page.locator('.card-content').textContent();
+    // Get back content (iframe reloads with new content)
+    await page.waitForTimeout(500);
+    const backContent = await iframe.locator('body').textContent();
 
     // Back content should include front content (as per Anki spec with FrontSide)
     expect(backContent).toContain(frontContent);
@@ -82,9 +86,10 @@ test.describe('Card Navigation', () => {
     // Check that we're back to front side (next card loaded)
     await expect(page.locator('button:has-text("Reveal")')).toBeVisible();
 
-    // Verify card content still exists
-    const cardContent = await page.locator('.card-content').textContent();
-    expect(cardContent?.trim()).not.toBe('');
+    // Verify card content still exists inside iframe
+    const iframe = page.frameLocator('.card-content iframe.sandboxed-card');
+    const body = iframe.locator('body');
+    await expect(body).not.toBeEmpty();
   });
 
   test('should cycle through answer options correctly', async ({ loadedDeckPage: page }) => {

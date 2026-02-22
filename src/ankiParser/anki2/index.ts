@@ -11,6 +11,7 @@ export type AnkiDB2Data = {
     };
     tags: string[];
     templates: z.infer<typeof modelSchema>[string]["tmpls"];
+    css: string;
     deckName: string;
   }[];
   notesTypes: null;
@@ -83,6 +84,7 @@ export function getDataFromAnki2(db: Database): AnkiDB2Data {
         values: valuesMap,
         tags: note.tags.split("\x1F"),
         templates: modelForCard.tmpls,
+        css: modelForCard.css,
         deckName: cardDeckName,
       };
     });

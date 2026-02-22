@@ -15,6 +15,7 @@ export type AnkiDB21bData = {
       afmt: string;
       qfmt: string;
     }[];
+    css: string;
     deckName: string;
   }[];
   notesTypes: ReturnType<typeof getNotesType>;
@@ -84,6 +85,9 @@ export function getDataFromAnki21b(db: Database): AnkiDB21bData {
     return templatesMap;
   })();
 
+  const notesTypes = getNotesType(db);
+  const notesTypeCssMap = new Map(notesTypes.map((nt) => [nt.id, nt.css]));
+
   const cards = (() => {
     /**
      * Notes define content.
@@ -114,12 +118,12 @@ export function getDataFromAnki21b(db: Database): AnkiDB21bData {
         ),
         // anki21b only has one template per model?
         templates: templates,
+        css: notesTypeCssMap.get(note.mid) ?? "",
         tags: [],
         deckName: cardDeckName,
       };
     });
   })();
 
-  const notesTypes = getNotesType(db);
   return { cards, notesTypes, deckName, decks };
 }
