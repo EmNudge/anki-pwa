@@ -34,13 +34,17 @@ import {
 } from "lucide-vue-next";
 import { useTheme } from "../design-system/hooks/useTheme";
 import { getRenderedCardString } from "../utils/render";
+import { sanitizeHtmlForPreview } from "../utils/sanitize";
 
 function icon(comp: Component): Component {
   return markRaw(comp);
 }
 
 function metadataHtml(html: string): VNode {
-  return h("div", { innerHTML: html, style: "white-space: pre-wrap; word-break: break-word" });
+  return h("div", {
+    innerHTML: sanitizeHtmlForPreview(html),
+    style: "white-space: pre-wrap; word-break: break-word",
+  });
 }
 
 function templateViewer(templateHtml: string): VNode {
@@ -55,7 +59,7 @@ function cardPreview(cardHtml: string): VNode {
   return h("div", { class: "card-preview-container" }, [
     h("div", { class: "card-preview" }, [
       h("div", { class: "card-preview-badge" }, "Front"),
-      h("div", { class: "card-preview-content", innerHTML: cardHtml }),
+      h("div", { class: "card-preview-content", innerHTML: sanitizeHtmlForPreview(cardHtml) }),
     ]),
   ]);
 }

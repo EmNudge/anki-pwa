@@ -1,0 +1,148 @@
+<script setup lang="ts">
+import { ref, watch, onBeforeUnmount, computed } from "vue";
+import katexCss from "katex/dist/katex.min.css?raw";
+import type { Theme } from "../design-system/hooks/useTheme";
+
+const props = defineProps<{
+  cardHtml: string;
+  cardCss: string;
+  theme: Theme;
+}>();
+
+const emit = defineEmits<{
+  audioButtonClick: [src: string];
+  backgroundDetected: [color: string | null];
+}>();
+
+const iframeRef = ref<HTMLIFrameElement | null>(null);
+let resizeObserver: ResizeObserver | null = null;
+
+const BASE_STYLES = `
+  *, *::before, *::after { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 0;
+    font-family: system-ui, -apple-system, sans-serif;
+    overflow: hidden;
+  }
+  :where(html[data-theme="light"]) body { color: #18181b; }
+  :where(html[data-theme="dark"]) body { color: #f4f4f5; }
+  img { max-width: 100%; height: 200px; display: block; margin: 0 auto; }
+  hr { margin: 1rem 0; border: none; border-top: 1px solid; opacity: 0.5; }
+  :where(html[data-theme="light"]) hr { border-color: #e4e4e7; }
+  :where(html[data-theme="dark"]) hr { border-color: #3f3f46; }
+  .audio-container {
+    display: inline-flex;
+    align-items: center;
+  }
+  .audio-container button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0.25rem;
+    color: inherit;
+  }
+  .audio-container button svg { pointer-events: none; }
+  audio { display: none; }
+`;
+
+// srcdoc excludes theme so theme changes don't cause full iframe reloads
+const srcdoc = computed(() => {
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>${BASE_STYLES}</style>
+<style>${katexCss}</style>
+${props.cardCss ? `<style>${props.cardCss}</style>` : ""}
+</head>
+<body class="card">
+${props.cardHtml}
+</body>
+</html>`;
+});
+
+function setupIframe() {
+  const iframe = iframeRef.value;
+  if (!iframe?.contentDocument) return;
+
+  const doc = iframe.contentDocument;
+  const body = doc.body;
+  if (!body) return;
+
+  // Set initial theme
+  doc.documentElement.dataset.theme = props.theme;
+
+  // Resize observer to auto-size iframe height to content
+  resizeObserver?.disconnect();
+  resizeObserver = new ResizeObserver(() => updateHeight());
+  resizeObserver.observe(body);
+
+  // Listen for image loads to retrigger height measurement
+  for (const img of doc.querySelectorAll("img")) {
+    img.addEventListener("load", updateHeight);
+  }
+
+  // Wire up audio buttons — clicks emit to parent since scripts are blocked
+  for (const btn of doc.querySelectorAll<HTMLElement>(".audio-container button")) {
+    btn.addEventListener("click", () => {
+      const audio = btn.closest(".audio-container")?.querySelector("audio");
+      if (audio?.src) {
+        emit("audioButtonClick", audio.src);
+      }
+    });
+  }
+
+  updateHeight();
+  emitBackgroundColor(body);
+}
+
+function emitBackgroundColor(body: HTMLElement) {
+  const bg = getComputedStyle(body).backgroundColor;
+  // "rgba(0, 0, 0, 0)" or "transparent" means no explicit background set
+  const isTransparent = !bg || bg === "transparent" || bg === "rgba(0, 0, 0, 0)";
+  emit("backgroundDetected", isTransparent ? null : bg);
+}
+
+function updateHeight() {
+  const iframe = iframeRef.value;
+  if (!iframe?.contentDocument?.body) return;
+  iframe.style.height = `${iframe.contentDocument.body.scrollHeight}px`;
+}
+
+// Update theme without full iframe reload
+watch(
+  () => props.theme,
+  (newTheme) => {
+    const doc = iframeRef.value?.contentDocument;
+    if (doc?.documentElement) {
+      doc.documentElement.dataset.theme = newTheme;
+    }
+  },
+);
+
+onBeforeUnmount(() => {
+  resizeObserver?.disconnect();
+  resizeObserver = null;
+});
+</script>
+
+<template>
+  <iframe
+    ref="iframeRef"
+    :srcdoc="srcdoc"
+    sandbox="allow-same-origin"
+    class="sandboxed-card"
+    @load="setupIframe"
+  />
+</template>
+
+<style scoped>
+.sandboxed-card {
+  width: 100%;
+  min-height: 100px;
+  border: none;
+  overflow: hidden;
+  display: block;
+}
+</style>

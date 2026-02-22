@@ -107,7 +107,7 @@ const renderedCard = computed(() => {
     mediaFiles: mediaFilesSig.value,
   });
 
-  return { frontSideHtml, backSideHtml };
+  return { frontSideHtml, backSideHtml, cardCss: card.css ?? "" };
 });
 
 function getAudioFilenames(html: string) {
@@ -147,6 +147,10 @@ const intervals = computed(() => {
 
   return queue.getNextIntervals(reviewCard);
 });
+
+function handleAudioButtonClick(src: string) {
+  new Audio(src).play();
+}
 
 function handleReveal() {
   updateActiveSide("back");
@@ -193,17 +197,14 @@ async function handleChooseAnswer(answer: Answer) {
       <template v-if="renderedCard">
         <FlashCard
           :active-side="activeSide"
+          :front-html="renderedCard.frontSideHtml"
+          :back-html="renderedCard.backSideHtml"
+          :card-css="renderedCard.cardCss"
           :intervals="intervals"
           @reveal="handleReveal"
           @choose-answer="handleChooseAnswer"
-        >
-          <template #front>
-            <div v-html="renderedCard.frontSideHtml" />
-          </template>
-          <template #back>
-            <div v-html="renderedCard.backSideHtml" />
-          </template>
-        </FlashCard>
+          @audio-button-click="handleAudioButtonClick"
+        />
         <CardButtons
           :active-side="activeSide"
           :intervals="intervals"
@@ -235,8 +236,6 @@ main {
   grid-template-columns: 300px 1fr 400px;
   min-height: calc(100vh - 44px);
 }
-
-:global(hr) { margin: var(--spacing-4) 0; }
 
 .layout-left-column {
   grid-column: 1;

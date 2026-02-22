@@ -1,16 +1,25 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted } from "vue";
+import { onMounted, onUnmounted, ref } from "vue";
 import { playClickSoundBasic, playClickSoundMelodic } from "../utils/sound";
 import type { Answer } from "../scheduler/types";
+import SandboxedCard from "./SandboxedCard.vue";
+import { useTheme } from "../design-system/hooks/useTheme";
+
+const { theme } = useTheme();
+const cardBackground = ref<string | null>(null);
 
 const props = defineProps<{
   activeSide: "front" | "back";
+  frontHtml: string;
+  backHtml: string;
+  cardCss: string;
   intervals?: { again: string; hard: string; good: string; easy: string };
 }>();
 
 const emit = defineEmits<{
   reveal: [];
   chooseAnswer: [answer: Answer];
+  audioButtonClick: [src: string];
 }>();
 
 function handleKeyDown(e: KeyboardEvent) {
@@ -32,13 +41,18 @@ onUnmounted(() => document.removeEventListener("keydown", handleKeyDown));
 </script>
 
 <template>
-  <div :class="['card', `card--${activeSide}`]">
+  <div :class="['card', `card--${activeSide}`]" :style="cardBackground ? { background: cardBackground } : undefined">
     <div :class="['card-indicator', `card-indicator--${activeSide}`]">
       {{ activeSide === "front" ? "Front" : "Back" }}
     </div>
     <div class="card-content">
-      <slot v-if="activeSide === 'front'" name="front" />
-      <slot v-else name="back" />
+      <SandboxedCard
+        :card-html="activeSide === 'front' ? frontHtml : backHtml"
+        :card-css="cardCss"
+        :theme="theme"
+        @audio-button-click="(src: string) => emit('audioButtonClick', src)"
+        @background-detected="(color: string | null) => cardBackground = color"
+      />
     </div>
   </div>
 </template>
@@ -76,7 +90,5 @@ onUnmounted(() => document.removeEventListener("keydown", handleKeyDown));
 :root[data-theme="dark"] .card-indicator--front { background: var(--color-primary-950); color: var(--color-primary-300); }
 :root[data-theme="dark"] .card-indicator--back { background: var(--color-success-950); color: var(--color-success-300); }
 .card-content { padding: var(--spacing-8) var(--spacing-4) var(--spacing-4); }
-.card-content :deep(img) { height: 200px; margin: 0 auto; }
-.card-content :deep(hr) { margin: var(--spacing-4) 0; border-color: var(--color-border); opacity: 0.5; }
 h1 { margin: 0; font-weight: var(--font-weight-normal); font-size: var(--font-size-2xl); }
 </style>
