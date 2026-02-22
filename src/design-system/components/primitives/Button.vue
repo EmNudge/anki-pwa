@@ -46,7 +46,7 @@ const classes = computed(() =>
   justify-content: center;
   gap: var(--spacing-2);
   border: 1px solid transparent;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   font-family: var(--font-family-sans);
   font-weight: var(--font-weight-medium);
   cursor: pointer;
@@ -55,7 +55,7 @@ const classes = computed(() =>
   user-select: none;
 }
 
-.ds-button:focus-visible { outline: 2px solid var(--color-border-focus); outline-offset: 2px; }
+.ds-button:focus-visible { outline: 2px solid var(--color-border-focus); outline-offset: 2px; box-shadow: var(--shadow-focus-ring); }
 .ds-button:disabled { cursor: not-allowed; opacity: 0.5; }
 
 .ds-button--primary { background: var(--color-primary-500); color: var(--color-text-inverse); border-color: var(--color-primary-500); }

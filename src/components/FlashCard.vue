@@ -46,10 +46,10 @@ onUnmounted(() => document.removeEventListener("keydown", handleKeyDown));
 
 <style scoped>
 .card {
-  border: 2px solid var(--color-border);
+  border: 1px solid var(--color-border);
   background: var(--color-surface);
-  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-base);
+  border-radius: var(--radius-xl);
   padding: 0;
   width: 500px;
   max-width: 100%;
@@ -57,25 +57,27 @@ onUnmounted(() => document.removeEventListener("keydown", handleKeyDown));
   position: relative;
   overflow: hidden;
 }
-.card--front { border-top-color: var(--color-border); }
-.card--back { border-top-color: var(--color-border); }
 @media (max-width: 1200px) { .card { width: 800px; } }
 @media (max-width: 768px) { .card { width: 100%; min-height: 400px; } }
 .card-indicator {
   display: inline-block;
   padding: var(--spacing-1) var(--spacing-3);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-xs);
   font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--letter-spacing-wide);
+  text-transform: uppercase;
   border-radius: 0 0 var(--radius-md) 0;
   position: absolute;
   top: 0;
   left: 0;
-  opacity: 0.3;
+  opacity: 0.6;
 }
-.card-indicator--front { background: var(--color-primary); color: white; }
-.card-indicator--back { background: var(--color-success); color: white; }
+.card-indicator--front { background: var(--color-primary-100); color: var(--color-primary-700); }
+.card-indicator--back { background: var(--color-success-100); color: var(--color-success-700); }
+:root[data-theme="dark"] .card-indicator--front { background: var(--color-primary-950); color: var(--color-primary-300); }
+:root[data-theme="dark"] .card-indicator--back { background: var(--color-success-950); color: var(--color-success-300); }
 .card-content { padding: var(--spacing-8) var(--spacing-4) var(--spacing-4); }
 .card-content :deep(img) { height: 200px; margin: 0 auto; }
-.card-content :deep(hr) { margin: var(--spacing-4) 0; opacity: 0.25; }
+.card-content :deep(hr) { margin: var(--spacing-4) 0; border-color: var(--color-border); opacity: 0.5; }
 h1 { margin: 0; font-weight: var(--font-weight-normal); font-size: var(--font-size-2xl); }
 </style>

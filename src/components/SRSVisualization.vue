@@ -164,7 +164,7 @@ function handleOpenSettings() { schedulerSettingsModalOpenSig.value = true; }
 
           <div class="info-item">
             <div class="info-label">Card ID</div>
-            <div class="info-value" style="font-size: 0.7rem; opacity: 0.5">
+            <div class="info-value info-value--muted">
               {{ currentCard?.cardId.split(":").slice(-2).join(":") }}
             </div>
           </div>
@@ -191,11 +191,11 @@ function handleOpenSettings() { schedulerSettingsModalOpenSig.value = true; }
 <style scoped>
 .srs-container { max-width: 100%; width: 100%; }
 @media (max-width: 1200px) { .srs-container { max-width: 800px; } }
-.status-badge { padding: var(--spacing-1) var(--spacing-3); border-radius: var(--radius-lg); font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); cursor: pointer; border: none; transition: var(--transition-colors); }
-.status-badge:hover { opacity: 0.9; transform: translateY(-1px); }
+.status-badge { padding: var(--spacing-1) var(--spacing-3); border-radius: var(--radius-full); font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); cursor: pointer; border: none; transition: var(--transition-all); letter-spacing: var(--letter-spacing-wide); }
+.status-badge:hover { filter: brightness(1.1); transform: translateY(-1px); }
 .status-badge:active { transform: translateY(0); }
-.status-enabled { background: var(--color-success-500); color: white; }
-.status-disabled { background: var(--color-neutral-500); color: white; }
+.status-enabled { background: var(--color-success-500); color: var(--color-text-inverse); }
+.status-disabled { background: var(--color-neutral-400); color: var(--color-text-inverse); }
 .srs-section { display: flex; flex-direction: column; gap: var(--spacing-2); }
 .section-title { font-weight: var(--font-weight-semibold); font-size: var(--font-size-sm); color: var(--color-text-secondary); text-transform: uppercase; letter-spacing: var(--letter-spacing-wide); }
 .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--spacing-3); }
@@ -213,6 +213,7 @@ function handleOpenSettings() { schedulerSettingsModalOpenSig.value = true; }
 .info-item { display: flex; justify-content: space-between; padding: var(--spacing-2); background: var(--color-surface-elevated); border: 1px solid var(--color-border); border-radius: var(--radius-sm); }
 .info-label { color: var(--color-text-secondary); font-size: var(--font-size-sm); }
 .info-value { font-weight: var(--font-weight-semibold); font-size: var(--font-size-sm); color: var(--color-text-primary); }
+.info-value--muted { font-size: var(--font-size-2xs); opacity: 0.5; }
 .no-cards-message { text-align: center; padding: var(--spacing-8); color: var(--color-text-tertiary); font-style: italic; }
 .scheduler-controls { display: flex; flex-direction: column; gap: var(--spacing-2); padding-top: var(--spacing-4); margin-top: var(--spacing-4); border-top: 1px solid var(--color-border); }
 .button-group { display: flex; gap: var(--spacing-2); flex-wrap: wrap; }

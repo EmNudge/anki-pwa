@@ -84,7 +84,7 @@ function handleBrowseAllTemplates() { openCommandPalette("browse-templates"); }
 <style scoped>
 .deck-name { font-size: var(--font-size-xl); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); word-break: break-word; margin-bottom: var(--spacing-2); }
 .current-deck-section { margin-bottom: var(--spacing-4); }
-.current-deck-label { font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); color: var(--color-text-secondary); margin-bottom: var(--spacing-2); text-transform: uppercase; letter-spacing: 0.5px; }
+.current-deck-label { font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); color: var(--color-text-secondary); margin-bottom: var(--spacing-2); text-transform: uppercase; letter-spacing: var(--letter-spacing-wide); }
 .current-deck-display { padding: var(--spacing-3); background: var(--color-surface-elevated); border: 1px solid var(--color-border); border-radius: var(--radius-md); margin-bottom: var(--spacing-2); }
 .current-deck-name { font-size: var(--font-size-base); font-weight: var(--font-weight-medium); color: var(--color-text-primary); margin-bottom: var(--spacing-1); word-break: break-word; }
 .current-deck-stats { font-size: var(--font-size-sm); color: var(--color-text-secondary); }
@@ -92,7 +92,7 @@ function handleBrowseAllTemplates() { openCommandPalette("browse-templates"); }
 .change-deck-button:hover { background: var(--color-surface-elevated); border-color: var(--color-border-hover); }
 .change-deck-button:active { transform: scale(0.98); }
 .change-deck-button:disabled { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
-.stats-section { margin-top: var(--spacing-4); padding-top: var(--spacing-4); border-top: 1px solid var(--color-border-primary); }
+.stats-section { margin-top: var(--spacing-4); padding-top: var(--spacing-4); border-top: 1px solid var(--color-border); }
 .stats-title { font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); color: var(--color-text-secondary); margin-bottom: var(--spacing-3); }
 .browse-item { margin-bottom: var(--spacing-2); }
 .browse-button { margin-bottom: var(--spacing-4); }

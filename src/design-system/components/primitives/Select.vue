@@ -77,10 +77,10 @@ function onChange(e: Event) {
 }
 
 .ds-select:hover:not(:disabled) { border-color: var(--color-border-hover); }
-.ds-select:focus { outline: none; border-color: var(--color-border-focus); box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1); }
+.ds-select:focus { outline: none; border-color: var(--color-border-focus); box-shadow: var(--shadow-focus-ring); }
 .ds-select:disabled { opacity: 0.5; cursor: not-allowed; }
 .ds-select--error { border-color: var(--color-error-500); }
-.ds-select--error:focus { border-color: var(--color-error-500); box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1); }
+.ds-select--error:focus { border-color: var(--color-error-500); box-shadow: var(--shadow-focus-ring-error); }
 .ds-select-helper-text { font-size: var(--font-size-xs); color: var(--color-text-secondary); }
 .ds-select-error-message { font-size: var(--font-size-xs); color: var(--color-error-500); }
 </style>

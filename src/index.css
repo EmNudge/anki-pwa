@@ -24,21 +24,21 @@ h1 {
 button {
   border-radius: var(--radius-md);
   border: 1px solid transparent;
-  padding: 0.6em 1.2em;
+  padding: var(--spacing-2) var(--spacing-4);
   font-size: var(--font-size-base);
   font-weight: var(--font-weight-medium);
   font-family: inherit;
   background-color: var(--color-surface-elevated);
   color: var(--color-text-secondary);
-  box-shadow: var(--box-shadow);
+  box-shadow: var(--shadow-xs);
   cursor: pointer;
   transition: var(--transition-colors);
 }
 button:hover {
-  border-color: var(--color-primary-500);
+  border-color: var(--color-border-hover);
 }
-button:focus,
 button:focus-visible {
   outline: 2px solid var(--color-border-focus);
   outline-offset: 2px;
+  box-shadow: var(--shadow-focus-ring);
 }

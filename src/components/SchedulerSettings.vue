@@ -137,6 +137,6 @@ function updateFsrsParam<K extends keyof NonNullable<SchedulerSettings["fsrsPara
 .form-group { margin-bottom: var(--spacing-4); }
 .form-label { display: block; margin-bottom: var(--spacing-2); font-weight: var(--font-weight-medium); font-size: var(--font-size-sm); color: var(--color-text-primary); }
 .form-input, .form-select { width: 100%; padding: var(--spacing-2); border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface-elevated); font-size: var(--font-size-sm); color: var(--color-text-primary); transition: var(--transition-colors); }
-.form-input:focus, .form-select:focus { outline: none; border-color: var(--color-border-focus); box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1); }
+.form-input:focus, .form-select:focus { outline: none; border-color: var(--color-border-focus); box-shadow: var(--shadow-focus-ring); }
 .help-text { font-size: var(--font-size-xs); color: var(--color-text-secondary); margin-top: var(--spacing-1); }
 </style>

@@ -280,7 +280,7 @@ onUnmounted(() => window.removeEventListener("keydown", onGlobalKeydown));
   right: 0;
   bottom: 0;
   background: var(--color-overlay);
-  backdrop-filter: blur(8px);
+  backdrop-filter: blur(12px);
   z-index: calc(var(--z-index-modal) + 100);
   display: flex;
   align-items: flex-start;
@@ -361,7 +361,7 @@ onUnmounted(() => window.removeEventListener("keydown", onGlobalKeydown));
   color: var(--color-primary-600);
   font-weight: var(--font-weight-semibold);
   background: var(--color-primary-50);
-  padding: 0 2px;
+  padding: 0 var(--spacing-0-5);
   border-radius: var(--radius-xs);
 }
 
@@ -475,7 +475,7 @@ onUnmounted(() => window.removeEventListener("keydown", onGlobalKeydown));
   color: var(--color-primary-700);
   font-weight: var(--font-weight-semibold);
   border-radius: var(--radius-xs);
-  padding: 0 2px;
+  padding: 0 var(--spacing-0-5);
 }
 :root[data-theme="dark"] .command-item-title-highlight { background: var(--color-primary-900); color: var(--color-primary-300); }
 
