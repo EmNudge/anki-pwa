@@ -3,7 +3,7 @@ import "./App.css";
 import { computed, ref, watch } from "vue";
 import FlashCard from "./components/FlashCard.vue";
 import CardButtons from "./components/CardButtons.vue";
-import type { Answer } from "./components/FlashCard.vue";
+import type { Answer } from "./scheduler/types";
 import { getRenderedCardString } from "./utils/render";
 import { computeDeckInfo } from "./utils/deckInfo";
 import FilePicker from "./components/FilePicker.vue";
@@ -289,14 +289,4 @@ main {
   .layout-right-column { grid-row: 3; border-top: 1px solid var(--color-border); }
 }
 
-.dropdowns { display: flex; gap: var(--spacing-4); justify-content: center; }
-
-.keyboard-hint {
-  text-align: right;
-  display: inline-block;
-  opacity: 0.5;
-  grid-column: 1 / -1;
-  margin-top: var(--spacing-4);
-}
-.keyboard-hint button { padding: var(--spacing-2); border-radius: var(--radius-sm); }
 </style>

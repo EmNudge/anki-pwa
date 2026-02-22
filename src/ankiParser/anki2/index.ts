@@ -1,5 +1,5 @@
 import { Database } from "sql.js";
-import { executeQuery, executeQueryAll } from "~/utils/sql";
+import { executeQuery, executeQueryAll, buildNoteToDeckMap, resolveDeckName } from "~/utils/sql";
 import { modelSchema } from "./jsonParsers";
 import { z } from "zod";
 import { assertTruthy } from "~/utils/assert";
@@ -67,19 +67,7 @@ export function getDataFromAnki2(db: Database): AnkiDB2Data {
       "SELECT id, cast(mid as text) as modelId, tags, flds as fields FROM notes",
     );
 
-    // Query cards table to get deck IDs for each note
-    const cardsDeckInfo = executeQueryAll<{ nid: number; did: number }>(
-      db,
-      "SELECT nid, did FROM cards",
-    );
-
-    // Create a map from note ID to deck ID (use first card's deck if multiple cards per note)
-    const noteToDeckId = new Map<number, number>();
-    for (const card of cardsDeckInfo) {
-      if (!noteToDeckId.has(card.nid)) {
-        noteToDeckId.set(card.nid, card.did);
-      }
-    }
+    const noteToDeckId = buildNoteToDeckMap(db);
 
     return notes.map((note) => {
       const modelForCard = models[note.modelId];
@@ -89,10 +77,7 @@ export function getDataFromAnki2(db: Database): AnkiDB2Data {
       const values = note.fields.split("\x1F");
       const valuesMap = Object.fromEntries(keys.map((key, index) => [key, values[index] || null]));
 
-      // Get deck name for this note
-      const deckId = noteToDeckId.get(note.id);
-      const cardDeckName =
-        deckId !== undefined ? (decks[deckId.toString()]?.name ?? "Unknown") : "Unknown";
+      const cardDeckName = resolveDeckName(note.id, noteToDeckId, decks);
 
       return {
         values: valuesMap,

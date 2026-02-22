@@ -1,13 +1,5 @@
 import type { SubDeckInfo } from "../types";
-import type { AnkiDB2Data } from "../ankiParser/anki2";
-import type { AnkiDB21bData } from "../ankiParser/anki21b";
-
-type AnkiData = {
-  files: Map<string, string>;
-  cards: AnkiDB2Data["cards"] | AnkiDB21bData["cards"];
-  deckName: string;
-  decks: Record<string, { id: number; name: string }>;
-};
+import type { AnkiData } from "../ankiParser";
 
 export function computeDeckInfo(ankiData: AnkiData) {
   const cardsWithDeckIds = ankiData.cards.map((card) => {

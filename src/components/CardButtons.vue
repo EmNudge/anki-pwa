@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Button } from "../design-system";
 import { playClickSoundBasic, playClickSoundMelodic } from "../utils/sound";
-import type { Answer } from "./FlashCard.vue";
+import type { Answer } from "../scheduler/types";
 
 const props = defineProps<{
   activeSide: "front" | "back";
