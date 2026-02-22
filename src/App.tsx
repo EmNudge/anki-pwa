@@ -33,30 +33,15 @@ import { SchedulerSettingsModal } from "./components/SchedulerSettings";
 import { CommandPalette } from "./components/CommandPalette";
 import { FileInfo } from "./components/FileInfo";
 import { useCommands } from "./useCommands";
-import { BackgroundWebGL } from "./components/BackgroundWebGL";
-import { backgroundFxEnabledSig } from "./stores";
-import { triggerPositiveBurst } from "./utils/fxBus";
 import { isTruthy } from "./utils/assert";
 
 function App() {
   // eslint-disable-next-line no-unused-expressions
   css`
     main {
-      position: relative;
-      z-index: 1;
       display: grid;
       grid-template-columns: 300px 1fr 400px;
-      gap: var(--spacing-4);
-      align-items: start;
-      max-width: 1400px;
-      margin: 0 auto;
-    }
-
-    @media (max-width: 1200px) {
-      main {
-        grid-template-columns: 1fr;
-        max-width: 800px;
-      }
+      min-height: 100vh;
     }
 
     :global(hr) {
@@ -66,6 +51,14 @@ function App() {
     .layout-left-column {
       grid-column: 1;
       grid-row: 1;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      background: var(--color-surface);
+      border-right: 1px solid var(--color-border);
+      padding: var(--spacing-4);
+      text-align: left;
     }
 
     .layout-center-column {
@@ -75,28 +68,49 @@ function App() {
       flex-direction: column;
       align-items: center;
       gap: var(--spacing-4);
+      padding: var(--spacing-8) var(--spacing-4);
     }
 
     .layout-right-column {
       grid-column: 3;
       grid-row: 1;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      background: var(--color-surface);
+      border-left: 1px solid var(--color-border);
+      padding: var(--spacing-4);
+      text-align: left;
     }
 
     @media (max-width: 1200px) {
+      main {
+        grid-template-columns: 1fr;
+        min-height: auto;
+      }
+
       .layout-left-column,
       .layout-center-column,
       .layout-right-column {
         grid-column: 1;
+        position: static;
+        height: auto;
+        overflow: visible;
+        border: none;
       }
 
       .layout-left-column {
         grid-row: 1;
+        border-bottom: 1px solid var(--color-border);
       }
       .layout-center-column {
         grid-row: 2;
+        background: transparent;
       }
       .layout-right-column {
         grid-row: 3;
+        border-top: 1px solid var(--color-border);
       }
     }
 
@@ -250,7 +264,6 @@ function App() {
 
   return (
     <>
-      {backgroundFxEnabledSig() && <BackgroundWebGL />}
       <main>
         {/* LEFT COLUMN: File Info */}
         <div class="layout-left-column">{deckInfoSig() && <FileInfo />}</div>
@@ -284,9 +297,6 @@ function App() {
                     setReviewStartTime(Date.now());
                   }}
                   onChooseAnswer={async (answer: Answer) => {
-                    if (answer === "good" || answer === "easy") {
-                      triggerPositiveBurst(answer);
-                    }
                     if (schedulerEnabledSig()) {
                       // Scheduler mode: process review
                       const reviewCard = currentReviewCardSig();
@@ -314,9 +324,6 @@ function App() {
                     setReviewStartTime(Date.now());
                   }}
                   onChooseAnswer={async (answer: Answer) => {
-                    if (answer === "good" || answer === "easy") {
-                      triggerPositiveBurst(answer);
-                    }
                     if (schedulerEnabledSig()) {
                       // Scheduler mode: process review
                       const reviewCard = currentReviewCardSig();

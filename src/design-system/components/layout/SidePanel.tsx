@@ -12,15 +12,9 @@ export interface SidePanelProps extends JSX.HTMLAttributes<HTMLDivElement> {
 export function SidePanel(props: SidePanelProps) {
   const [local, others] = splitProps(props, ["title", "headerAction", "maxWidth", "children", "class"]);
 
-  const maxWidth = () => local.maxWidth ?? "300px";
-
   // eslint-disable-next-line no-unused-expressions
   css`
     .ds-side-panel {
-      border: 1px solid var(--color-border);
-      background: var(--color-surface);
-      border-radius: var(--radius-sm);
-      padding: var(--spacing-4);
       display: flex;
       flex-direction: column;
       gap: var(--spacing-4);
@@ -49,7 +43,7 @@ export function SidePanel(props: SidePanelProps) {
   const classes = () => ["ds-side-panel", local.class].filter(Boolean).join(" ");
 
   return (
-    <div class={classes()} style={{ "max-width": maxWidth() }} {...others}>
+    <div class={classes()} {...others}>
       <div class="ds-side-panel-header">
         <div class="ds-side-panel-title">{local.title}</div>
         {local.headerAction}
