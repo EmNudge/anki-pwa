@@ -87,7 +87,7 @@ function handleContentClick(e: MouseEvent) {
   width: 100%;
   height: 100%;
   background-color: var(--color-overlay);
-  backdrop-filter: blur(10px);
+  backdrop-filter: blur(12px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -100,7 +100,7 @@ function handleContentClick(e: MouseEvent) {
   max-height: 90vh;
   background-color: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   display: flex;
   flex-direction: column;

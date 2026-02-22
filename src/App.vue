@@ -230,7 +230,7 @@ main {
   min-height: 100vh;
 }
 
-:global(hr) { margin: 1rem 0; }
+:global(hr) { margin: var(--spacing-4) 0; }
 
 .layout-left-column {
   grid-column: 1;
@@ -289,7 +289,7 @@ main {
   .layout-right-column { grid-row: 3; border-top: 1px solid var(--color-border); }
 }
 
-.dropdowns { display: flex; gap: 1rem; justify-content: center; }
+.dropdowns { display: flex; gap: var(--spacing-4); justify-content: center; }
 
 .keyboard-hint {
   text-align: right;
@@ -298,5 +298,5 @@ main {
   grid-column: 1 / -1;
   margin-top: var(--spacing-4);
 }
-.keyboard-hint button { padding: 0.5rem; border-radius: 0.25rem; }
+.keyboard-hint button { padding: var(--spacing-2); border-radius: var(--radius-sm); }
 </style>

@@ -35,5 +35,5 @@ function handleFileChange(event: Event) {
 
 <style scoped>
 .file-input { display: none; }
-.icon { width: 1.25rem; height: 1.25rem; }
+.icon { width: var(--spacing-5); height: var(--spacing-5); }
 </style>

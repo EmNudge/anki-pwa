@@ -75,10 +75,10 @@ function onInput(e: Event) {
 
 .ds-input::placeholder { color: var(--color-text-tertiary); }
 .ds-input:hover:not(:disabled) { border-color: var(--color-border-hover); }
-.ds-input:focus { outline: none; border-color: var(--color-border-focus); box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1); }
+.ds-input:focus { outline: none; border-color: var(--color-border-focus); box-shadow: var(--shadow-focus-ring); }
 .ds-input:disabled { opacity: 0.5; cursor: not-allowed; }
 .ds-input--error { border-color: var(--color-error-500); }
-.ds-input--error:focus { border-color: var(--color-error-500); box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1); }
+.ds-input--error:focus { border-color: var(--color-error-500); box-shadow: var(--shadow-focus-ring-error); }
 .ds-input-helper-text { font-size: var(--font-size-xs); color: var(--color-text-secondary); }
 .ds-input-error-message { font-size: var(--font-size-xs); color: var(--color-error-500); }
 </style>
