@@ -37,7 +37,7 @@ export function getRenderedCardString({
 function replaceMediaFiles(renderedString: string, mediaFiles: Map<string, string>) {
   return renderedString.replace(/="([^"](\\"|[^"])+)"/g, (match, filename) => {
     const url = mediaFiles.get(filename);
-    console.log({filename, url, renderedString, mediaFiles});
+    console.log({ filename, url, renderedString, mediaFiles });
     return url ? `="${url}"` : match;
   });
 }
@@ -45,16 +45,16 @@ function replaceMediaFiles(renderedString: string, mediaFiles: Map<string, strin
 function replaceLatex(renderedString: string) {
   const cleanAndUnescapeLatex = (latex: string) => {
     // Strip HTML tags that Anki may have inserted
-    let cleanLatex = latex.replace(/<[^>]+>/g, '');
+    let cleanLatex = latex.replace(/<[^>]+>/g, "");
 
     // Unescape HTML entities
     cleanLatex = cleanLatex
-      .replace(/&amp;/g, '&')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
       .replace(/&quot;/g, '"')
       .replace(/&#39;/g, "'")
-      .replace(/&nbsp;/g, ' ');
+      .replace(/&nbsp;/g, " ");
 
     // Trim whitespace
     return cleanLatex.trim();
@@ -66,7 +66,7 @@ function replaceLatex(renderedString: string) {
 
       // Skip empty blocks
       if (!cleanLatex) {
-        return '';
+        return "";
       }
 
       // Render as display mode LaTeX
@@ -88,9 +88,9 @@ function replaceLatex(renderedString: string) {
       if (envMatch && envMatch[1] !== undefined) {
         // Split into environment part and remaining text
         const envPart = envMatch[1];
-        const textPart = envMatch[2] || '';
+        const textPart = envMatch[2] || "";
 
-        let result = '';
+        let result = "";
 
         // Render the environment as display mode LaTeX
         try {

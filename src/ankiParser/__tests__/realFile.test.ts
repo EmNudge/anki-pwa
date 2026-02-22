@@ -243,9 +243,9 @@ describe("Real Anki File Parsing", () => {
       expect(typeof result.decks).toBe("object");
 
       // Get all deck names
-      const deckNames = Object.values(result.decks).map(d => d.name);
+      const deckNames = Object.values(result.decks).map((d) => d.name);
       console.log(`\n🗂️  Decks found:`);
-      deckNames.forEach(name => console.log(`   - ${name}`));
+      deckNames.forEach((name) => console.log(`   - ${name}`));
 
       // Verify deck name is set
       expect(result.deckName).toBeDefined();
@@ -262,7 +262,7 @@ describe("Real Anki File Parsing", () => {
 
       // Count cards per deck
       const cardsByDeck = new Map<string, number>();
-      result.cards.forEach(card => {
+      result.cards.forEach((card) => {
         cardsByDeck.set(card.deckName, (cardsByDeck.get(card.deckName) || 0) + 1);
       });
 
@@ -439,7 +439,9 @@ describe("Real Anki File Parsing", () => {
       });
 
       // Count cards with tags
-      const cardsWithTags = result.cards.filter(card => card.tags.length > 0 && card.tags[0] !== '');
+      const cardsWithTags = result.cards.filter(
+        (card) => card.tags.length > 0 && card.tags[0] !== "",
+      );
       console.log(`\n🏷️  Cards with tags: ${cardsWithTags.length}/${result.cards.length}`);
     });
 

@@ -106,7 +106,7 @@ describe("getRenderedCardString", () => {
   it("should handle field names with special characters", () => {
     const variables = {
       "Field-Name": "value1",
-      "Field_Name": "value2",
+      Field_Name: "value2",
     };
 
     const template = "{{Field-Name}} and {{Field_Name}}";
@@ -218,7 +218,7 @@ describe("getRenderedCardString", () => {
     // Anki stores multiline field content with HTML tags like <div>
     const variables = {
       Front: "Define acceleration.",
-      Back: 'a vector quantity<div>[latex]</div><div><br></div><div>\\begin{align*}</div><div>&amp;a = \\dfrac{\\Delta v}{t} \\\\</div><div>&amp;F = ma \\\\</div><div>&amp;a = \\dfrac{F}{m}</div><div>\\end{align*}</div><div>[/latex]</div>',
+      Back: "a vector quantity<div>[latex]</div><div><br></div><div>\\begin{align*}</div><div>&amp;a = \\dfrac{\\Delta v}{t} \\\\</div><div>&amp;F = ma \\\\</div><div>&amp;a = \\dfrac{F}{m}</div><div>\\end{align*}</div><div>[/latex]</div>",
     };
 
     const html = getRenderedCardString({
@@ -239,7 +239,7 @@ describe("getRenderedCardString", () => {
   it("should render inline math within latex blocks", () => {
     // Test inline $...$ expressions within [latex] blocks
     const variables = {
-      Front: '[latex]Linear Motion Equations<div><br>Solve for $V_f$ (2 eqns)</div>[/latex]',
+      Front: "[latex]Linear Motion Equations<div><br>Solve for $V_f$ (2 eqns)</div>[/latex]",
     };
 
     const html = getRenderedCardString({
@@ -265,7 +265,8 @@ describe("getRenderedCardString", () => {
   it("should render [$] and [$$] tags with empty and LaTeX content", () => {
     // Test [$]...[/$] and [$$]...[/$$] blocks
     const variables = {
-      Front: 'Linear vs non-linear of<div>[$] [/$]</div><div>[$]X&nbsp;\\text{ vs }&nbsp;Y[/$]</div><div>[$] [/$]</div><div>[$]X \\text{ vs } \\dfrac{1}{Y}[/$]</div>',
+      Front:
+        "Linear vs non-linear of<div>[$] [/$]</div><div>[$]X&nbsp;\\text{ vs }&nbsp;Y[/$]</div><div>[$] [/$]</div><div>[$]X \\text{ vs } \\dfrac{1}{Y}[/$]</div>",
     };
 
     const html = getRenderedCardString({
@@ -290,7 +291,8 @@ describe("getRenderedCardString", () => {
   it("should render complex latex with align environment and inline math", () => {
     // Test complex case with \begin{align}, HTML entities, nested divs, and inline math
     const variables = {
-      Front: '[latex]\\begin{align}&amp; \\dfrac{GM_E m}{r^2} = ma \\\\&nbsp;\\text{becomes&nbsp;} &amp;\\dfrac{GM_E}{r^2} = a \\end{align}<div><div><div><div><div><br /><div><div><div>where $M_E$ is the mass of the earth</div><div><br /></div><div>and $r$ is the distance between mass $m$ and the center of the earth.</div><div>[/latex]</div></div></div></div></div></div></div></div>',
+      Front:
+        "[latex]\\begin{align}&amp; \\dfrac{GM_E m}{r^2} = ma \\\\&nbsp;\\text{becomes&nbsp;} &amp;\\dfrac{GM_E}{r^2} = a \\end{align}<div><div><div><div><div><br /><div><div><div>where $M_E$ is the mass of the earth</div><div><br /></div><div>and $r$ is the distance between mass $m$ and the center of the earth.</div><div>[/latex]</div></div></div></div></div></div></div></div>",
     };
 
     const html = getRenderedCardString({

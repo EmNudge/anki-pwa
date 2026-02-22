@@ -45,7 +45,7 @@ export function getDataFromAnki2(db: Database): AnkiDB2Data {
       decks = Object.fromEntries(
         Object.entries(parsedDecks)
           .filter(([_, deck]) => deck.name)
-          .map(([id, deck]) => [id, { id: deck.id, name: deck.name! }])
+          .map(([id, deck]) => [id, { id: deck.id, name: deck.name! }]),
       );
 
       // Use the first deck's name for backwards compatibility
@@ -92,7 +92,7 @@ export function getDataFromAnki2(db: Database): AnkiDB2Data {
       // Get deck name for this note
       const deckId = noteToDeckId.get(note.id);
       const cardDeckName =
-        deckId !== undefined ? decks[deckId.toString()]?.name ?? "Unknown" : "Unknown";
+        deckId !== undefined ? (decks[deckId.toString()]?.name ?? "Unknown") : "Unknown";
 
       return {
         values: valuesMap,

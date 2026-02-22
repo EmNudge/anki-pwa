@@ -1,1 +1,1 @@
-export { useTheme, ThemeProvider, type Theme, type ThemeProviderProps } from "./useTheme.tsx";
+export { useTheme, type Theme } from "./useTheme";

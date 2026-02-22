@@ -33,7 +33,7 @@ export function getDataFromAnki21b(db: Database): AnkiDB21bData {
       );
 
       const decks = Object.fromEntries(
-        deckRows.map((deck) => [deck.id.toString(), { id: deck.id, name: deck.name }])
+        deckRows.map((deck) => [deck.id.toString(), { id: deck.id, name: deck.name }]),
       );
 
       // Use the first non-default deck's name, or "Default" if only default exists
@@ -122,7 +122,7 @@ export function getDataFromAnki21b(db: Database): AnkiDB21bData {
       // Get deck name for this note
       const deckId = noteToDeckId.get(note.id);
       const cardDeckName =
-        deckId !== undefined ? decks[deckId.toString()]?.name ?? "Unknown" : "Unknown";
+        deckId !== undefined ? (decks[deckId.toString()]?.name ?? "Unknown") : "Unknown";
 
       return {
         values: Object.fromEntries(

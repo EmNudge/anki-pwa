@@ -1,4 +1,4 @@
-export function pluralize(count: number, singular: string, plural: string) {
+function pluralize(count: number, singular: string, plural: string) {
   return count === 1 ? singular : plural;
 }
 

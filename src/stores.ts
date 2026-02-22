@@ -1,27 +1,16 @@
-import { createMemo, createResource, createSignal } from "solid-js";
+import { ref, computed, watch, shallowRef } from "vue";
 import { getAnkiDataFromBlob } from "./ankiParser";
 import { ReviewQueue, type ReviewCard } from "./scheduler/queue";
 import { DEFAULT_SCHEDULER_SETTINGS, type SchedulerSettings } from "./scheduler/types";
 import { reviewDB } from "./scheduler/db";
+import type { DeckInfo } from "./types";
 
-export interface SubDeckInfo {
-  id: string;
-  name: string;
-  cardCount: number;
-  templateCount: number;
-}
+export const deckInfoSig = shallowRef<DeckInfo | null>(null);
 
-export const [deckInfoSig, setDeckInfoSig] = createSignal<{
-  name: string;
-  cardCount: number;
-  templateCount: number;
-  subdecks: SubDeckInfo[];
-} | null>(null);
-
-export const [selectedDeckIdSig, setSelectedDeckIdSig] = createSignal<string | null>(null);
+export const selectedDeckIdSig = ref<string | null>(null);
 
 export const ankiCachePromise = caches.open("anki-cache");
-export const [blobSig, setBlobSig] = createSignal<Blob | null>(null);
+export const blobSig = shallowRef<Blob | null>(null);
 
 ankiCachePromise.then(async (cache) => {
   const response = await cache.match("anki-deck");
@@ -29,127 +18,125 @@ ankiCachePromise.then(async (cache) => {
     return;
   }
 
-  setBlobSig(await response.blob());
+  blobSig.value = await response.blob();
 });
 
-export const [ankiDataSig] = createResource(blobSig, (newBlob) => getAnkiDataFromBlob(newBlob));
+// Resource replacement: watch blobSig and fetch data
+type AnkiData = Awaited<ReturnType<typeof getAnkiDataFromBlob>>;
+export const ankiDataSig = shallowRef<AnkiData | null>(null);
 
-export const [selectedCardSig, setSelectedCardSig] = createSignal(0);
-export const cardsSig = createMemo(() => {
-  setSelectedCardSig(0);
-  const ankiData = ankiDataSig();
-  const selectedDeckId = selectedDeckIdSig();
+watch(blobSig, async (newBlob) => {
+  if (!newBlob) {
+    ankiDataSig.value = null;
+    return;
+  }
+  ankiDataSig.value = await getAnkiDataFromBlob(newBlob);
+});
+
+export const selectedCardSig = ref(0);
+export const cardsSig = computed(() => {
+  const ankiData = ankiDataSig.value;
+  const selectedDeckId = selectedDeckIdSig.value;
 
   if (!ankiData) return [];
 
-  // If no deck is selected, return all cards
   if (!selectedDeckId) return ankiData.cards;
 
-  // Filter cards by the selected deck
   const selectedDeck = ankiData.decks[selectedDeckId];
   if (!selectedDeck) return ankiData.cards;
 
   return ankiData.cards.filter((card) => card.deckName === selectedDeck.name);
 });
 
-export const [selectedTemplateSig, setSelectedTemplateSig] = createSignal(0);
-export const templatesSig = createMemo(() => {
-  setSelectedTemplateSig(0);
-  return cardsSig()[selectedCardSig()]?.templates;
+// Reset selection when cards change
+watch(cardsSig, () => {
+  selectedCardSig.value = 0;
 });
 
-export const mediaFilesSig = createMemo(() => ankiDataSig()?.files ?? new Map<string, string>());
+export const selectedTemplateSig = ref(0);
+export const templatesSig = computed(() => {
+  return cardsSig.value[selectedCardSig.value]?.templates;
+});
 
-export const [soundEffectsEnabledSig, setSoundEffectsEnabledSig] = createSignal(
-  localStorage.getItem("soundEffectsEnabled") === "true",
-);
+// Reset template selection when templates change
+watch(templatesSig, () => {
+  selectedTemplateSig.value = 0;
+});
+
+export const mediaFilesSig = computed(() => ankiDataSig.value?.files ?? new Map<string, string>());
+
+export const soundEffectsEnabledSig = ref(localStorage.getItem("soundEffectsEnabled") === "true");
 
 export function toggleSoundEffects() {
-  const newValue = !soundEffectsEnabledSig();
-  setSoundEffectsEnabledSig(newValue);
+  const newValue = !soundEffectsEnabledSig.value;
+  soundEffectsEnabledSig.value = newValue;
   localStorage.setItem("soundEffectsEnabled", newValue.toString());
 }
 
 // Background FX (WebGL) toggle - disabled by default
-export const [backgroundFxEnabledSig, setBackgroundFxEnabledSig] = createSignal(
-  localStorage.getItem("backgroundFxEnabled") === "true",
-);
+export const backgroundFxEnabledSig = ref(localStorage.getItem("backgroundFxEnabled") === "true");
 
 export function toggleBackgroundFx() {
-  const newValue = !backgroundFxEnabledSig();
-  setBackgroundFxEnabledSig(newValue);
+  const newValue = !backgroundFxEnabledSig.value;
+  backgroundFxEnabledSig.value = newValue;
   localStorage.setItem("backgroundFxEnabled", newValue.toString());
 }
 
 // Scheduler and review queue state
-export const [schedulerEnabledSig, setSchedulerEnabledSig] = createSignal(
-  localStorage.getItem("schedulerEnabled") === "true",
-);
+export const schedulerEnabledSig = ref(localStorage.getItem("schedulerEnabled") === "true");
 
 export function toggleScheduler() {
-  const newValue = !schedulerEnabledSig();
-  setSchedulerEnabledSig(newValue);
+  const newValue = !schedulerEnabledSig.value;
+  schedulerEnabledSig.value = newValue;
   localStorage.setItem("schedulerEnabled", newValue.toString());
   // Reset queue when toggling
-  setReviewQueueSig(null);
-  setDueCardsSig([]);
-  setCurrentReviewCardSig(null);
+  reviewQueueSig.value = null;
+  dueCardsSig.value = [];
+  currentReviewCardSig.value = null;
 }
 
-export const [schedulerSettingsSig, setSchedulerSettingsSig] = createSignal<SchedulerSettings>(
-  DEFAULT_SCHEDULER_SETTINGS,
-);
+export const schedulerSettingsSig = ref<SchedulerSettings>(DEFAULT_SCHEDULER_SETTINGS);
 
-export const [reviewQueueSig, setReviewQueueSig] = createSignal<ReviewQueue | null>(null);
+export const reviewQueueSig = shallowRef<ReviewQueue | null>(null);
 
-export const [dueCardsSig, setDueCardsSig] = createSignal<ReviewCard[]>([]);
+export const dueCardsSig = shallowRef<ReviewCard[]>([]);
 
-export const [currentReviewCardSig, setCurrentReviewCardSig] = createSignal<ReviewCard | null>(
-  null,
-);
+export const currentReviewCardSig = shallowRef<ReviewCard | null>(null);
 
-export const [schedulerSettingsModalOpenSig, setSchedulerSettingsModalOpenSig] = createSignal(false);
+export const schedulerSettingsModalOpenSig = ref(false);
 
 /**
  * Initialize the review queue for the current deck
  */
 export async function initializeReviewQueue() {
-  const cards = cardsSig();
-  const templates = templatesSig();
+  const cards = cardsSig.value;
+  const templates = templatesSig.value;
 
   if (cards.length === 0 || !templates || templates.length === 0) {
-    // Clear queue state if no cards/templates
-    setReviewQueueSig(null);
-    setDueCardsSig([]);
-    setCurrentReviewCardSig(null);
+    reviewQueueSig.value = null;
+    dueCardsSig.value = [];
+    currentReviewCardSig.value = null;
     return;
   }
 
-  // Use a simple deck ID based on card count and first card hash
   const deckId = `deck-${cards.length}`;
 
-  // Load settings from IndexedDB
   const settings = await reviewDB.getSettings(deckId);
-  setSchedulerSettingsSig(settings);
+  schedulerSettingsSig.value = settings;
 
-  // Create review queue
   const queue = new ReviewQueue(deckId, settings);
   await queue.init();
 
-  // Build the full queue
   const fullQueue = await queue.buildQueue(cards.length, templates.length);
-
-  // Get cards due for review
   const dueCards = queue.getDueCards(fullQueue);
 
-  setReviewQueueSig(queue);
-  setDueCardsSig(dueCards);
+  reviewQueueSig.value = queue;
+  dueCardsSig.value = dueCards;
 
-  // Set first card as current
   if (dueCards.length > 0) {
-    setCurrentReviewCardSig(dueCards[0] ?? null);
+    currentReviewCardSig.value = dueCards[0] ?? null;
   } else {
-    setCurrentReviewCardSig(null);
+    currentReviewCardSig.value = null;
   }
 }
 
@@ -157,20 +144,20 @@ export async function initializeReviewQueue() {
  * Move to the next card in the review queue
  */
 export function moveToNextReviewCard() {
-  const dueCards = dueCardsSig();
+  const dueCards = dueCardsSig.value;
   if (dueCards.length === 0) {
-    setCurrentReviewCardSig(null);
+    currentReviewCardSig.value = null;
     return;
   }
 
-  const currentIndex = dueCards.findIndex((card) => card.cardId === currentReviewCardSig()?.cardId);
+  const currentIndex = dueCards.findIndex(
+    (card) => card.cardId === currentReviewCardSig.value?.cardId,
+  );
 
   if (currentIndex < dueCards.length - 1) {
-    // Move to next card
-    setCurrentReviewCardSig(dueCards[currentIndex + 1] ?? null);
+    currentReviewCardSig.value = dueCards[currentIndex + 1] ?? null;
   } else {
-    // Wrap around to the beginning
-    setCurrentReviewCardSig(dueCards[0] ?? null);
+    currentReviewCardSig.value = dueCards[0] ?? null;
   }
 }
 
@@ -178,16 +165,13 @@ export function moveToNextReviewCard() {
  * Reset all scheduler data and re-initialize the review queue
  */
 export async function resetScheduler() {
-  // Clear all review data from IndexedDB
   await reviewDB.clearAll();
 
-  // Reset state
-  setReviewQueueSig(null);
-  setDueCardsSig([]);
-  setCurrentReviewCardSig(null);
+  reviewQueueSig.value = null;
+  dueCardsSig.value = [];
+  currentReviewCardSig.value = null;
 
-  // Re-initialize the review queue if scheduler is enabled
-  if (schedulerEnabledSig() && cardsSig().length > 0) {
+  if (schedulerEnabledSig.value && cardsSig.value.length > 0) {
     await initializeReviewQueue();
   }
 }

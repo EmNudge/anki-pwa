@@ -1,4 +1,3 @@
-
 /**
  * Supported scheduling algorithms
  */

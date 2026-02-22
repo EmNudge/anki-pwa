@@ -95,11 +95,12 @@ async function getFilesFromEntries(entries: Entry[]): Promise<Map<string, string
 
       // Check if file is Zstandard compressed and decompress if needed
       // Zstandard magic number is 0x28 0xB5 0x2F 0xFD
-      const isZstdCompressed = fileBytes.length >= 4 &&
+      const isZstdCompressed =
+        fileBytes.length >= 4 &&
         fileBytes[0] === 0x28 &&
-        fileBytes[1] === 0xB5 &&
-        fileBytes[2] === 0x2F &&
-        fileBytes[3] === 0xFD;
+        fileBytes[1] === 0xb5 &&
+        fileBytes[2] === 0x2f &&
+        fileBytes[3] === 0xfd;
 
       if (isZstdCompressed) {
         try {
