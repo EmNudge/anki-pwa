@@ -19,7 +19,7 @@ import {
 } from "./deckLibrary";
 
 // View state
-export type AppView = "files" | "review" | "create";
+export type AppView = "files" | "review" | "create" | "ai-generate";
 export const activeViewSig = ref<AppView>("files");
 
 export const deckInfoSig = shallowRef<DeckInfo | null>(null);

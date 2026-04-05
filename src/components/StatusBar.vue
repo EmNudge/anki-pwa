@@ -5,6 +5,7 @@ const tabs: { id: AppView; label: string }[] = [
   { id: "files", label: "Files" },
   { id: "review", label: "Review" },
   { id: "create", label: "Create Deck" },
+  { id: "ai-generate", label: "AI Generate" },
 ];
 </script>
 
