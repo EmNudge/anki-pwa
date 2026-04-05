@@ -23,6 +23,7 @@ export type AnkiDB21bData = {
     noteType: number;
     latexSvg: boolean;
     latexPre: string;
+    latexPost: string;
     req: [number, string, number[]][] | null;
   }[];
   notesTypes: ReturnType<typeof getNotesType>;
@@ -184,11 +185,41 @@ export function getDataFromAnki21b(db: Database): AnkiDB21bData {
 
         // Get notetype info for this card
         const noteTypeInfo = notesTypeMap.get(note.mid);
+        const values = Object.fromEntries(
+          note.flds.split("\x1F").map((value, i) => [fieldNames[i], value]),
+        );
+        const req = (noteTypeInfo?.reqs ?? []).map((r, i) => {
+          const mode = r.kind === 0 ? "none" : r.kind === 1 ? "any" : "all";
+          const fieldOrds =
+            "fieldOrds" in r && Array.isArray(r.fieldOrds)
+              ? r.fieldOrds
+              : "field_ords" in (r as Record<string, unknown>) &&
+                  Array.isArray((r as { field_ords?: unknown[] }).field_ords)
+                ? ((r as { field_ords?: number[] }).field_ords ?? [])
+                : [];
+          return [i, mode, fieldOrds] as [number, string, number[]];
+        });
+
+        const reqForOrd = req.find(([ord]) => ord === cardRow.ord);
+        if (reqForOrd) {
+          const [, mode, fieldIndices] = reqForOrd;
+          if (mode === "any") {
+            const anyFilled = fieldIndices.some((idx) => {
+              const fieldName = fieldNames[idx];
+              return fieldName && (values[fieldName]?.trim() ?? "") !== "";
+            });
+            if (!anyFilled) return null;
+          } else if (mode === "all") {
+            const allFilled = fieldIndices.every((idx) => {
+              const fieldName = fieldNames[idx];
+              return fieldName && (values[fieldName]?.trim() ?? "") !== "";
+            });
+            if (!allFilled) return null;
+          }
+        }
 
         return {
-          values: Object.fromEntries(
-            note.flds.split("\x1F").map((value, i) => [fieldNames[i], value]),
-          ),
+          values,
           templates: [
             {
               name: matchingTemplate.name,
@@ -203,10 +234,8 @@ export function getDataFromAnki21b(db: Database): AnkiDB21bData {
           noteType: noteTypeInfo?.kind ?? 0,
           latexSvg: noteTypeInfo?.latexSvg ?? false,
           latexPre: noteTypeInfo?.latexPre ?? "",
-          req: (noteTypeInfo?.reqs ?? []).map((r, i) => {
-            const mode = r.kind === 0 ? "none" : r.kind === 1 ? "any" : "all";
-            return [i, mode, r.fieldOrds] as [number, string, number[]];
-          }),
+          latexPost: noteTypeInfo?.latexPost ?? "",
+          req,
           scheduling: {
             type: cardRow.type,
             typeName: getTypeName(cardRow.type),

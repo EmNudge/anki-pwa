@@ -9,6 +9,9 @@ export type AnkiData = {
   cards: AnkiDB2Data["cards"] | AnkiDB21bData["cards"];
   deckName: string;
   decks: Record<string, { id: number; name: string }>;
+  notesTypes: AnkiDB2Data["notesTypes"] | AnkiDB21bData["notesTypes"];
+  collectionCreationTime: number;
+  deckConfigs: AnkiDB2Data["deckConfigs"] | Record<string, never>;
 };
 
 export async function getAnkiDataFromBlob(file: Blob): Promise<AnkiData> {
@@ -18,10 +21,11 @@ export async function getAnkiDataFromBlob(file: Blob): Promise<AnkiData> {
   const db = new SQL.Database(ankiDb.array);
 
   if (ankiDb.type === "21b") {
-    const { cards, deckName, decks } = getDataFromAnki21b(db);
-    return { cards, files, deckName, decks };
+    const { cards, deckName, decks, notesTypes, collectionCreationTime } = getDataFromAnki21b(db);
+    return { cards, files, deckName, decks, notesTypes, collectionCreationTime, deckConfigs: {} };
   }
 
-  const { cards, deckName, decks } = getDataFromAnki2(db);
-  return { cards, files, deckName, decks };
+  const { cards, deckName, decks, notesTypes, collectionCreationTime, deckConfigs } =
+    getDataFromAnki2(db);
+  return { cards, files, deckName, decks, notesTypes, collectionCreationTime, deckConfigs };
 }

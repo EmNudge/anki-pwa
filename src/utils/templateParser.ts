@@ -96,8 +96,12 @@ function parseTemplateNodes(templateString: string): TemplateNode[] {
         if (activeField && tag.field === activeField) {
           return { nodes, nextIndex: index };
         }
-        nodes.push({ type: "text", value: templateString.slice(openIndex, closeIndex + 2) });
-        continue;
+        if (activeField) {
+          throw new Error(`Found {{/${tag.field}}}, but expected {{/${activeField}}}`);
+        }
+        throw new Error(
+          `Found {{/${tag.field}}}, but missing '{{#${tag.field}}}' or '{{^${tag.field}}}'`,
+        );
       }
 
       const inner = parseChildren(index, tag.field);
@@ -108,6 +112,10 @@ function parseTemplateNodes(templateString: string): TemplateNode[] {
         children: inner.nodes,
       });
       index = inner.nextIndex;
+    }
+
+    if (activeField) {
+      throw new Error(`Missing {{/${activeField}}}`);
     }
 
     return { nodes, nextIndex: index };

@@ -303,6 +303,7 @@ export interface Anki21bNotetype {
     latexPost?: string;
     latexSvg?: boolean;
     kind?: number;
+    reqs?: { kind: number; fieldOrds: number[] }[];
   };
 }
 
@@ -348,7 +349,7 @@ export function insertAnki21bData(
       latexPre: notetype.config.latexPre ?? "",
       latexPost: notetype.config.latexPost ?? "",
       latexSvg: notetype.config.latexSvg ?? false,
-      reqs: [],
+      reqs: notetype.config.reqs ?? [],
       originalId: 0,
       originalStockKind: 0,
       other: Buffer.from([]),

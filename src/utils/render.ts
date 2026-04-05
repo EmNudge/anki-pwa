@@ -3,6 +3,17 @@ import { isClozeNode, parseClozeNodes, renderTemplateString } from "./templatePa
 
 type Variables = { [key: string]: string | null };
 
+const SPECIAL_FIELDS = new Set([
+  "FrontSide",
+  "Tags",
+  "Deck",
+  "Subdeck",
+  "Card",
+  "Type",
+  "CardFlag",
+  "CardID",
+]);
+
 // security risk - figure out how to do this safely
 // maybe embed in an iframe?
 export function getRenderedCardString({
@@ -168,6 +179,10 @@ function processFieldReference(
   isAnswer: boolean,
   isCloze: boolean,
 ): string {
+  if (ref === "tts-voices:") {
+    return "Apple Alex, Apple Samantha, Google US English";
+  }
+
   // Handle TTS filter: {{tts LANG OPTIONS:other_filters:FieldName}}
   // The tts prefix contains spaces, so we detect it and normalize it into the filter chain
   let normalizedRef = ref;
@@ -181,11 +196,13 @@ function processFieldReference(
   const parts = normalizedRef.split(":");
 
   if (parts.length === 1 && !ttsFilter) {
+    assertKnownField(normalizedRef, variables);
     return variables[normalizedRef] ?? "";
   }
 
   // Last part is the field name, preceding parts are filters
   const fieldName = parts[parts.length - 1]!;
+  assertKnownField(fieldName, variables);
   const filters = parts.length > 1 ? parts.slice(0, -1) : [];
   if (ttsFilter) {
     filters.unshift(ttsFilter);
@@ -205,6 +222,16 @@ function processFieldReference(
   }
 
   return value;
+}
+
+function assertKnownField(fieldName: string, variables: Variables) {
+  if (!fieldName) {
+    return;
+  }
+  if (fieldName in variables || SPECIAL_FIELDS.has(fieldName)) {
+    return;
+  }
+  throw new Error(`Found '{{${fieldName}}}', but there is no field called '${fieldName}'`);
 }
 
 /**
@@ -632,6 +659,9 @@ const SOUND_ICON_SVG =
 
 function replaceTemplatingSyntax(renderedString: string) {
   return renderedString
+    .replace(/\[anki:tts([^\]]*)\]([\s\S]+?)\[\/anki:tts\]/g, (_match, options, text) => {
+      return `<span class="tts-speak" data-tts-options="${options.trim()}">${text}</span>`;
+    })
     .replace(/\[sound:(.+?)\]/g, (_match, filename) => {
       return [
         `<div class='audio-container' data-autoplay>`,
