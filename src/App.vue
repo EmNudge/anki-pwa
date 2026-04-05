@@ -27,6 +27,7 @@ import {
 import StatusBar from "./components/StatusBar.vue";
 import FileLibrary from "./components/FileLibrary.vue";
 import DeckCreator from "./components/DeckCreator.vue";
+import AiDeckGenerator from "./components/AiDeckGenerator.vue";
 import SRSVisualization from "./components/SRSVisualization.vue";
 import SchedulerSettings from "./components/SchedulerSettings.vue";
 import CommandPalette from "./components/CommandPalette.vue";
@@ -178,6 +179,9 @@ async function handleChooseAnswer(answer: Answer) {
 
   <!-- CREATE DECK VIEW -->
   <DeckCreator v-else-if="activeViewSig === 'create'" />
+
+  <!-- AI GENERATE VIEW -->
+  <AiDeckGenerator v-else-if="activeViewSig === 'ai-generate'" />
 
   <!-- REVIEW VIEW -->
   <main v-else>

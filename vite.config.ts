@@ -15,6 +15,15 @@ export default defineConfig({
       "~": new URL("./src", import.meta.url).pathname,
     },
   },
+  server: {
+    proxy: {
+      "/ollama": {
+        target: "http://localhost:11434",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/ollama/, ""),
+      },
+    },
+  },
   plugins: [
     vue(),
     inspect(),
