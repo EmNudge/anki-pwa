@@ -5,8 +5,15 @@ on:
     branches: ['**']
 
 jobs:
-  typecheck:
+  checks:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        check:
+          - typecheck
+          - lint
+          - lint:knip
+          - test:run
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -14,29 +21,7 @@ jobs:
           node-version: '20'
           cache: 'npm'
       - run: npm ci
-      - run: npm run typecheck
-
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-      - run: npm ci
-      - run: npm run lint
-
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-      - run: npm ci
-      - run: npm run test:run
+      - run: npm run ${{ matrix.check }}
 
   e2e:
     runs-on: ubuntu-latest

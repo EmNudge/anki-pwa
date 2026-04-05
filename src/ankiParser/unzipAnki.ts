@@ -52,7 +52,7 @@ async function getFilesFromEntries(entries: Entry[]): Promise<Map<string, string
     const decompressed = await decompressZstd(mediaFileBytes);
     decompressedBytes = decompressed;
     mediaFileText = new TextDecoder().decode(decompressed);
-  } catch (_e) {
+  } catch {
     // Not compressed, try as plain text
     decompressedBytes = mediaFileBytes;
     mediaFileText = new TextDecoder().decode(mediaFileBytes);
@@ -63,12 +63,12 @@ async function getFilesFromEntries(entries: Entry[]): Promise<Map<string, string
       // Try parsing as JSON first (older format)
       return mediaMappingSchema.parse(JSON.parse(mediaFileText));
       // eslint-disable-next-line no-unused-vars
-    } catch (_jsonError) {
+    } catch {
       // If JSON parsing fails, try parsing as Protocol Buffer (newer .anki21b format)
       try {
         return parseMediaProto(decompressedBytes);
         // eslint-disable-next-line no-unused-vars
-      } catch (_protoError) {
+      } catch {
         // If both parsers fail, return empty object
         return {};
       }
@@ -107,7 +107,7 @@ async function getFilesFromEntries(entries: Entry[]): Promise<Map<string, string
         try {
           const decompressed = await decompressZstd(fileBytes);
           fileBytes = new Uint8Array(decompressed);
-        } catch (_decompError) {
+        } catch {
           // If decompression fails, use original bytes
           // This allows graceful fallback for files that aren't actually compressed
         }

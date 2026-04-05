@@ -5,6 +5,7 @@ import { DEFAULT_SCHEDULER_SETTINGS, type SchedulerSettings } from "./scheduler/
 import { reviewDB } from "./scheduler/db";
 import type { DeckInfo } from "./types";
 import { cachedFileEntrySchema } from "./ankiParser/anki2/jsonParsers";
+import type { z } from "zod";
 
 // View state
 export type AppView = "files" | "review" | "create";
@@ -15,11 +16,7 @@ export const deckInfoSig = shallowRef<DeckInfo | null>(null);
 export const selectedDeckIdSig = ref<string | null>(null);
 
 // Multi-file cache management
-export interface CachedFileEntry {
-  name: string;
-  size: number;
-  addedAt: number;
-}
+type CachedFileEntry = z.infer<typeof cachedFileEntrySchema>[number];
 
 export const ankiCachePromise = caches.open("anki-cache");
 export const blobSig = shallowRef<Blob | null>(null);
