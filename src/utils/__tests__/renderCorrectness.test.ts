@@ -28,6 +28,7 @@ describe("Render Correctness Issues (expected to fail)", () => {
         variables,
         mediaFiles: new Map(),
         cardOrd: 0,
+        isCloze: true,
       });
 
       // The entire multiline content should be replaced with [...]
@@ -47,6 +48,7 @@ describe("Render Correctness Issues (expected to fail)", () => {
         mediaFiles: new Map(),
         cardOrd: 0,
         isAnswer: true,
+        isCloze: true,
       });
 
       // The entire multiline cloze should be revealed
@@ -66,6 +68,7 @@ describe("Render Correctness Issues (expected to fail)", () => {
         variables,
         mediaFiles: new Map(),
         cardOrd: 0,
+        isCloze: true,
       });
 
       expect(html).toContain("[the hint]");

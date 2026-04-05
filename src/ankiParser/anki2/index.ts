@@ -6,7 +6,9 @@ import { assertTruthy } from "~/utils/assert";
 
 export type CardScheduling = {
   type: number;
+  typeName: string;
   queue: number;
+  queueName: string;
   due: number;
   ivl: number;
   factor: number;
@@ -14,6 +16,30 @@ export type CardScheduling = {
   lapses: number;
   fsrs: { stability: number; difficulty: number; desiredRetention: number } | null;
 };
+
+export function getQueueName(queue: number): string {
+  switch (queue) {
+    case -3: return "schedulerBuried";
+    case -2: return "userBuried";
+    case -1: return "suspended";
+    case 0: return "new";
+    case 1: return "learning";
+    case 2: return "review";
+    case 3: return "dayLearning";
+    case 4: return "preview";
+    default: return "unknown";
+  }
+}
+
+export function getTypeName(type: number): string {
+  switch (type) {
+    case 0: return "new";
+    case 1: return "learning";
+    case 2: return "review";
+    case 3: return "relearning";
+    default: return "unknown";
+  }
+}
 
 export type RevlogEntry = {
   id: number;
@@ -40,16 +66,19 @@ export type AnkiDB2Data = {
     scheduling: CardScheduling | null;
     noteType: number; // 0=MODEL_STD, 1=MODEL_CLOZE
     latexSvg: boolean;
+    latexPre: string;
     req: [number, string, number[]][] | null;
   }[];
   notesTypes: null;
   deckName: string;
   decks: Record<string, { id: number; name: string }>;
   revlog: RevlogEntry[];
+  collectionCreationTime: number;
+  deckConfigs: unknown[];
 };
 
 export function getDataFromAnki2(db: Database): AnkiDB2Data {
-  const { models, deckName, decks } = (() => {
+  const { models, deckName, decks, collectionCreationTime } = (() => {
     // anki2 and anki21 only use the first row of the col table
     // models, decks, and dconf are JSON strings
     const colData = executeQuery<{
@@ -58,6 +87,7 @@ export function getDataFromAnki2(db: Database): AnkiDB2Data {
       decks: string;
       dconf: string;
       tags: string;
+      crt: number;
     }>(db, "SELECT * from col");
 
     const parsedModels = modelSchema.parse(JSON.parse(colData.models));
@@ -88,7 +118,7 @@ export function getDataFromAnki2(db: Database): AnkiDB2Data {
       console.warn("Failed to parse deck information from decks JSON:", e);
     }
 
-    return { models: parsedModels, deckName, decks };
+    return { models: parsedModels, deckName, decks, collectionCreationTime: colData.crt ?? 0 };
   })();
 
   const cards = (() => {
@@ -145,6 +175,28 @@ export function getDataFromAnki2(db: Database): AnkiDB2Data {
         const effectiveDid = cardRow.odid !== 0 ? cardRow.odid : cardRow.did;
         const cardDeckName = decks[effectiveDid.toString()]?.name ?? "Unknown";
 
+        // Check req (blank card filtering)
+        const req = modelForCard.req;
+        if (req) {
+          const reqForOrd = req.find((r) => r[0] === cardRow.ord);
+          if (reqForOrd) {
+            const [, mode, fieldIndices] = reqForOrd;
+            if (mode === "any") {
+              const anyFilled = fieldIndices.some((idx) => {
+                const fieldName = keys[idx];
+                return fieldName && (valuesMap[fieldName]?.trim() ?? "") !== "";
+              });
+              if (!anyFilled) return null;
+            } else if (mode === "all") {
+              const allFilled = fieldIndices.every((idx) => {
+                const fieldName = keys[idx];
+                return fieldName && (valuesMap[fieldName]?.trim() ?? "") !== "";
+              });
+              if (!allFilled) return null;
+            }
+          }
+        }
+
         // Parse FSRS state from card.data (JSON or protobuf)
         const fsrs = parseFsrsData(cardRow.data);
 
@@ -157,10 +209,13 @@ export function getDataFromAnki2(db: Database): AnkiDB2Data {
           guid: note.guid,
           noteType: modelForCard.type ?? 0,
           latexSvg: modelForCard.latexsvg ?? false,
+          latexPre: modelForCard.latexPre ?? "",
           req: modelForCard.req ?? null,
           scheduling: {
             type: cardRow.type,
+            typeName: getTypeName(cardRow.type),
             queue: cardRow.queue,
+            queueName: getQueueName(cardRow.queue),
             due: cardRow.due,
             ivl: cardRow.ivl,
             factor: cardRow.factor,
@@ -186,14 +241,25 @@ export function getDataFromAnki2(db: Database): AnkiDB2Data {
     }
   })();
 
-  return { cards, notesTypes: null, deckName, decks, revlog };
+  // Parse deck configs if the table exists
+  const deckConfigs = (() => {
+    try {
+      return executeQueryAll<{ id: number; name: string; config: Uint8Array }>(
+        db, "SELECT id, name, config FROM deck_config",
+      );
+    } catch {
+      return [];
+    }
+  })();
+
+  return { cards, notesTypes: null, deckName, decks, revlog, collectionCreationTime, deckConfigs };
 }
 
 /**
  * Parse FSRS memory state from card.data.
  * Supports both JSON format ({s, d, dr}) and protobuf format (FSRSMemoryState).
  */
-function parseFsrsData(
+export function parseFsrsData(
   data: string | Uint8Array,
 ): CardScheduling["fsrs"] {
   if (!data) return null;

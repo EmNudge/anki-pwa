@@ -53,6 +53,7 @@ describe("Render Issues", () => {
         variables,
         mediaFiles: new Map(),
         cardOrd: 0,
+        isCloze: true,
       });
 
       // c1 should be replaced with a blank/prompt
@@ -74,6 +75,7 @@ describe("Render Issues", () => {
         variables,
         mediaFiles: new Map(),
         cardOrd: 0,
+        isCloze: true,
       });
 
       // Should show the hint instead of [...]
@@ -93,6 +95,7 @@ describe("Render Issues", () => {
         mediaFiles: new Map(),
         cardOrd: 0,
         isAnswer: true,
+        isCloze: true,
       });
 
       expect(answerHtml).toContain("Paris");
@@ -179,6 +182,7 @@ describe("Render Issues", () => {
         variables,
         mediaFiles: new Map(),
         cardOrd: 0,
+        isCloze: true,
       });
 
       // Should strip HTML AND process cloze

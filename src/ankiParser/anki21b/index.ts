@@ -1,9 +1,9 @@
 import { getNotesType } from "./proto";
 import { Database } from "sql.js";
-import { executeQueryAll } from "~/utils/sql";
+import { executeQuery, executeQueryAll } from "~/utils/sql";
 import { parseFieldConfigProto, parseTemplatesProto } from "./proto";
 import { assertTruthy } from "~/utils/assert";
-import type { CardScheduling, RevlogEntry } from "../anki2";
+import { type CardScheduling, type RevlogEntry, parseFsrsData, getQueueName, getTypeName } from "../anki2";
 
 export type AnkiDB21bData = {
   cards: {
@@ -20,14 +20,29 @@ export type AnkiDB21bData = {
     deckName: string;
     guid: string;
     scheduling: CardScheduling | null;
+    noteType: number;
+    latexSvg: boolean;
+    latexPre: string;
+    req: [number, string, number[]][] | null;
   }[];
   notesTypes: ReturnType<typeof getNotesType>;
   deckName: string;
   decks: Record<string, { id: number; name: string }>;
   revlog: RevlogEntry[];
+  collectionCreationTime: number;
 };
 
 export function getDataFromAnki21b(db: Database): AnkiDB21bData {
+  // Extract collection creation time from col table if it exists
+  const collectionCreationTime = (() => {
+    try {
+      const col = executeQuery<{ crt: number }>(db, "SELECT crt FROM col");
+      return col.crt ?? 0;
+    } catch {
+      return 0;
+    }
+  })();
+
   // Extract all decks from the decks table
   const { decks, deckName } = (() => {
     try {
@@ -101,6 +116,7 @@ export function getDataFromAnki21b(db: Database): AnkiDB21bData {
 
   const notesTypes = getNotesType(db);
   const notesTypeCssMap = new Map(notesTypes.map((nt) => [nt.id, nt.css]));
+  const notesTypeMap = new Map(notesTypes.map((nt) => [nt.id, nt]));
 
   const cards = (() => {
     /**
@@ -131,7 +147,7 @@ export function getDataFromAnki21b(db: Database): AnkiDB21bData {
       factor: number;
       reps: number;
       lapses: number;
-      data: string;
+      data: string | Uint8Array;
     }>(
       db,
       "SELECT id, nid, ord, did, odid, type, queue, due, ivl, factor, reps, lapses, data FROM cards",
@@ -159,22 +175,11 @@ export function getDataFromAnki21b(db: Database): AnkiDB21bData {
         const effectiveDid = cardRow.odid !== 0 ? cardRow.odid : cardRow.did;
         const cardDeckName = decks[effectiveDid.toString()]?.name ?? "Unknown";
 
-        // Parse FSRS state from card.data JSON
-        let fsrs: CardScheduling["fsrs"] = null;
-        if (cardRow.data) {
-          try {
-            const parsed = JSON.parse(cardRow.data);
-            if (parsed && typeof parsed.s === "number") {
-              fsrs = {
-                stability: parsed.s,
-                difficulty: parsed.d,
-                desiredRetention: parsed.dr ?? 0.9,
-              };
-            }
-          } catch {
-            // Not JSON or no FSRS data — ignore
-          }
-        }
+        // Parse FSRS state from card.data (JSON or protobuf)
+        const fsrs = parseFsrsData(cardRow.data);
+
+        // Get notetype info for this card
+        const noteTypeInfo = notesTypeMap.get(note.mid);
 
         return {
           values: Object.fromEntries(
@@ -191,9 +196,17 @@ export function getDataFromAnki21b(db: Database): AnkiDB21bData {
           tags: note.tags.trim().split(/\s+/).filter(Boolean),
           deckName: cardDeckName,
           guid: note.guid,
+          noteType: noteTypeInfo?.kind ?? 0,
+          latexSvg: noteTypeInfo?.latexSvg ?? false,
+          latexPre: noteTypeInfo?.latexPre ?? "",
+          req: noteTypeInfo?.reqs
+            ? noteTypeInfo.reqs.map((r, i) => [i, r.kind === 1 ? "any" : "all", r.fieldOrds] as [number, string, number[]])
+            : null,
           scheduling: {
             type: cardRow.type,
+            typeName: getTypeName(cardRow.type),
             queue: cardRow.queue,
+            queueName: getQueueName(cardRow.queue),
             due: cardRow.due,
             ivl: cardRow.ivl,
             factor: cardRow.factor,
@@ -219,5 +232,5 @@ export function getDataFromAnki21b(db: Database): AnkiDB21bData {
     }
   })();
 
-  return { cards, notesTypes, deckName, decks, revlog };
+  return { cards, notesTypes, deckName, decks, revlog, collectionCreationTime };
 }
