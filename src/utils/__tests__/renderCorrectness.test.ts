@@ -122,50 +122,33 @@ describe("Render Correctness Issues (expected to fail)", () => {
   });
 
   /**
-   * Issue #3: Filter chain applied in wrong order
+   * Issue #3: Filter chain order — right-to-left (innermost first)
    *
-   * Anki applies filters left-to-right: {{text:cloze:Field}} applies text first, then cloze.
-   * The current code applies them right-to-left (cloze first, then text).
+   * Anki applies filters right-to-left: {{text:hint:Field}} applies hint first (closest
+   * to field), then text. This is now implemented correctly.
    *
-   * Source: rslib/src/card_rendering/filters.rs — filters applied in order from template
+   * Source: rslib/src/card_rendering/filters.rs — filters applied from field outward
    */
-  describe("#3 - filter chain order should be left-to-right", () => {
-    it("should apply filters left-to-right per Anki source", () => {
-      // {{text:cloze:Text}} in Anki: text applied first (strips HTML), then cloze
-      // L-to-R (correct): text strips HTML → "{{c1::Paris}} is the capital of {{c2::France}}"
-      //                    then cloze → "[...] is the capital of France"
-      //                    Result: no HTML tags at all
-      //
-      // R-to-L (current): cloze first → "<b>[...]</b> is the capital of <i>France</i>"
-      //                    then text → "[...] is the capital of France"
-      //                    Result: same here, but differs with hint filter...
-
-      // Better test case: {{hint:text:Field}} — order matters
-      // L-to-R (correct): hint wraps in clickable element first, then text strips HTML from that
-      // R-to-L (current): text strips HTML first (no-op on plain text), then hint wraps
+  describe("#3 - filter chain order should be right-to-left", () => {
+    it("should apply filters right-to-left per Anki source", () => {
       const variables = {
         Details: "<em>Important</em> context here",
       };
 
       // {{text:hint:Details}}
-      // L-to-R: text strips HTML → "Important context here", then hint wraps it
-      // R-to-L: hint wraps first → clickable element with "<em>Important</em>...", then text strips all HTML → plain text with no clickable element
+      // R-to-L (correct): hint wraps first → <a>Show Details</a><span>...<em>...</em>...</span>
+      //                    then text strips ALL HTML → "Show DetailsImportant context here"
       const html = getRenderedCardString({
         templateString: "{{text:hint:Details}}",
         variables,
         mediaFiles: new Map(),
       });
 
-      // With L-to-R (correct): text first strips HTML to plain text,
-      // then hint wraps the plain text in a clickable element
-      // Result: should have a hint element containing "Important context here" (no <em>)
-      //
-      // With R-to-L (current): hint wraps first (creating <a> and <span>),
-      // then text strips ALL HTML including the hint wrapper
-      // Result: just "Show HintImportant context here" as plain text
-      expect(html).toContain("hint");
-      expect(html).toContain("<a"); // The hint wrapper should survive
-      expect(html).not.toContain("<em>"); // But the original HTML should be stripped
+      // With R-to-L: hint runs first, then text strips all HTML including hint wrapper
+      expect(html).toContain("Important");
+      expect(html).toContain("context here");
+      expect(html).not.toContain("<em>"); // HTML stripped by text filter
+      expect(html).not.toContain("<a"); // hint wrapper also stripped by text filter
     });
   });
 

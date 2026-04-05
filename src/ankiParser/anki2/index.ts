@@ -10,11 +10,17 @@ export type CardScheduling = {
   queue: number;
   queueName: string;
   due: number;
+  dueType: "position" | "dayOffset" | "timestamp" | "dayLearningOffset";
   ivl: number;
+  ivlUnit: "days" | "seconds";
   factor: number;
+  easeFactor: number | null;
   reps: number;
   lapses: number;
-  fsrs: { stability: number; difficulty: number; desiredRetention: number } | null;
+  odue: number;
+  flags: number;
+  left: number;
+  fsrs: { stability: number; difficulty: number; desiredRetention: number | undefined } | null;
 };
 
 export function getQueueName(queue: number): string {
@@ -51,7 +57,29 @@ export type RevlogEntry = {
   factor: number;
   time: number;
   type: number;
+  typeName: string;
 };
+
+export function getRevlogTypeName(type: number): string {
+  switch (type) {
+    case 0: return "learning";
+    case 1: return "review";
+    case 2: return "relearning";
+    case 3: return "filtered";
+    case 4: return "manual";
+    default: return "unknown";
+  }
+}
+
+export function getDueType(queue: number): CardScheduling["dueType"] {
+  switch (queue) {
+    case 0: return "position";
+    case 1: return "timestamp";
+    case 2: return "dayOffset";
+    case 3: return "dayLearningOffset";
+    default: return "position";
+  }
+}
 
 export type AnkiDB2Data = {
   cards: {
@@ -68,13 +96,17 @@ export type AnkiDB2Data = {
     latexSvg: boolean;
     latexPre: string;
     req: [number, string, number[]][] | null;
+    noteData: string | null;
+    csum: number | null;
+    sfld: string | null;
   }[];
-  notesTypes: null;
+  notesTypes: { id: string | number; schemaHash: string; latexPre: string; latexSvg: boolean }[];
   deckName: string;
   decks: Record<string, { id: number; name: string }>;
   revlog: RevlogEntry[];
   collectionCreationTime: number;
-  deckConfigs: unknown[];
+  deckConfigs: Record<string, { learnSteps?: number[]; relearnSteps?: number[] }>;
+  graves: { usn: number; oid: number; type: number }[];
 };
 
 export function getDataFromAnki2(db: Database): AnkiDB2Data {
@@ -125,7 +157,10 @@ export function getDataFromAnki2(db: Database): AnkiDB2Data {
       modelId: string;
       tags: string;
       fields: string;
-    }>(db, "SELECT id, guid, cast(mid as text) as modelId, tags, flds as fields FROM notes");
+      data: string;
+      sfld: string;
+      csum: number;
+    }>(db, "SELECT id, guid, cast(mid as text) as modelId, tags, flds as fields, data, sfld, csum FROM notes");
 
     const notesMap = new Map(notes.map((n) => [n.id, n]));
 
@@ -143,10 +178,13 @@ export function getDataFromAnki2(db: Database): AnkiDB2Data {
       factor: number;
       reps: number;
       lapses: number;
+      odue: number;
+      flags: number;
+      left: number;
       data: string | Uint8Array;
     }>(
       db,
-      "SELECT id, nid, ord, did, odid, type, queue, due, ivl, factor, reps, lapses, data FROM cards",
+      "SELECT id, nid, ord, did, odid, type, queue, due, ivl, factor, reps, lapses, odue, flags, left, data FROM cards",
     );
 
     return cardRows
@@ -208,16 +246,25 @@ export function getDataFromAnki2(db: Database): AnkiDB2Data {
           latexSvg: modelForCard.latexsvg ?? false,
           latexPre: modelForCard.latexPre ?? "",
           req: modelForCard.req ?? null,
+          noteData: note.data || null,
+          csum: note.csum ?? null,
+          sfld: note.sfld ?? null,
           scheduling: {
             type: cardRow.type,
             typeName: getTypeName(cardRow.type),
             queue: cardRow.queue,
             queueName: getQueueName(cardRow.queue),
             due: cardRow.due,
+            dueType: getDueType(cardRow.queue),
             ivl: cardRow.ivl,
+            ivlUnit: cardRow.ivl < 0 ? "seconds" as const : "days" as const,
             factor: cardRow.factor,
+            easeFactor: cardRow.factor === 0 ? null : cardRow.factor / 1000,
             reps: cardRow.reps,
             lapses: cardRow.lapses,
+            odue: cardRow.odue,
+            flags: cardRow.flags,
+            left: cardRow.left,
             fsrs,
           },
         };
@@ -228,28 +275,68 @@ export function getDataFromAnki2(db: Database): AnkiDB2Data {
   // Parse revlog if the table exists
   const revlog = (() => {
     try {
-      return executeQueryAll<RevlogEntry>(
+      const rows = executeQueryAll<Omit<RevlogEntry, "typeName">>(
         db,
         "SELECT id, cid, usn, ease, ivl, lastIvl, factor, time, type FROM revlog",
       );
+      return rows.map((r) => ({ ...r, typeName: getRevlogTypeName(r.type) }));
     } catch {
       // revlog table may not exist in all databases
       return [];
     }
   })();
 
-  // Parse deck configs if the table exists
+  // Parse deck configs from col.dconf JSON (anki2 format)
   const deckConfigs = (() => {
     try {
-      return executeQueryAll<{ id: number; name: string; config: Uint8Array }>(
-        db, "SELECT id, name, config FROM deck_config",
+      const colData = executeQuery<{ dconf: string }>(db, "SELECT dconf FROM col");
+      const parsed = JSON.parse(colData.dconf) as Record<string, Record<string, unknown>>;
+      const result: Record<string, { learnSteps?: number[]; relearnSteps?: number[] }> = {};
+      for (const [id, config] of Object.entries(parsed)) {
+        const newConf = config?.new as { delays?: number[] } | undefined;
+        const lapseConf = config?.lapse as { delays?: number[] } | undefined;
+        result[id] = {
+          learnSteps: newConf?.delays,
+          relearnSteps: lapseConf?.delays,
+        };
+      }
+      return result;
+    } catch {
+      return {};
+    }
+  })();
+
+  // Parse graves (deleted objects) if the table exists
+  const graves = (() => {
+    try {
+      return executeQueryAll<{ usn: number; oid: number; type: number }>(
+        db, "SELECT usn, oid, type FROM graves",
       );
     } catch {
       return [];
     }
   })();
 
-  return { cards, notesTypes: null, deckName, decks, revlog, collectionCreationTime, deckConfigs };
+  // Build notesTypes with schema hash
+  const notesTypes = Object.values(models).map((model) => {
+    const fieldNames = model.flds.map((f) => f.name);
+    const templateNames = model.tmpls.map((t) => t.name);
+    const hashInput = [...fieldNames, ...templateNames].join("\x1f");
+    // Simple string hash for notetype matching
+    let hash = 0;
+    for (let i = 0; i < hashInput.length; i++) {
+      const char = hashInput.charCodeAt(i);
+      hash = ((hash << 5) - hash + char) | 0;
+    }
+    return {
+      id: model.id,
+      schemaHash: Math.abs(hash).toString(16),
+      latexPre: model.latexPre ?? "",
+      latexSvg: model.latexsvg ?? false,
+    };
+  });
+
+  return { cards, notesTypes, deckName, decks, revlog, collectionCreationTime, deckConfigs, graves };
 }
 
 /**
@@ -273,7 +360,7 @@ export function parseFsrsData(
       return {
         stability: parsed.s,
         difficulty: parsed.d,
-        desiredRetention: parsed.dr ?? 0.9,
+        desiredRetention: parsed.dr,
       };
     } catch {
       // Not JSON or wrong shape — try interpreting as binary if it contains non-printable chars
@@ -332,7 +419,7 @@ function parseFsrsProtobuf(
   }
 
   if (stability !== null && difficulty !== null) {
-    return { stability, difficulty, desiredRetention: 0.9 };
+    return { stability, difficulty, desiredRetention: undefined };
   }
 
   return null;

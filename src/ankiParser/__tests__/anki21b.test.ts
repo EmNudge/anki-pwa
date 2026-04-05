@@ -531,5 +531,58 @@ describe("Anki21b Parser", () => {
       expect(result.notesTypes[0]?.latexSvg).toBe(true);
       expect(result.notesTypes[0]?.latexPre).toContain("\\usepackage{amsmath}");
     });
+
+    it("should map protobuf req kind=0 to 'none' and expose req array", async () => {
+      const db = await createAnki21bDatabase();
+
+      const notetypes: Anki21bNotetype[] = [
+        { id: "1", name: "Special", config: { css: "", kind: 0 } },
+      ];
+      const fields: Anki21bField[] = [
+        { ntid: "1", ord: 0, name: "Front", config: { fontName: "Arial", fontSize: 20 } },
+        { ntid: "1", ord: 1, name: "Back", config: { fontName: "Arial", fontSize: 20 } },
+      ];
+      const templates: Anki21bTemplate[] = [
+        { ntid: "1", ord: 0, name: "Card 1", qFormat: "{{Front}}", aFormat: "{{Back}}" },
+      ];
+      const notes: Anki21bNote[] = [
+        { id: 1, mid: "1", tags: [], fields: { Front: "", Back: "" } },
+      ];
+
+      insertAnki21bData(db, notetypes, fields, templates, notes);
+
+      const result = getDataFromAnki21b(db);
+      expect(result.cards).toHaveLength(1);
+      const card = result.cards[0] as Record<string, unknown>;
+      expect(card).toHaveProperty("req");
+      expect(card.req).not.toBeNull();
+    });
+
+    it("should expose the tags table with collapse state", async () => {
+      const db = await createAnki21bDatabase();
+
+      db.run(`CREATE TABLE IF NOT EXISTS tags (tag TEXT NOT NULL PRIMARY KEY, usn INTEGER NOT NULL, collapsed INTEGER NOT NULL DEFAULT 0)`);
+      db.run(`INSERT INTO tags (tag, usn, collapsed) VALUES ('vocab', 0, 0)`);
+      db.run(`INSERT INTO tags (tag, usn, collapsed) VALUES ('vocab::german', 0, 1)`);
+
+      const notetypes: Anki21bNotetype[] = [
+        { id: "1", name: "Basic", config: { css: "", kind: 0 } },
+      ];
+      const fields: Anki21bField[] = [
+        { ntid: "1", ord: 0, name: "Front", config: { fontName: "Arial", fontSize: 20 } },
+        { ntid: "1", ord: 1, name: "Back", config: { fontName: "Arial", fontSize: 20 } },
+      ];
+      const templates: Anki21bTemplate[] = [
+        { ntid: "1", ord: 0, name: "Card 1", qFormat: "{{Front}}", aFormat: "{{Back}}" },
+      ];
+      const notes: Anki21bNote[] = [
+        { id: 1, mid: "1", tags: ["vocab::german"], fields: { Front: "Hund", Back: "Dog" } },
+      ];
+
+      insertAnki21bData(db, notetypes, fields, templates, notes);
+
+      const result = getDataFromAnki21b(db);
+      expect(result.tagsTable).toHaveLength(2);
+    });
   });
 });
