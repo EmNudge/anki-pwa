@@ -4,7 +4,10 @@ import type { z } from "zod";
 
 export type CachedFileEntry = z.infer<typeof cachedFileEntrySchema>[number];
 
-export type DeckInput = { kind: "blob"; blob: Blob } | { kind: "sample"; data: AnkiData };
+export type DeckInput =
+  | { kind: "blob"; blob: Blob }
+  | { kind: "sample"; data: AnkiData }
+  | { kind: "sqlite"; bytes: Uint8Array; mediaFiles?: Map<string, string> };
 type DeckLibraryItem = {
   detail: string;
   id: string;

@@ -1,5 +1,5 @@
 import { ref, computed, watch, shallowRef } from "vue";
-import { getAnkiDataFromBlob } from "./ankiParser";
+import { getAnkiDataFromBlob, getAnkiDataFromSqlite } from "./ankiParser";
 import type { AnkiData } from "./ankiParser";
 import { ReviewQueue, type ReviewCard } from "./scheduler/queue";
 import { DEFAULT_SCHEDULER_SETTINGS, type SchedulerSettings } from "./scheduler/types";
@@ -19,7 +19,7 @@ import {
 } from "./deckLibrary";
 
 // View state
-export type AppView = "files" | "review" | "create" | "ai-generate";
+export type AppView = "files" | "review" | "create" | "ai-generate" | "sync";
 export const activeViewSig = ref<AppView>("files");
 
 export const deckInfoSig = shallowRef<DeckInfo | null>(null);
@@ -147,6 +147,13 @@ export async function deleteCachedFile(name: string) {
   clearLoadedDeck();
 }
 
+export function loadSyncedCollection(bytes: Uint8Array, mediaFiles?: Map<string, string>) {
+  const sourceId = "sync-collection";
+  persistActiveDeckSourceId(sourceId);
+  activeDeckInputSig.value = { kind: "sqlite", bytes, mediaFiles };
+  activeViewSig.value = "review";
+}
+
 export const sampleDecksSig = sampleDecks;
 
 // Resource replacement: watch active deck input and fetch data
@@ -165,6 +172,14 @@ watch(activeDeckInputSig, async (newInput) => {
 
   if (newInput.kind === "sample") {
     ankiDataSig.value = newInput.data;
+    return;
+  }
+
+  if (newInput.kind === "sqlite") {
+    const parsedDeck = await getAnkiDataFromSqlite(newInput.bytes, newInput.mediaFiles);
+    if (activeDeckLoadVersion === loadVersion) {
+      ankiDataSig.value = parsedDeck;
+    }
     return;
   }
 

@@ -29,3 +29,32 @@ export async function getAnkiDataFromBlob(file: Blob): Promise<AnkiData> {
     getDataFromAnki2(db);
   return { cards, files, deckName, decks, notesTypes, collectionCreationTime, deckConfigs };
 }
+
+/**
+ * Parse a raw SQLite database (as returned by the Anki sync download endpoint).
+ * Auto-detects whether the DB uses anki2 (JSON col table) or anki21b (protobuf notetypes table) format.
+ */
+export async function getAnkiDataFromSqlite(
+  sqliteBytes: Uint8Array,
+  mediaFiles?: Map<string, string>,
+): Promise<AnkiData> {
+  const SQL = await initSqlJs({ locateFile: () => wasm });
+  const db = new SQL.Database(sqliteBytes);
+  const files = mediaFiles ?? new Map<string, string>();
+
+  try {
+    const tables = db.exec("SELECT name FROM sqlite_master WHERE type='table'");
+    const tableNames = new Set((tables[0]?.values ?? []).map((row) => row[0] as string));
+
+    if (tableNames.has("notetypes")) {
+      const { cards, deckName, decks, notesTypes, collectionCreationTime } = getDataFromAnki21b(db);
+      return { cards, files, deckName, decks, notesTypes, collectionCreationTime, deckConfigs: {} };
+    }
+
+    const { cards, deckName, decks, notesTypes, collectionCreationTime, deckConfigs } =
+      getDataFromAnki2(db);
+    return { cards, files, deckName, decks, notesTypes, collectionCreationTime, deckConfigs };
+  } finally {
+    db.close();
+  }
+}
