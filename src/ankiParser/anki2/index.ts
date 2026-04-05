@@ -95,6 +95,7 @@ export type AnkiDB2Data = {
     noteType: number; // 0=MODEL_STD, 1=MODEL_CLOZE
     latexSvg: boolean;
     latexPre: string;
+    latexPost: string;
     req: [number, string, number[]][] | null;
     noteData: string | null;
     csum: number | null;
@@ -245,6 +246,7 @@ export function getDataFromAnki2(db: Database): AnkiDB2Data {
           noteType: modelForCard.type ?? 0,
           latexSvg: modelForCard.latexsvg ?? false,
           latexPre: modelForCard.latexPre ?? "",
+          latexPost: modelForCard.latexPost ?? "",
           req: modelForCard.req ?? null,
           noteData: note.data || null,
           csum: note.csum ?? null,

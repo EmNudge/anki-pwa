@@ -9,6 +9,28 @@ import { describe, it, expect } from "vitest";
 import { getRenderedCardString } from "../render";
 
 describe("Rendering Gaps (expected to fail)", () => {
+  describe("#23 - invalid templates should surface explicit parser errors", () => {
+    it("should reject references to unknown fields", () => {
+      expect(() =>
+        getRenderedCardString({
+          templateString: "{{Front}} {{MissingField}}",
+          variables: { Front: "Known field" },
+          mediaFiles: new Map(),
+        }),
+      ).toThrow(/MissingField|no field called/i);
+    });
+
+    it("should reject mismatched conditional closing tags", () => {
+      expect(() =>
+        getRenderedCardString({
+          templateString: "{{#Front}}value{{/Back}}",
+          variables: { Front: "shown", Back: "hidden" },
+          mediaFiles: new Map(),
+        }),
+      ).toThrow(/expected|missing|Front|Back/i);
+    });
+  });
+
   // ─────────────────────────────────────────────────────────────────────
   // Issue #4: furigana/kanji/kana filters not implemented
   //
@@ -489,6 +511,31 @@ describe("Rendering Gaps (expected to fail)", () => {
       // When latexSvg is true AND the pre-rendered file exists in media,
       // the output should reference the SVG file, not use KaTeX rendering
       expect(html).toContain("blob:http://localhost/svg1");
+    });
+  });
+
+  describe("#24 - TTS syntaxes beyond inline filters", () => {
+    it("should render [anki:tts] blocks instead of leaving raw tags in place", () => {
+      const html = getRenderedCardString({
+        templateString: "[anki:tts lang=en_US]Hello world[/anki:tts]",
+        variables: {},
+        mediaFiles: new Map(),
+      });
+
+      expect(html).toContain("Hello world");
+      expect(html).not.toContain("[anki:tts");
+      expect(html).toMatch(/tts|audio|speak/i);
+    });
+
+    it("should resolve the tts-voices special field", () => {
+      const html = getRenderedCardString({
+        templateString: "{{tts-voices:}}",
+        variables: {},
+        mediaFiles: new Map(),
+      });
+
+      expect(html).not.toBe("");
+      expect(html).toMatch(/voice|Apple|Microsoft|Google/i);
     });
   });
 });

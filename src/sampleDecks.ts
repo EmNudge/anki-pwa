@@ -43,6 +43,7 @@ function createCard(card: SampleCard, index: number) {
     noteType: 0,
     latexSvg: false,
     latexPre: "",
+    latexPost: "",
     req: null,
     noteData: null,
     csum: null,
@@ -72,6 +73,9 @@ function createSampleDeck({
       cards: cards.map(createCard),
       deckName: name,
       decks,
+      notesTypes: [],
+      collectionCreationTime: 0,
+      deckConfigs: {},
     },
   };
 }

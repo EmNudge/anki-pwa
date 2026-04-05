@@ -5,9 +5,11 @@
  * All tests in this file are EXPECTED TO FAIL against the current implementation,
  * demonstrating where the parser diverges from real Anki behavior.
  */
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+import { BlobWriter, TextReader, Uint8ArrayReader, ZipWriter } from "@zip-js/zip-js";
 import { getDataFromAnki2 } from "../anki2";
 import { getDataFromAnki21b } from "../anki21b";
+import { getAnkiDataFromBlob } from "..";
 import {
   createAnki2Database,
   createAnki21bDatabase,
@@ -21,7 +23,77 @@ import {
   type Anki21bNote,
 } from "./testUtils";
 
+vi.mock("../../utils/zstd", () => ({
+  decompressZstd: async (data: Uint8Array) => data,
+}));
+
+async function buildAnki2ApkgBlob() {
+  const db = await createAnki2Database();
+
+  const models: Anki2Model[] = [
+    {
+      id: "1",
+      css: ".card { color: black; }",
+      latexPre: "\\documentclass{article}\\begin{document}",
+      latexPost: "\\end{document}",
+      fields: [{ name: "Front" }, { name: "Back" }],
+      templates: [{ name: "Card 1", qfmt: "{{Front}}", afmt: "{{Back}}", ord: 0 }],
+    },
+  ];
+  const notes: Anki2Note[] = [
+    { id: 1, modelId: "1", tags: ["runtime"], fields: { Front: "Hello", Back: "World" } },
+  ];
+
+  insertAnki2Data(db, models, notes);
+  db.run(`UPDATE col SET crt = 1704067200 WHERE id = 1`);
+
+  const zipWriter = new ZipWriter(new BlobWriter("application/zip"));
+  await zipWriter.add("collection.anki2", new Uint8ArrayReader(db.export()));
+  await zipWriter.add("media", new TextReader("{}"));
+
+  return zipWriter.close();
+}
+
 describe("Parser Gaps (expected to fail)", () => {
+  describe("#23 - anki21b should apply req filtering like anki2", () => {
+    it("should filter blank reverse cards using notetype reqs", async () => {
+      const db = await createAnki21bDatabase();
+
+      const notetypes: Anki21bNotetype[] = [
+        {
+          id: "1",
+          name: "Basic (and reversed card)",
+          config: {
+            css: "",
+            kind: 0,
+            reqs: [
+              { kind: 1, fieldOrds: [0] },
+              { kind: 1, fieldOrds: [1] },
+            ],
+          },
+        },
+      ];
+      const fields: Anki21bField[] = [
+        { ntid: "1", ord: 0, name: "Front", config: { fontName: "Arial", fontSize: 20 } },
+        { ntid: "1", ord: 1, name: "Back", config: { fontName: "Arial", fontSize: 20 } },
+      ];
+      const templates: Anki21bTemplate[] = [
+        { ntid: "1", ord: 0, name: "Forward", qFormat: "{{Front}}", aFormat: "{{Back}}" },
+        { ntid: "1", ord: 1, name: "Reverse", qFormat: "{{Back}}", aFormat: "{{Front}}" },
+      ];
+      const notes: Anki21bNote[] = [
+        { id: 1, mid: "1", tags: [], fields: { Front: "Question", Back: "" } },
+      ];
+
+      insertAnki21bData(db, notetypes, fields, templates, notes);
+
+      const result = getDataFromAnki21b(db);
+      const templateNames = result.cards.map((card) => card.templates[0]?.name);
+
+      expect(templateNames).toEqual(["Forward"]);
+    });
+  });
+
   // ─────────────────────────────────────────────────────────────────────
   // Issue #1: Missing card queue states 3 (day-learning), 4 (preview),
   //           and -3 (scheduler-buried)
@@ -667,4 +739,75 @@ describe("Parser Gaps (expected to fail)", () => {
       expect(card).toHaveProperty("latexPre");
     });
   });
+
+  describe("#24 - getAnkiDataFromBlob should preserve parser metadata", () => {
+    it("should expose collection and notetype metadata at the public API boundary", async () => {
+      const apkg = await buildAnki2ApkgBlob();
+
+      const result = await getAnkiDataFromBlob(apkg);
+
+      expect(result).toHaveProperty("collectionCreationTime", 1704067200);
+      expect(result).toHaveProperty("notesTypes");
+      expect(result).toHaveProperty("deckConfigs");
+    });
+  });
+
+  describe("#25 - cards should retain latexPost across formats", () => {
+    it("should include latexPost on anki2 cards", async () => {
+      const db = await createAnki2Database();
+
+      const models: Anki2Model[] = [
+        {
+          id: "1",
+          css: "",
+          latexPre: "\\documentclass{article}\\begin{document}",
+          latexPost: "\\end{document}",
+          fields: [{ name: "Front" }, { name: "Back" }],
+          templates: [{ name: "Card 1", qfmt: "{{Front}}", afmt: "{{Back}}", ord: 0 }],
+        },
+      ];
+      const notes: Anki2Note[] = [
+        { id: 1, modelId: "1", tags: [], fields: { Front: "[latex]x^2[/latex]", Back: "square" } },
+      ];
+
+      insertAnki2Data(db, models, notes);
+
+      expect(resultWithLatexPost(getDataFromAnki2(db).cards[0])).toBe("\\end{document}");
+    });
+
+    it("should include latexPost on anki21b cards", async () => {
+      const db = await createAnki21bDatabase();
+
+      const notetypes: Anki21bNotetype[] = [
+        {
+          id: "1",
+          name: "Math",
+          config: {
+            css: "",
+            kind: 0,
+            latexPre: "\\documentclass{article}\\begin{document}",
+            latexPost: "\\end{document}",
+          },
+        },
+      ];
+      const fields: Anki21bField[] = [
+        { ntid: "1", ord: 0, name: "Front", config: {} },
+        { ntid: "1", ord: 1, name: "Back", config: {} },
+      ];
+      const templates: Anki21bTemplate[] = [
+        { ntid: "1", ord: 0, name: "Card 1", qFormat: "{{Front}}", aFormat: "{{Back}}" },
+      ];
+      const notes: Anki21bNote[] = [
+        { id: 1, mid: "1", tags: [], fields: { Front: "[latex]x^2[/latex]", Back: "square" } },
+      ];
+
+      insertAnki21bData(db, notetypes, fields, templates, notes);
+
+      expect(resultWithLatexPost(getDataFromAnki21b(db).cards[0])).toBe("\\end{document}");
+    });
+  });
 });
+
+function resultWithLatexPost(card: unknown) {
+  return (card as { latexPost?: string } | undefined)?.latexPost;
+}
