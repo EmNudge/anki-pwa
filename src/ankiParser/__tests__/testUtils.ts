@@ -172,6 +172,9 @@ export interface Anki2Model {
   css: string;
   latexPre: string;
   latexPost: string;
+  type?: number; // 0=MODEL_STD, 1=MODEL_CLOZE
+  latexsvg?: boolean;
+  req?: [number, string, number[]][];
   fields: { name: string }[];
   templates: {
     name: string;
@@ -195,6 +198,9 @@ export function insertAnki2Data(db: Database, models: Anki2Model[], notes: Anki2
             css: m.css,
             latexPre: m.latexPre,
             latexPost: m.latexPost,
+            ...(m.type !== undefined ? { type: m.type } : {}),
+            ...(m.latexsvg !== undefined ? { latexsvg: m.latexsvg } : {}),
+            ...(m.req !== undefined ? { req: m.req } : {}),
             flds: m.fields,
             tmpls: m.templates,
           },

@@ -3,6 +3,7 @@ import { Database } from "sql.js";
 import { executeQueryAll } from "~/utils/sql";
 import { parseFieldConfigProto, parseTemplatesProto } from "./proto";
 import { assertTruthy } from "~/utils/assert";
+import type { CardScheduling, RevlogEntry } from "../anki2";
 
 export type AnkiDB21bData = {
   cards: {
@@ -17,10 +18,13 @@ export type AnkiDB21bData = {
     }[];
     css: string;
     deckName: string;
+    guid: string;
+    scheduling: CardScheduling | null;
   }[];
   notesTypes: ReturnType<typeof getNotesType>;
   deckName: string;
   decks: Record<string, { id: number; name: string }>;
+  revlog: RevlogEntry[];
 };
 
 export function getDataFromAnki21b(db: Database): AnkiDB21bData {
@@ -105,21 +109,33 @@ export function getDataFromAnki21b(db: Database): AnkiDB21bData {
      */
     const notes = executeQueryAll<{
       id: number;
+      guid: string;
       flds: string;
       tags: string;
       mid: string;
-    }>(db, "SELECT id, flds, tags, cast(mid as text) as mid FROM notes");
+    }>(db, "SELECT id, guid, flds, tags, cast(mid as text) as mid FROM notes");
 
     const notesMap = new Map(notes.map((n) => [n.id, n]));
 
-    // Query card rows to drive the output
+    // Query card rows to drive the output — include scheduling fields
     const cardRows = executeQueryAll<{
       id: number;
       nid: number;
       ord: number;
       did: number;
       odid: number;
-    }>(db, "SELECT id, nid, ord, did, odid FROM cards");
+      type: number;
+      queue: number;
+      due: number;
+      ivl: number;
+      factor: number;
+      reps: number;
+      lapses: number;
+      data: string;
+    }>(
+      db,
+      "SELECT id, nid, ord, did, odid, type, queue, due, ivl, factor, reps, lapses, data FROM cards",
+    );
 
     return cardRows
       .map((cardRow) => {
@@ -143,6 +159,23 @@ export function getDataFromAnki21b(db: Database): AnkiDB21bData {
         const effectiveDid = cardRow.odid !== 0 ? cardRow.odid : cardRow.did;
         const cardDeckName = decks[effectiveDid.toString()]?.name ?? "Unknown";
 
+        // Parse FSRS state from card.data JSON
+        let fsrs: CardScheduling["fsrs"] = null;
+        if (cardRow.data) {
+          try {
+            const parsed = JSON.parse(cardRow.data);
+            if (parsed && typeof parsed.s === "number") {
+              fsrs = {
+                stability: parsed.s,
+                difficulty: parsed.d,
+                desiredRetention: parsed.dr ?? 0.9,
+              };
+            }
+          } catch {
+            // Not JSON or no FSRS data — ignore
+          }
+        }
+
         return {
           values: Object.fromEntries(
             note.flds.split("\x1F").map((value, i) => [fieldNames[i], value]),
@@ -157,10 +190,34 @@ export function getDataFromAnki21b(db: Database): AnkiDB21bData {
           css: notesTypeCssMap.get(note.mid) ?? "",
           tags: note.tags.trim().split(/\s+/).filter(Boolean),
           deckName: cardDeckName,
+          guid: note.guid,
+          scheduling: {
+            type: cardRow.type,
+            queue: cardRow.queue,
+            due: cardRow.due,
+            ivl: cardRow.ivl,
+            factor: cardRow.factor,
+            reps: cardRow.reps,
+            lapses: cardRow.lapses,
+            fsrs,
+          },
         };
       })
       .filter((c): c is NonNullable<typeof c> => c !== null);
   })();
 
-  return { cards, notesTypes, deckName, decks };
+  // Parse revlog if the table exists
+  const revlog = (() => {
+    try {
+      return executeQueryAll<RevlogEntry>(
+        db,
+        "SELECT id, cid, usn, ease, ivl, lastIvl, factor, time, type FROM revlog",
+      );
+    } catch {
+      // revlog table may not exist in all databases
+      return [];
+    }
+  })();
+
+  return { cards, notesTypes, deckName, decks, revlog };
 }
