@@ -6,6 +6,7 @@ import { assertTruthy } from "../utils/assert";
 import mime from "mime";
 import { decompressZstd } from "../utils/zstd";
 import { parseMediaProto } from "./parseMediaProto";
+import { mediaMappingSchema } from "./anki2/jsonParsers";
 
 /**
  * Type guard to check if an Entry is a FileEntry (has getData method)
@@ -60,7 +61,7 @@ async function getFilesFromEntries(entries: Entry[]): Promise<Map<string, string
   const mediaFile = (() => {
     try {
       // Try parsing as JSON first (older format)
-      return JSON.parse(mediaFileText) as Record<number, string>;
+      return mediaMappingSchema.parse(JSON.parse(mediaFileText));
       // eslint-disable-next-line no-unused-vars
     } catch (_jsonError) {
       // If JSON parsing fails, try parsing as Protocol Buffer (newer .anki21b format)

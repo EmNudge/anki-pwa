@@ -1,6 +1,6 @@
 import { Database } from "sql.js";
 import { executeQuery, executeQueryAll } from "~/utils/sql";
-import { modelSchema } from "./jsonParsers";
+import { modelSchema, deckSchema, fsrsJsonSchema } from "./jsonParsers";
 import { z } from "zod";
 import { assertTruthy } from "~/utils/assert";
 
@@ -96,10 +96,7 @@ export function getDataFromAnki2(db: Database): AnkiDB2Data {
     let deckName = "Unknown";
     let decks: Record<string, { id: number; name: string }> = {};
     try {
-      const parsedDecks = JSON.parse(colData.decks) as Record<
-        string,
-        { id: number; name?: string }
-      >;
+      const parsedDecks = deckSchema.parse(JSON.parse(colData.decks));
 
       // Convert to our format, filtering out entries without names
       decks = Object.fromEntries(
@@ -272,16 +269,14 @@ export function parseFsrsData(
   // If it's a string, try JSON first
   if (typeof data === "string") {
     try {
-      const parsed = JSON.parse(data);
-      if (parsed && typeof parsed.s === "number") {
-        return {
-          stability: parsed.s,
-          difficulty: parsed.d,
-          desiredRetention: parsed.dr ?? 0.9,
-        };
-      }
+      const parsed = fsrsJsonSchema.parse(JSON.parse(data));
+      return {
+        stability: parsed.s,
+        difficulty: parsed.d,
+        desiredRetention: parsed.dr ?? 0.9,
+      };
     } catch {
-      // Not JSON — try interpreting as binary if it contains non-printable chars
+      // Not JSON or wrong shape — try interpreting as binary if it contains non-printable chars
     }
   }
 

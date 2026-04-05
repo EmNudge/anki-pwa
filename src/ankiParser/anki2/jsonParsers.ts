@@ -29,3 +29,26 @@ export const modelSchema = z.record(
     ),
   }),
 );
+
+export const deckSchema = z.record(
+  z.object({
+    id: z.number(),
+    name: z.string().optional(),
+  }),
+);
+
+export const fsrsJsonSchema = z.object({
+  s: z.number(),
+  d: z.number(),
+  dr: z.number().optional(),
+});
+
+export const mediaMappingSchema = z.record(z.string());
+
+export const cachedFileEntrySchema = z.array(
+  z.object({
+    name: z.string(),
+    size: z.number(),
+    addedAt: z.number(),
+  }),
+);

@@ -4,6 +4,7 @@ import { ReviewQueue, type ReviewCard } from "./scheduler/queue";
 import { DEFAULT_SCHEDULER_SETTINGS, type SchedulerSettings } from "./scheduler/types";
 import { reviewDB } from "./scheduler/db";
 import type { DeckInfo } from "./types";
+import { cachedFileEntrySchema } from "./ankiParser/anki2/jsonParsers";
 
 // View state
 export type AppView = "files" | "review" | "create";
@@ -29,7 +30,7 @@ export const activeFileNameSig = ref<string | null>(null);
 const storedFiles = localStorage.getItem("anki-cached-files");
 if (storedFiles) {
   try {
-    cachedFilesSig.value = JSON.parse(storedFiles);
+    cachedFilesSig.value = cachedFileEntrySchema.parse(JSON.parse(storedFiles));
   } catch {
     // ignore corrupt data
   }
