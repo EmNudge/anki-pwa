@@ -24,24 +24,24 @@ const emit = defineEmits<{
 
 function handleKeyDown(e: KeyboardEvent) {
   if (props.activeSide === "front") {
-    if (e.key === " ") {
+    if (e.key === " " || e.key === "Enter") {
       playClickSoundBasic();
       emit("reveal");
     }
     return;
   }
-  if (e.key === "e") {
-    playClickSoundMelodic();
-    emit("chooseAnswer", "easy");
-  } else if (e.key === "h") {
-    playClickSoundMelodic();
-    emit("chooseAnswer", "hard");
-  } else if (e.key === "g") {
-    playClickSoundMelodic();
-    emit("chooseAnswer", "good");
-  } else if (e.key === "a") {
+  if (e.key === "a" || e.key === "1") {
     playClickSoundMelodic();
     emit("chooseAnswer", "again");
+  } else if (e.key === "h" || e.key === "2") {
+    playClickSoundMelodic();
+    emit("chooseAnswer", "hard");
+  } else if (e.key === "g" || e.key === " " || e.key === "3") {
+    playClickSoundMelodic();
+    emit("chooseAnswer", "good");
+  } else if (e.key === "e" || e.key === "4") {
+    playClickSoundMelodic();
+    emit("chooseAnswer", "easy");
   }
 }
 

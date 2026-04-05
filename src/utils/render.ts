@@ -15,6 +15,8 @@ export function getRenderedCardString({
   deckName,
   cardName,
   latexPre,
+  noteTypeName,
+  isCloze = false,
 }: {
   templateString: string;
   variables: Variables;
@@ -26,6 +28,8 @@ export function getRenderedCardString({
   deckName?: string;
   cardName?: string;
   latexPre?: string;
+  noteTypeName?: string;
+  isCloze?: boolean;
 }) {
   let renderedString = templateString;
 
@@ -33,7 +37,7 @@ export function getRenderedCardString({
   // render the front template and inject it
   let enrichedVariables = { ...variables };
   if (frontTemplate && renderedString.includes("{{FrontSide}}") && !enrichedVariables.FrontSide) {
-    const frontSideHtml = getRenderedCardString({
+    let frontSideHtml = getRenderedCardString({
       templateString: frontTemplate,
       variables,
       mediaFiles,
@@ -42,7 +46,11 @@ export function getRenderedCardString({
       deckName,
       cardName,
       latexPre,
+      noteTypeName,
+      isCloze,
     });
+    // Strip audio references from FrontSide to prevent double playback
+    frontSideHtml = stripAvTags(frontSideHtml);
     enrichedVariables = { ...enrichedVariables, FrontSide: frontSideHtml };
   }
 
@@ -57,8 +65,21 @@ export function getRenderedCardString({
       enrichedVariables.Subdeck = parts[parts.length - 1] ?? deckName;
     }
   }
-  if (cardName && !enrichedVariables.Card) {
+  if (isCloze && !enrichedVariables.Card) {
+    enrichedVariables.Card = `Cloze ${cardOrd + 1}`;
+  } else if (cardName && !enrichedVariables.Card) {
     enrichedVariables.Card = cardName;
+  }
+  if (noteTypeName && !enrichedVariables.Type) {
+    enrichedVariables.Type = noteTypeName;
+  }
+
+  // Detect cloze numbers present in variables for conditional sections
+  const clozeNumbers = detectClozeNumbers(enrichedVariables);
+  for (const cn of clozeNumbers) {
+    if (!enrichedVariables[`c${cn}`]) {
+      enrichedVariables[`c${cn}`] = "1"; // truthy marker
+    }
   }
 
   renderedString = flattenOptionalSections(renderedString, enrichedVariables);
@@ -78,8 +99,33 @@ export function getRenderedCardString({
 }
 
 /**
+ * Detect all cloze numbers present in any variable value.
+ */
+function detectClozeNumbers(variables: Variables): number[] {
+  const nums = new Set<number>();
+  for (const value of Object.values(variables)) {
+    if (!value) continue;
+    const matches = value.matchAll(/\{\{c(\d+)::/g);
+    for (const m of matches) {
+      nums.add(parseInt(m[1]!));
+    }
+  }
+  return [...nums];
+}
+
+/**
+ * Strip [sound:...] tags and their rendered audio elements from HTML.
+ * Used when injecting FrontSide into the answer template to prevent double playback.
+ */
+function stripAvTags(html: string): string {
+  return html
+    .replace(/\[sound:[^\]]+\]/g, "")
+    .replace(/<div class='audio-container'[^>]*>[\s\S]*?<\/div>/g, "");
+}
+
+/**
  * Process a field reference that may include filters.
- * Format: {{filter1:filter2:FieldName}} — filters applied right-to-left.
+ * Format: {{filter1:filter2:FieldName}} — filters applied left-to-right.
  */
 function processFieldReference(
   ref: string,
@@ -99,8 +145,8 @@ function processFieldReference(
 
   let value = variables[fieldName] ?? "";
 
-  // Apply filters from right to left (innermost first)
-  for (let i = filters.length - 1; i >= 0; i--) {
+  // Apply filters left-to-right (outermost first, per Anki source)
+  for (let i = 0; i < filters.length; i++) {
     const filter = filters[i]!;
     value = applyFilter(filter, value, cardOrd, isAnswer);
   }
@@ -119,6 +165,9 @@ function applyFilter(filter: string, value: string, cardOrd: number, isAnswer: b
     case "hint":
       return `<a class="hint" onclick="this.style.display='none';this.nextSibling.style.display='inline-block';">Show Hint</a><span style="display:none">${value}</span>`;
     case "type":
+      if (isAnswer) {
+        return `<span id="typeans">${value}</span>`;
+      }
       return `<input type="text" id="typeans" placeholder="type answer">`;
     default:
       return value;
@@ -135,7 +184,7 @@ function processCloze(text: string, cardOrd: number, isAnswer: boolean): string 
   const clozeNum = cardOrd + 1;
 
   return text.replace(
-    /\{\{c(\d+)::(.+?)(?:::(.+?))?\}\}/g,
+    /\{\{c(\d+)::(.+?)(?:::(.+?))?\}\}/gs,
     (_match, num: string, answer: string, hint?: string) => {
       if (parseInt(num) === clozeNum) {
         if (isAnswer) {
@@ -152,7 +201,7 @@ function processClozeOnly(text: string, cardOrd: number): string {
   const clozeNum = cardOrd + 1;
   const matches: string[] = [];
 
-  text.replace(/\{\{c(\d+)::(.+?)(?:::(.+?))?\}\}/g, (_match, num: string, answer: string) => {
+  text.replace(/\{\{c(\d+)::(.+?)(?:::(.+?))?\}\}/gs, (_match, num: string, answer: string) => {
     if (parseInt(num) === clozeNum) {
       matches.push(answer);
     }
@@ -164,10 +213,18 @@ function processClozeOnly(text: string, cardOrd: number): string {
 
 /**
  * source strings are replaced with blob URLs
+ * Performs case-insensitive and NFC-normalized matching
  */
 function replaceMediaFiles(renderedString: string, mediaFiles: Map<string, string>) {
+  // Build a normalized lookup map for case-insensitive + NFC matching
+  const normalizedMap = new Map<string, string>();
+  for (const [key, value] of mediaFiles) {
+    normalizedMap.set(key.normalize("NFC").toLowerCase(), value);
+  }
+
   return renderedString.replace(/="([^"](\\"|[^"])+)"/g, (match, filename) => {
-    const url = mediaFiles.get(filename);
+    const normalized = (filename as string).normalize("NFC").toLowerCase();
+    const url = normalizedMap.get(normalized);
     return url ? `="${url}"` : match;
   });
 }
@@ -183,8 +240,14 @@ function parseLatexMacros(latexPre: string): Record<string, string> {
   while ((match = re.exec(latexPre)) !== null) {
     const name = match[1];
     if (!name) continue;
-    // Extract the balanced-brace body after the command name
-    const afterMatch = latexPre.slice(match.index + match[0].length);
+    // Extract the balanced-brace body after the command name,
+    // skipping optional argument count like [1]
+    let afterMatch = latexPre.slice(match.index + match[0].length).trimStart();
+    // Skip optional argument count [N]
+    const argCountMatch = afterMatch.match(/^\[(\d+)\]/);
+    if (argCountMatch) {
+      afterMatch = afterMatch.slice(argCountMatch[0].length);
+    }
     const body = extractBracedBody(afterMatch);
     if (body !== null) {
       macros[name] = body;
@@ -246,6 +309,17 @@ function replaceLatex(renderedString: string, macros: Record<string, string> = {
     }
   };
 
+  const replaceInlineMathBlock = (_match: string, latex: string) => {
+    try {
+      const cleanLatex = cleanAndUnescapeLatex(latex);
+      if (!cleanLatex) return "";
+      return katex.renderToString(cleanLatex, katexOptions(false));
+    } catch (error) {
+      console.error(new Error("could not parse latex for: " + latex, { cause: error }));
+      return cleanAndUnescapeLatex(latex);
+    }
+  };
+
   const replaceLatexBlock = (_match: string, latex: string) => {
     try {
       const cleanLatex = cleanAndUnescapeLatex(latex);
@@ -303,24 +377,16 @@ function replaceLatex(renderedString: string, macros: Record<string, string> = {
     }
   };
 
-  const replaceInlineMath = (_match: string, latex: string) => {
-    try {
-      const cleanLatex = cleanAndUnescapeLatex(latex);
-      if (!cleanLatex) return "";
-      return katex.renderToString(cleanLatex, katexOptions(false));
-    } catch (error) {
-      console.error(new Error("could not parse latex for: " + latex, { cause: error }));
-      return cleanAndUnescapeLatex(latex);
-    }
-  };
-
   return (
     renderedString
-      .replace(/\[\$\$?\](.+?)\[\/\$\$?\]/gs, replaceDisplayMathBlock)
+      // [$$]...[/$$] is display math
+      .replace(/\[\$\$\](.+?)\[\/\$\$\]/gs, replaceDisplayMathBlock)
+      // [$]...[/$] is inline math
+      .replace(/\[\$\](.+?)\[\/\$\]/gs, replaceInlineMathBlock)
       .replace(/\[latex\](.+?)\[\/latex\]/gs, replaceLatexBlock)
       // Standard LaTeX delimiters: \[...\] for display, \(...\) for inline
       .replace(/\\\[(.+?)\\\]/gs, replaceDisplayMathBlock)
-      .replace(/\\\((.+?)\\\)/gs, replaceInlineMath)
+      .replace(/\\\((.+?)\\\)/gs, replaceInlineMathBlock)
   );
 }
 
@@ -346,6 +412,17 @@ function replaceTemplatingSyntax(renderedString: string) {
 }
 
 /**
+ * Check if a field value is "not empty" per Anki's rules:
+ * strip HTML tags and whitespace, then check if anything remains.
+ */
+function fieldIsNotEmpty(value: string | null | undefined): boolean {
+  if (!value) return false;
+  // Strip HTML tags, then check for non-whitespace content
+  const stripped = value.replace(/<[^>]*>/g, "").trim();
+  return stripped.length > 0;
+}
+
+/**
  * Optional/conditional sections:
  * - {{#section}}content{{/section}} — shown if field is non-empty
  * - {{^section}}content{{/section}} — shown if field is empty (inverse)
@@ -365,7 +442,7 @@ function flattenOptionalSections(templateString: string, card: Variables) {
       "g",
     );
 
-    if (!card[section]) {
+    if (!fieldIsNotEmpty(card[section])) {
       renderedString = renderedString.replace(regex, "");
     } else {
       renderedString = renderedString.replace(regex, "$1");
@@ -384,7 +461,7 @@ function flattenOptionalSections(templateString: string, card: Variables) {
       "g",
     );
 
-    if (card[section]) {
+    if (fieldIsNotEmpty(card[section])) {
       // Field has a value — remove the inverse section
       renderedString = renderedString.replace(regex, "");
     } else {

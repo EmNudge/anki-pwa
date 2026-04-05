@@ -15,6 +15,12 @@ test.describe('Keyboard Shortcuts', () => {
     await expect(page.locator('button:has-text("Easy")')).toBeVisible();
   });
 
+  test('should reveal card with Enter key', async ({ loadedDeckPage: page }) => {
+    await expect(page.locator('button:has-text("Reveal")')).toBeVisible();
+    await page.keyboard.press('Enter');
+    await expect(page.locator('button:has-text("Again")')).toBeVisible();
+  });
+
   test('should answer with "a" key for Again', async ({ loadedDeckPage: page }) => {
     // Reveal card
     await page.keyboard.press('Space');
@@ -63,6 +69,42 @@ test.describe('Keyboard Shortcuts', () => {
     await expect(page.locator('button:has-text("Reveal")')).toBeVisible();
   });
 
+  test('should answer with numeric key "1" for Again', async ({ loadedDeckPage: page }) => {
+    await page.keyboard.press('Space');
+    await page.keyboard.press('1');
+    await page.waitForTimeout(300);
+    await expect(page.locator('button:has-text("Reveal")')).toBeVisible();
+  });
+
+  test('should answer with numeric key "2" for Hard', async ({ loadedDeckPage: page }) => {
+    await page.keyboard.press('Space');
+    await page.keyboard.press('2');
+    await page.waitForTimeout(300);
+    await expect(page.locator('button:has-text("Reveal")')).toBeVisible();
+  });
+
+  test('should answer with numeric key "3" for Good', async ({ loadedDeckPage: page }) => {
+    await page.keyboard.press('Space');
+    await page.keyboard.press('3');
+    await page.waitForTimeout(300);
+    await expect(page.locator('button:has-text("Reveal")')).toBeVisible();
+  });
+
+  test('should answer with numeric key "4" for Easy', async ({ loadedDeckPage: page }) => {
+    await page.keyboard.press('Space');
+    await page.keyboard.press('4');
+    await page.waitForTimeout(300);
+    await expect(page.locator('button:has-text("Reveal")')).toBeVisible();
+  });
+
+  test('should answer with Space key for Good on back side', async ({ loadedDeckPage: page }) => {
+    await page.keyboard.press('Space');
+    await expect(page.locator('button:has-text("Good")')).toBeVisible();
+    await page.keyboard.press('Space');
+    await page.waitForTimeout(300);
+    await expect(page.locator('button:has-text("Reveal")')).toBeVisible();
+  });
+
   test('should complete full review flow with keyboard only', async ({ loadedDeckPage: page }) => {
     // Review 3 cards using only keyboard
     for (let i = 0; i < 3; i++) {
@@ -105,19 +147,19 @@ test.describe('Keyboard Shortcuts', () => {
     await expect(page.locator('button:has-text("Reveal")')).toBeVisible();
   });
 
-  test('should ignore Space key when on back side', async ({ loadedDeckPage: page }) => {
+  test('should use Space key as Good on back side', async ({ loadedDeckPage: page }) => {
     // Reveal card
     await page.keyboard.press('Space');
 
     // Verify we're on back side
     await expect(page.locator('button:has-text("Again")')).toBeVisible();
 
-    // Press Space again (should do nothing)
+    // Press Space again (should answer Good)
     await page.keyboard.press('Space');
-    await page.waitForTimeout(200);
+    await page.waitForTimeout(300);
 
-    // Should still be on back side
-    await expect(page.locator('button:has-text("Again")')).toBeVisible();
+    // Should move to next card
+    await expect(page.locator('button:has-text("Reveal")')).toBeVisible();
   });
 
   test('should support rapid keyboard review', async ({ loadedDeckPage: page }) => {

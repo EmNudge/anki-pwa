@@ -38,6 +38,9 @@ export type AnkiDB2Data = {
     deckName: string;
     guid: string;
     scheduling: CardScheduling | null;
+    noteType: number; // 0=MODEL_STD, 1=MODEL_CLOZE
+    latexSvg: boolean;
+    req: [number, string, number[]][] | null;
   }[];
   notesTypes: null;
   deckName: string;
@@ -113,7 +116,7 @@ export function getDataFromAnki2(db: Database): AnkiDB2Data {
       factor: number;
       reps: number;
       lapses: number;
-      data: string;
+      data: string | Uint8Array;
     }>(
       db,
       "SELECT id, nid, ord, did, odid, type, queue, due, ivl, factor, reps, lapses, data FROM cards",
@@ -142,22 +145,8 @@ export function getDataFromAnki2(db: Database): AnkiDB2Data {
         const effectiveDid = cardRow.odid !== 0 ? cardRow.odid : cardRow.did;
         const cardDeckName = decks[effectiveDid.toString()]?.name ?? "Unknown";
 
-        // Parse FSRS state from card.data JSON
-        let fsrs: CardScheduling["fsrs"] = null;
-        if (cardRow.data) {
-          try {
-            const parsed = JSON.parse(cardRow.data);
-            if (parsed && typeof parsed.s === "number") {
-              fsrs = {
-                stability: parsed.s,
-                difficulty: parsed.d,
-                desiredRetention: parsed.dr ?? 0.9,
-              };
-            }
-          } catch {
-            // Not JSON or no FSRS data — ignore
-          }
-        }
+        // Parse FSRS state from card.data (JSON or protobuf)
+        const fsrs = parseFsrsData(cardRow.data);
 
         return {
           values: valuesMap,
@@ -166,6 +155,9 @@ export function getDataFromAnki2(db: Database): AnkiDB2Data {
           css: modelForCard.css,
           deckName: cardDeckName,
           guid: note.guid,
+          noteType: modelForCard.type ?? 0,
+          latexSvg: modelForCard.latexsvg ?? false,
+          req: modelForCard.req ?? null,
           scheduling: {
             type: cardRow.type,
             queue: cardRow.queue,
@@ -195,4 +187,92 @@ export function getDataFromAnki2(db: Database): AnkiDB2Data {
   })();
 
   return { cards, notesTypes: null, deckName, decks, revlog };
+}
+
+/**
+ * Parse FSRS memory state from card.data.
+ * Supports both JSON format ({s, d, dr}) and protobuf format (FSRSMemoryState).
+ */
+function parseFsrsData(
+  data: string | Uint8Array,
+): CardScheduling["fsrs"] {
+  if (!data) return null;
+
+  // If it's a Uint8Array (binary), try protobuf parsing
+  if (data instanceof Uint8Array) {
+    return parseFsrsProtobuf(data);
+  }
+
+  // If it's a string, try JSON first
+  if (typeof data === "string") {
+    try {
+      const parsed = JSON.parse(data);
+      if (parsed && typeof parsed.s === "number") {
+        return {
+          stability: parsed.s,
+          difficulty: parsed.d,
+          desiredRetention: parsed.dr ?? 0.9,
+        };
+      }
+    } catch {
+      // Not JSON — try interpreting as binary if it contains non-printable chars
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Parse protobuf-encoded FSRSMemoryState.
+ * Message: { stability: float (field 1), difficulty: float (field 2) }
+ */
+function parseFsrsProtobuf(
+  data: Uint8Array,
+): CardScheduling["fsrs"] {
+  if (data.length < 5) return null;
+
+  let stability: number | null = null;
+  let difficulty: number | null = null;
+  let offset = 0;
+
+  while (offset < data.length) {
+    const tag = data[offset++];
+    if (tag === undefined) break;
+
+    const fieldNumber = tag >> 3;
+    const wireType = tag & 0x07;
+
+    if (wireType === 5 && offset + 4 <= data.length) {
+      // 32-bit (float)
+      const view = new DataView(data.buffer, data.byteOffset + offset, 4);
+      const value = view.getFloat32(0, true); // little-endian
+      offset += 4;
+
+      if (fieldNumber === 1) stability = value;
+      else if (fieldNumber === 2) difficulty = value;
+    } else if (wireType === 0) {
+      // varint — skip
+      while (offset < data.length && (data[offset]! & 0x80) !== 0) offset++;
+      offset++;
+    } else if (wireType === 2) {
+      // length-delimited — skip
+      let len = 0;
+      let shift = 0;
+      while (offset < data.length) {
+        const byte = data[offset++]!;
+        len |= (byte & 0x7f) << shift;
+        if ((byte & 0x80) === 0) break;
+        shift += 7;
+      }
+      offset += len;
+    } else {
+      break;
+    }
+  }
+
+  if (stability !== null && difficulty !== null) {
+    return { stability, difficulty, desiredRetention: 0.9 };
+  }
+
+  return null;
 }

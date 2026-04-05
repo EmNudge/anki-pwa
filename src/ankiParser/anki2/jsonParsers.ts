@@ -8,6 +8,11 @@ export const modelSchema = z.record(
     css: z.string(),
     latexPre: z.string(),
     latexPost: z.string(),
+    latexsvg: z.boolean().optional(),
+    type: z.number().optional(), // 0=MODEL_STD, 1=MODEL_CLOZE
+    req: z
+      .array(z.tuple([z.number(), z.string(), z.array(z.number())]))
+      .optional(),
     flds: z.array(
       z.object({
         name: z.string(),
