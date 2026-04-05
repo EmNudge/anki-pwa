@@ -3,34 +3,3 @@
 #root {
   width: 100%;
 }
-
-/*
-  DEPRECATED: Legacy theme variables below are kept for backward compatibility.
-  All new code should use design system tokens from design-system/tokens/
-  - Use --color-* tokens instead of --*-color-*
-  - Use --spacing-* tokens for spacing
-  - Use --shadow-* tokens for shadows
-*/
-
-/* Deprecated theme styles moved to design-system/tokens/colors.css */
-
-.logo {
-  height: 6em;
-  padding: var(--spacing-6);
-  will-change: filter;
-  transition: filter var(--duration-slow);
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em var(--color-primary-500));
-}
-.logo.solid:hover {
-  filter: drop-shadow(0 0 2em var(--color-primary-400));
-}
-
-.card {
-  padding: var(--spacing-8);
-}
-
-.read-the-docs {
-  color: var(--color-text-tertiary);
-}

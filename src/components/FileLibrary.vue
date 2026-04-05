@@ -1,31 +1,25 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
 import { Button } from "../design-system";
+import { createCachedDeckLibraryItem, createSampleDeckLibraryItem } from "../deckLibrary";
 import {
   cachedFilesSig,
-  activeFileNameSig,
+  activeDeckSourceIdSig,
   addCachedFile,
   loadCachedFile,
   deleteCachedFile,
+  loadSampleDeck,
+  sampleDecksSig,
 } from "../stores";
 
 const fileInput = ref<HTMLInputElement>();
 
-const sortedFiles = computed(() => [...cachedFilesSig.value].sort((a, b) => b.addedAt - a.addedAt));
-
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function formatDate(timestamp: number): string {
-  return new Date(timestamp).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
+const sampleDecks = computed(() => sampleDecksSig.map(createSampleDeckLibraryItem));
+const uploadedDecks = computed(() =>
+  [...cachedFilesSig.value]
+    .sort((a, b) => b.addedAt - a.addedAt)
+    .map(createCachedDeckLibraryItem),
+);
 
 function handleFileInput(event: Event) {
   const file = (event.target as HTMLInputElement).files?.[0];
@@ -36,7 +30,7 @@ function handleFileInput(event: Event) {
 <template>
   <div class="file-library">
     <div class="header">
-      <h2 class="title">Your Decks</h2>
+      <h2 class="title">Deck Library</h2>
       <input
         ref="fileInput"
         type="file"
@@ -47,33 +41,60 @@ function handleFileInput(event: Event) {
       <Button variant="primary" size="sm" @click="fileInput?.click()"> Add File </Button>
     </div>
 
-    <div v-if="sortedFiles.length === 0" class="empty-state">
-      <p class="empty-text">No decks yet. Add an .apkg file to get started.</p>
-      <Button variant="secondary" @click="fileInput?.click()"> Choose a Deck File </Button>
-    </div>
-
-    <div v-else class="file-grid">
-      <div
-        v-for="file in sortedFiles"
-        :key="file.name"
-        :class="['file-card', { 'file-card--active': activeFileNameSig === file.name }]"
-        @click="loadCachedFile(file.name)"
-      >
-        <div class="file-info">
-          <span class="file-name">{{ file.name }}</span>
-          <span class="file-meta"
-            >{{ formatSize(file.size) }} &middot; {{ formatDate(file.addedAt) }}</span
-          >
-        </div>
-        <button
-          class="delete-btn"
-          title="Remove from library"
-          @click.stop="deleteCachedFile(file.name)"
-        >
-          &times;
-        </button>
+    <section class="library-section">
+      <div class="section-header">
+        <h3 class="section-title">Sample Decks</h3>
+        <span class="section-count">{{ sampleDecks.length }}</span>
       </div>
-    </div>
+      <div class="file-grid">
+        <div
+          v-for="sampleDeck in sampleDecks"
+          :key="sampleDeck.id"
+          :class="['file-card', { 'file-card--active': activeDeckSourceIdSig === sampleDeck.id }]"
+          @click="loadSampleDeck(sampleDeck.id)"
+        >
+          <div class="file-info">
+            <span class="file-name">{{ sampleDeck.title }}</span>
+            <span class="file-meta">{{ sampleDeck.detail }}</span>
+            <span class="file-meta">{{ sampleDeck.meta }}</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="library-section">
+      <div class="section-header">
+        <h3 class="section-title">Your Decks</h3>
+        <span class="section-count">{{ uploadedDecks.length }}</span>
+      </div>
+
+      <div v-if="uploadedDecks.length === 0" class="empty-state">
+        <p class="empty-text">No uploaded decks yet. Add an .apkg file to keep your own deck here.</p>
+        <Button variant="secondary" @click="fileInput?.click()"> Choose a Deck File </Button>
+      </div>
+
+      <div v-else class="file-grid">
+        <div
+          v-for="deck in uploadedDecks"
+          :key="deck.id"
+          :class="['file-card', { 'file-card--active': activeDeckSourceIdSig === deck.id }]"
+          @click="loadCachedFile(deck.id)"
+        >
+          <div class="file-info">
+            <span class="file-name">{{ deck.title }}</span>
+            <span class="file-meta">{{ deck.detail }}</span>
+            <span class="file-meta">{{ deck.meta }}</span>
+          </div>
+          <button
+            class="delete-btn"
+            title="Remove from library"
+            @click.stop="deleteCachedFile(deck.id)"
+          >
+            &times;
+          </button>
+        </div>
+      </div>
+    </section>
   </div>
 </template>
 
@@ -100,6 +121,29 @@ function handleFileInput(event: Event) {
 
 .hidden-input {
   display: none;
+}
+
+.library-section + .library-section {
+  margin-top: var(--spacing-8);
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--spacing-3);
+}
+
+.section-title {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  margin: 0;
+}
+
+.section-count {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
 }
 
 .empty-state {

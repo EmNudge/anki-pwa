@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from "vue";
-import { playClickSoundBasic, playClickSoundMelodic } from "../utils/sound";
 import type { Answer } from "../scheduler/types";
 import SandboxedCard from "./SandboxedCard.vue";
 import { useTheme } from "../design-system/hooks/useTheme";
+import { findReviewControl, triggerReviewControl } from "./reviewControls";
 
 const { theme } = useTheme();
 const cardBackground = ref<string | null>(null);
@@ -23,26 +23,13 @@ const emit = defineEmits<{
 }>();
 
 function handleKeyDown(e: KeyboardEvent) {
-  if (props.activeSide === "front") {
-    if (e.key === " " || e.key === "Enter") {
-      playClickSoundBasic();
-      emit("reveal");
-    }
-    return;
-  }
-  if (e.key === "a" || e.key === "1") {
-    playClickSoundMelodic();
-    emit("chooseAnswer", "again");
-  } else if (e.key === "h" || e.key === "2") {
-    playClickSoundMelodic();
-    emit("chooseAnswer", "hard");
-  } else if (e.key === "g" || e.key === " " || e.key === "3") {
-    playClickSoundMelodic();
-    emit("chooseAnswer", "good");
-  } else if (e.key === "e" || e.key === "4") {
-    playClickSoundMelodic();
-    emit("chooseAnswer", "easy");
-  }
+  const control = findReviewControl(props.activeSide, e.key);
+  if (!control) return;
+
+  triggerReviewControl(control.action, {
+    reveal: () => emit("reveal"),
+    chooseAnswer: (answer) => emit("chooseAnswer", answer),
+  });
 }
 
 onMounted(() => document.addEventListener("keydown", handleKeyDown));

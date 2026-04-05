@@ -10,8 +10,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { BlobReader, ZipReader, BlobWriter } from '@zip-js/zip-js';
 import { decompressZstd } from './utils/zstdNode.js';
-import { parseMediaProto } from '../src/ankiParser/parseMediaProto.js';
-import { mediaMappingSchema } from '../src/ankiParser/anki2/jsonParsers.js';
+import { parseMediaMapping } from '../src/ankiParser/mediaMappings.js';
 
 async function inspectAnkiMedia(filePath: string) {
   const fileName = path.basename(filePath);
@@ -52,36 +51,16 @@ async function inspectAnkiMedia(filePath: string) {
 
   const mediaBuffer = new Uint8Array(await mediaBlob.arrayBuffer());
 
-  // Try to decompress if it's zstd compressed (newer Anki formats)
-  let mediaContent: string;
-  let mediaBytes: Uint8Array;
-  try {
-    const decompressed = await decompressZstd(mediaBuffer);
-    mediaBytes = decompressed;
-    mediaContent = new TextDecoder().decode(decompressed);
-  } catch {
-    // Not compressed, try as plain text
-    mediaBytes = mediaBuffer;
-    mediaContent = new TextDecoder().decode(mediaBuffer);
-  }
-
-  // Parse media mapping
   let mediaMapping: Record<string, string>;
   try {
-    // Try parsing as JSON first (older format)
-    mediaMapping = mediaMappingSchema.parse(JSON.parse(mediaContent));
+    mediaMapping = await parseMediaMapping(mediaBuffer, decompressZstd);
   } catch {
-    // If JSON parsing fails, try parsing as Protocol Buffer (newer .anki21b format)
-    try {
-      mediaMapping = parseMediaProto(mediaBytes);
-    } catch {
-      console.error('❌ Failed to parse media mapping as JSON or Protocol Buffer');
-      console.log('First 100 bytes (hex):');
-      console.log(Array.from(mediaBuffer.slice(0, 100))
-        .map(b => b.toString(16).padStart(2, '0'))
-        .join(' '));
-      process.exit(1);
-    }
+    console.error('❌ Failed to parse media mapping as JSON or Protocol Buffer');
+    console.log('First 100 bytes (hex):');
+    console.log(Array.from(mediaBuffer.slice(0, 100))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join(' '));
+    process.exit(1);
   }
 
   const mediaCount = Object.keys(mediaMapping).length;
