@@ -16,9 +16,12 @@ const emit = defineEmits<{
 const settings = ref<SchedulerSettings>({ ...schedulerSettingsSig.value });
 
 // Sync settings when modal opens
-watch(() => props.isOpen, (isOpen) => {
-  if (isOpen) settings.value = { ...schedulerSettingsSig.value };
-});
+watch(
+  () => props.isOpen,
+  (isOpen) => {
+    if (isOpen) settings.value = { ...schedulerSettingsSig.value };
+  },
+);
 
 async function handleSave() {
   const newSettings = JSON.parse(JSON.stringify(settings.value)) as SchedulerSettings;
@@ -40,7 +43,7 @@ function updateSetting<K extends keyof SchedulerSettings>(key: K, value: Schedul
 
 function updateFsrsParam<K extends keyof NonNullable<SchedulerSettings["fsrsParams"]>>(
   key: K,
-  value: NonNullable<SchedulerSettings["fsrsParams"]>[K]
+  value: NonNullable<SchedulerSettings["fsrsParams"]>[K],
 ) {
   settings.value = {
     ...settings.value,
@@ -58,13 +61,19 @@ function updateFsrsParam<K extends keyof NonNullable<SchedulerSettings["fsrsPara
         <select
           class="form-select"
           :value="settings.algorithm"
-          @change="updateSetting('algorithm', ($event.target as HTMLSelectElement).value as 'sm2' | 'fsrs')"
+          @change="
+            updateSetting('algorithm', ($event.target as HTMLSelectElement).value as 'sm2' | 'fsrs')
+          "
         >
           <option value="sm2">SM-2 (Classic)</option>
           <option value="fsrs">FSRS (Modern)</option>
         </select>
         <div class="help-text">
-          {{ settings.algorithm === "sm2" ? "SM-2: Classic spaced repetition algorithm" : "FSRS: Modern algorithm with improved scheduling accuracy" }}
+          {{
+            settings.algorithm === "sm2"
+              ? "SM-2: Classic spaced repetition algorithm"
+              : "FSRS: Modern algorithm with improved scheduling accuracy"
+          }}
         </div>
       </div>
     </div>
@@ -79,7 +88,9 @@ function updateFsrsParam<K extends keyof NonNullable<SchedulerSettings["fsrsPara
           :value="settings.dailyNewLimit"
           min="0"
           max="999"
-          @change="updateSetting('dailyNewLimit', parseInt(($event.target as HTMLInputElement).value, 10))"
+          @change="
+            updateSetting('dailyNewLimit', parseInt(($event.target as HTMLInputElement).value, 10))
+          "
         />
       </div>
       <div class="form-group">
@@ -90,7 +101,12 @@ function updateFsrsParam<K extends keyof NonNullable<SchedulerSettings["fsrsPara
           :value="settings.dailyReviewLimit"
           min="0"
           max="9999"
-          @change="updateSetting('dailyReviewLimit', parseInt(($event.target as HTMLInputElement).value, 10))"
+          @change="
+            updateSetting(
+              'dailyReviewLimit',
+              parseInt(($event.target as HTMLInputElement).value, 10),
+            )
+          "
         />
       </div>
     </div>
@@ -106,7 +122,12 @@ function updateFsrsParam<K extends keyof NonNullable<SchedulerSettings["fsrsPara
           min="0"
           max="1"
           step="0.01"
-          @change="updateFsrsParam('requestRetention', parseFloat(($event.target as HTMLInputElement).value))"
+          @change="
+            updateFsrsParam(
+              'requestRetention',
+              parseFloat(($event.target as HTMLInputElement).value),
+            )
+          "
         />
         <div class="help-text">How much you want to remember (0.9 = 90% retention recommended)</div>
       </div>
@@ -118,7 +139,12 @@ function updateFsrsParam<K extends keyof NonNullable<SchedulerSettings["fsrsPara
           :value="settings.fsrsParams?.maximumInterval ?? 36500"
           min="1"
           max="36500"
-          @change="updateFsrsParam('maximumInterval', parseInt(($event.target as HTMLInputElement).value, 10))"
+          @change="
+            updateFsrsParam(
+              'maximumInterval',
+              parseInt(($event.target as HTMLInputElement).value, 10),
+            )
+          "
         />
         <div class="help-text">Maximum days between reviews (36500 = 100 years default)</div>
       </div>
@@ -132,11 +158,47 @@ function updateFsrsParam<K extends keyof NonNullable<SchedulerSettings["fsrsPara
 </template>
 
 <style scoped>
-.form-section { margin-bottom: var(--spacing-6); }
-.section-title { font-weight: var(--font-weight-semibold); font-size: var(--font-size-sm); color: var(--color-text-secondary); text-transform: uppercase; letter-spacing: var(--letter-spacing-wide); margin-bottom: var(--spacing-3); }
-.form-group { margin-bottom: var(--spacing-4); }
-.form-label { display: block; margin-bottom: var(--spacing-2); font-weight: var(--font-weight-medium); font-size: var(--font-size-sm); color: var(--color-text-primary); }
-.form-input, .form-select { width: 100%; padding: var(--spacing-2); border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface-elevated); font-size: var(--font-size-sm); color: var(--color-text-primary); transition: var(--transition-colors); }
-.form-input:focus, .form-select:focus { outline: none; border-color: var(--color-border-focus); box-shadow: var(--shadow-focus-ring); }
-.help-text { font-size: var(--font-size-xs); color: var(--color-text-secondary); margin-top: var(--spacing-1); }
+.form-section {
+  margin-bottom: var(--spacing-6);
+}
+.section-title {
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: var(--letter-spacing-wide);
+  margin-bottom: var(--spacing-3);
+}
+.form-group {
+  margin-bottom: var(--spacing-4);
+}
+.form-label {
+  display: block;
+  margin-bottom: var(--spacing-2);
+  font-weight: var(--font-weight-medium);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+}
+.form-input,
+.form-select {
+  width: 100%;
+  padding: var(--spacing-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-elevated);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+  transition: var(--transition-colors);
+}
+.form-input:focus,
+.form-select:focus {
+  outline: none;
+  border-color: var(--color-border-focus);
+  box-shadow: var(--shadow-focus-ring);
+}
+.help-text {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  margin-top: var(--spacing-1);
+}
 </style>

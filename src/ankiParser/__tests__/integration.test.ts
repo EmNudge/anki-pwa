@@ -97,17 +97,22 @@ describe("Anki Parser Integration Tests", () => {
       insertAnki2Data(db, models, notes);
       const result = getDataFromAnki2(db);
 
-      expect(result.cards).toHaveLength(3);
+      // 3 notes × 2 templates = 6 cards (one per card row)
+      expect(result.cards).toHaveLength(6);
 
+      // First card: note 1, ord 0 (Spanish → English)
       expect(result.cards[0]?.values.Spanish).toBe("hablar");
       expect(result.cards[0]?.tags).toEqual(["vocabulary", "verbs", "common"]);
-      expect(result.cards[0]?.templates).toHaveLength(2);
+      expect(result.cards[0]?.templates).toHaveLength(1);
 
-      expect(result.cards[1]?.values["Example Sentence"]).toBe("Me gusta comer");
-      expect(result.cards[1]?.values.Audio).toBe("[sound:comer.mp3]");
+      // Find note 2's first card
+      const note2Card = result.cards.find((c) => c.values["Example Sentence"] === "Me gusta comer");
+      expect(note2Card?.values.Audio).toBe("[sound:comer.mp3]");
 
-      expect(result.cards[2]?.values.Audio).toBe(null);
-      expect(result.cards[2]?.tags).toContain("nouns");
+      // Find note 3's card — Audio should be null (empty field)
+      const note3Card = result.cards.find((c) => c.values.Spanish === "casa");
+      expect(note3Card?.values.Audio).toBe(null);
+      expect(note3Card?.tags).toContain("nouns");
     });
 
     it("should handle a mixed deck with multiple card types", async () => {

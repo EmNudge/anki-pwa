@@ -111,10 +111,15 @@ function closeCommandPalette() {
 }
 
 function matchesHotkey(e: KeyboardEvent, hotkey: string): boolean {
-  const parts = hotkey.toLowerCase().split("+").map((s) => s.trim());
+  const parts = hotkey
+    .toLowerCase()
+    .split("+")
+    .map((s) => s.trim());
   const partSet = new Set(parts);
   const key =
-    parts.find((p) => p !== "ctrl" && p !== "cmd" && p !== "meta" && p !== "shift" && p !== "alt") ?? "";
+    parts.find(
+      (p) => p !== "ctrl" && p !== "cmd" && p !== "meta" && p !== "shift" && p !== "alt",
+    ) ?? "";
   const needsCtrl = partSet.has("ctrl");
   const needsMeta = partSet.has("cmd") || partSet.has("meta");
   const needsShift = partSet.has("shift");
@@ -129,7 +134,10 @@ function matchesHotkey(e: KeyboardEvent, hotkey: string): boolean {
   );
 }
 
-function highlightParts(title: string, query: string): { before: string; match: string; after: string } | null {
+function highlightParts(
+  title: string,
+  query: string,
+): { before: string; match: string; after: string } | null {
   if (!query) return null;
   const lowerTitle = title.toLowerCase();
   const lowerQuery = query.toLowerCase();
@@ -217,10 +225,9 @@ onUnmounted(() => window.removeEventListener("keydown", onGlobalKeydown));
                 <span class="command-item-title">
                   <template v-if="highlightParts(cmd.title, searchQuery)">
                     {{ highlightParts(cmd.title, searchQuery)!.before
-
-                    }}<span
-                      class="command-item-title-highlight"
-                      >{{ highlightParts(cmd.title, searchQuery)!.match }}</span
+                    }}<span class="command-item-title-highlight">{{
+                      highlightParts(cmd.title, searchQuery)!.match
+                    }}</span
                     >{{ highlightParts(cmd.title, searchQuery)!.after }}
                   </template>
                   <template v-else>{{ cmd.title }}</template>
@@ -235,7 +242,7 @@ onUnmounted(() => window.removeEventListener("keydown", onGlobalKeydown));
                 class="command-item-hotkey"
               >
                 <kbd
-                  v-for="key in cmd.hotkey.split('+').map(k => k.trim())"
+                  v-for="key in cmd.hotkey.split('+').map((k) => k.trim())"
                   :key="key"
                   class="command-item-kbd"
                   >{{ key }}</kbd
@@ -290,8 +297,12 @@ onUnmounted(() => window.removeEventListener("keydown", onGlobalKeydown));
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .command-palette-container {
@@ -340,9 +351,21 @@ onUnmounted(() => window.removeEventListener("keydown", onGlobalKeydown));
   flex: 1;
 }
 
-.metadata-item { margin-bottom: var(--spacing-3); }
-.metadata-label { font-size: var(--font-size-xs); color: var(--color-text-tertiary); font-weight: var(--font-weight-medium); margin-bottom: var(--spacing-1); }
-.metadata-value { font-size: var(--font-size-sm); color: var(--color-text-primary); white-space: pre-wrap; word-break: break-word; }
+.metadata-item {
+  margin-bottom: var(--spacing-3);
+}
+.metadata-label {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+  font-weight: var(--font-weight-medium);
+  margin-bottom: var(--spacing-1);
+}
+.metadata-value {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 
 :deep(.metadata-value-code) {
   font-family: var(--font-family-mono);
@@ -370,7 +393,9 @@ onUnmounted(() => window.removeEventListener("keydown", onGlobalKeydown));
   background: var(--color-primary-950);
 }
 
-:deep(.card-preview-container) { margin-top: var(--spacing-2); }
+:deep(.card-preview-container) {
+  margin-top: var(--spacing-2);
+}
 :deep(.card-preview) {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
@@ -391,8 +416,14 @@ onUnmounted(() => window.removeEventListener("keydown", onGlobalKeydown));
 }
 
 @keyframes slideDown {
-  from { opacity: 0; transform: translateY(-20px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .command-palette-header {
@@ -409,8 +440,14 @@ onUnmounted(() => window.removeEventListener("keydown", onGlobalKeydown));
   color: var(--color-text-secondary);
 }
 
-.breadcrumb-item { display: flex; align-items: center; gap: var(--spacing-1); }
-.breadcrumb-separator { color: var(--color-text-tertiary); }
+.breadcrumb-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-1);
+}
+.breadcrumb-separator {
+  color: var(--color-text-tertiary);
+}
 .breadcrumb-back {
   background: none;
   border: none;
@@ -421,10 +458,21 @@ onUnmounted(() => window.removeEventListener("keydown", onGlobalKeydown));
   font-size: var(--font-size-sm);
   transition: var(--transition-colors);
 }
-.breadcrumb-back:hover { background: var(--color-surface-elevated); }
+.breadcrumb-back:hover {
+  background: var(--color-surface-elevated);
+}
 
-.command-palette-search { position: relative; display: flex; align-items: center; }
-.command-palette-search-icon { position: absolute; left: var(--spacing-3); color: var(--color-text-tertiary); pointer-events: none; }
+.command-palette-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.command-palette-search-icon {
+  position: absolute;
+  left: var(--spacing-3);
+  color: var(--color-text-tertiary);
+  pointer-events: none;
+}
 .command-palette-input {
   width: 100%;
   padding: var(--spacing-3) var(--spacing-3) var(--spacing-3) var(--spacing-10);
@@ -435,9 +483,14 @@ onUnmounted(() => window.removeEventListener("keydown", onGlobalKeydown));
   font-family: var(--font-family-sans);
   outline: none;
 }
-.command-palette-input::placeholder { color: var(--color-text-tertiary); }
+.command-palette-input::placeholder {
+  color: var(--color-text-tertiary);
+}
 
-.command-palette-results { overflow-y: auto; max-height: 400px; }
+.command-palette-results {
+  overflow-y: auto;
+  max-height: 400px;
+}
 
 .command-palette-item {
   display: flex;
@@ -448,15 +501,40 @@ onUnmounted(() => window.removeEventListener("keydown", onGlobalKeydown));
   border-left: 2px solid transparent;
   transition: var(--transition-colors);
 }
-.command-palette-item:hover { background: var(--color-neutral-100); }
-:root[data-theme="dark"] .command-palette-item:hover { background: var(--color-neutral-200); }
-.command-palette-item.selected { background: var(--color-neutral-200); border-left-color: var(--color-primary-500); }
-:root[data-theme="dark"] .command-palette-item.selected { background: var(--color-neutral-300); border-left-color: var(--color-primary-400); }
-.command-palette-item.selected .command-item-title { color: var(--color-text-primary); font-weight: var(--font-weight-semibold); }
+.command-palette-item:hover {
+  background: var(--color-neutral-100);
+}
+:root[data-theme="dark"] .command-palette-item:hover {
+  background: var(--color-neutral-200);
+}
+.command-palette-item.selected {
+  background: var(--color-neutral-200);
+  border-left-color: var(--color-primary-500);
+}
+:root[data-theme="dark"] .command-palette-item.selected {
+  background: var(--color-neutral-300);
+  border-left-color: var(--color-primary-400);
+}
+.command-palette-item.selected .command-item-title {
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-semibold);
+}
 
-.command-item-content { display: flex; align-items: center; gap: var(--spacing-3); flex: 1; }
-.command-item-icon { color: var(--color-text-tertiary); font-size: var(--font-size-lg); }
-.command-item-title { color: var(--color-text-primary); font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); }
+.command-item-content {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-3);
+  flex: 1;
+}
+.command-item-icon {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-lg);
+}
+.command-item-title {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
 .command-item-label {
   display: inline-flex;
   align-items: center;
@@ -477,9 +555,15 @@ onUnmounted(() => window.removeEventListener("keydown", onGlobalKeydown));
   border-radius: var(--radius-xs);
   padding: 0 var(--spacing-0-5);
 }
-:root[data-theme="dark"] .command-item-title-highlight { background: var(--color-primary-900); color: var(--color-primary-300); }
+:root[data-theme="dark"] .command-item-title-highlight {
+  background: var(--color-primary-900);
+  color: var(--color-primary-300);
+}
 
-.command-item-hotkey { display: flex; gap: var(--spacing-1); }
+.command-item-hotkey {
+  display: flex;
+  gap: var(--spacing-1);
+}
 .command-item-kbd {
   padding: var(--spacing-1) var(--spacing-2);
   background: var(--color-surface-elevated);
@@ -491,9 +575,17 @@ onUnmounted(() => window.removeEventListener("keydown", onGlobalKeydown));
   min-width: 24px;
   text-align: center;
 }
-.command-item-arrow { color: var(--color-text-tertiary); font-size: var(--font-size-sm); }
+.command-item-arrow {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-sm);
+}
 
-.command-palette-empty { padding: var(--spacing-8); text-align: center; color: var(--color-text-tertiary); font-size: var(--font-size-sm); }
+.command-palette-empty {
+  padding: var(--spacing-8);
+  text-align: center;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-sm);
+}
 
 .command-palette-footer {
   padding: var(--spacing-2) var(--spacing-4);
@@ -503,7 +595,11 @@ onUnmounted(() => window.removeEventListener("keydown", onGlobalKeydown));
   font-size: var(--font-size-xs);
   color: var(--color-text-tertiary);
 }
-.footer-hint { display: flex; align-items: center; gap: var(--spacing-1); }
+.footer-hint {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-1);
+}
 .footer-hint kbd {
   padding: var(--spacing-0-5) var(--spacing-1);
   background: var(--color-surface-elevated);

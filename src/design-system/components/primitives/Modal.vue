@@ -3,17 +3,20 @@ import { watch, onUnmounted } from "vue";
 
 export type ModalSize = "sm" | "md" | "lg" | "xl";
 
-const props = withDefaults(defineProps<{
-  title?: string;
-  isOpen: boolean;
-  size?: ModalSize;
-  showCloseButton?: boolean;
-  closeOnClickOutside?: boolean;
-}>(), {
-  size: "md",
-  showCloseButton: true,
-  closeOnClickOutside: true,
-});
+const props = withDefaults(
+  defineProps<{
+    title?: string;
+    isOpen: boolean;
+    size?: ModalSize;
+    showCloseButton?: boolean;
+    closeOnClickOutside?: boolean;
+  }>(),
+  {
+    size: "md",
+    showCloseButton: true,
+    closeOnClickOutside: true,
+  },
+);
 
 const emit = defineEmits<{
   close: [];
@@ -36,10 +39,14 @@ function removeKeydownListener() {
   }
 }
 
-watch(() => props.isOpen, (isOpen) => {
-  if (isOpen) addKeydownListener();
-  else removeKeydownListener();
-}, { immediate: true });
+watch(
+  () => props.isOpen,
+  (isOpen) => {
+    if (isOpen) addKeydownListener();
+    else removeKeydownListener();
+  },
+  { immediate: true },
+);
 
 onUnmounted(removeKeydownListener);
 
@@ -107,10 +114,18 @@ function handleContentClick(e: MouseEvent) {
   z-index: calc(var(--z-index-modal) + 1);
 }
 
-.ds-modal--sm { width: 500px; }
-.ds-modal--md { width: 800px; }
-.ds-modal--lg { width: 1000px; }
-.ds-modal--xl { width: 1200px; }
+.ds-modal--sm {
+  width: 500px;
+}
+.ds-modal--md {
+  width: 800px;
+}
+.ds-modal--lg {
+  width: 1000px;
+}
+.ds-modal--xl {
+  width: 1200px;
+}
 
 .ds-modal__header {
   display: flex;
@@ -127,7 +142,11 @@ function handleContentClick(e: MouseEvent) {
   color: var(--color-text-primary);
 }
 
-.ds-modal__content { padding: var(--spacing-8); overflow-y: auto; flex: 1; }
+.ds-modal__content {
+  padding: var(--spacing-8);
+  overflow-y: auto;
+  flex: 1;
+}
 
 .ds-modal__footer {
   display: flex;
@@ -149,6 +168,11 @@ function handleContentClick(e: MouseEvent) {
   justify-content: center;
 }
 
-.ds-modal__close:hover { opacity: 0.7; }
-.ds-modal__close svg { width: 24px; height: 24px; }
+.ds-modal__close:hover {
+  opacity: 0.7;
+}
+.ds-modal__close svg {
+  width: 24px;
+  height: 24px;
+}
 </style>

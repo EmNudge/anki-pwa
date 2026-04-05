@@ -11,9 +11,7 @@ import {
 
 const fileInput = ref<HTMLInputElement>();
 
-const sortedFiles = computed(() =>
-  [...cachedFilesSig.value].sort((a, b) => b.addedAt - a.addedAt),
-);
+const sortedFiles = computed(() => [...cachedFilesSig.value].sort((a, b) => b.addedAt - a.addedAt));
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -39,17 +37,19 @@ function handleFileInput(event: Event) {
   <div class="file-library">
     <div class="header">
       <h2 class="title">Your Decks</h2>
-      <input ref="fileInput" type="file" accept=".apkg" class="hidden-input" @change="handleFileInput" />
-      <Button variant="primary" size="sm" @click="fileInput?.click()">
-        Add File
-      </Button>
+      <input
+        ref="fileInput"
+        type="file"
+        accept=".apkg"
+        class="hidden-input"
+        @change="handleFileInput"
+      />
+      <Button variant="primary" size="sm" @click="fileInput?.click()"> Add File </Button>
     </div>
 
     <div v-if="sortedFiles.length === 0" class="empty-state">
       <p class="empty-text">No decks yet. Add an .apkg file to get started.</p>
-      <Button variant="secondary" @click="fileInput?.click()">
-        Choose a Deck File
-      </Button>
+      <Button variant="secondary" @click="fileInput?.click()"> Choose a Deck File </Button>
     </div>
 
     <div v-else class="file-grid">
@@ -61,7 +61,9 @@ function handleFileInput(event: Event) {
       >
         <div class="file-info">
           <span class="file-name">{{ file.name }}</span>
-          <span class="file-meta">{{ formatSize(file.size) }} &middot; {{ formatDate(file.addedAt) }}</span>
+          <span class="file-meta"
+            >{{ formatSize(file.size) }} &middot; {{ formatDate(file.addedAt) }}</span
+          >
         </div>
         <button
           class="delete-btn"

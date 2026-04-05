@@ -96,9 +96,9 @@ Tests parsing of actual .apkg files with different format versions:
 The test suite can parse actual Anki deck files:
 
 ```typescript
-import { parseAnkiFile } from './realFile.test';
+import { parseAnkiFile } from "./realFile.test";
 
-const result = await parseAnkiFile('/path/to/deck.apkg');
+const result = await parseAnkiFile("/path/to/deck.apkg");
 
 console.log(`Cards: ${result.cards.length}`);
 console.log(`Database type: ${result.dbType}`);
@@ -130,31 +130,37 @@ The test suite includes utilities to programmatically create Anki databases:
 ### Anki2 Database
 
 ```typescript
-import { createAnki2Database, insertAnki2Data } from './testUtils';
+import { createAnki2Database, insertAnki2Data } from "./testUtils";
 
 const db = await createAnki2Database();
 
-const models = [{
-  id: "1",
-  css: ".card { font-family: arial; }",
-  fields: [{ name: "Front" }, { name: "Back" }],
-  templates: [{
-    name: "Card 1",
-    qfmt: "{{Front}}",
-    afmt: "{{Back}}",
-    ord: 0
-  }]
-}];
+const models = [
+  {
+    id: "1",
+    css: ".card { font-family: arial; }",
+    fields: [{ name: "Front" }, { name: "Back" }],
+    templates: [
+      {
+        name: "Card 1",
+        qfmt: "{{Front}}",
+        afmt: "{{Back}}",
+        ord: 0,
+      },
+    ],
+  },
+];
 
-const notes = [{
-  id: 1,
-  modelId: "1",
-  tags: ["tag1", "tag2"],
-  fields: {
-    Front: "Question",
-    Back: "Answer"
-  }
-}];
+const notes = [
+  {
+    id: 1,
+    modelId: "1",
+    tags: ["tag1", "tag2"],
+    fields: {
+      Front: "Question",
+      Back: "Answer",
+    },
+  },
+];
 
 insertAnki2Data(db, models, notes);
 ```
@@ -162,45 +168,53 @@ insertAnki2Data(db, models, notes);
 ### Anki21b Database
 
 ```typescript
-import { createAnki21bDatabase, insertAnki21bData } from './testUtils';
+import { createAnki21bDatabase, insertAnki21bData } from "./testUtils";
 
 const db = await createAnki21bDatabase();
 
-const notetypes = [{
-  id: "1",
-  name: "Basic",
-  config: {
-    css: ".card { font-family: arial; }",
-    latexPre: "\\documentclass{article}",
-    latexPost: "\\end{document}",
-    kind: 0
-  }
-}];
+const notetypes = [
+  {
+    id: "1",
+    name: "Basic",
+    config: {
+      css: ".card { font-family: arial; }",
+      latexPre: "\\documentclass{article}",
+      latexPost: "\\end{document}",
+      kind: 0,
+    },
+  },
+];
 
-const fields = [{
-  ntid: "1",
-  ord: 0,
-  name: "Front",
-  config: { fontName: "Arial", fontSize: 20 }
-}];
+const fields = [
+  {
+    ntid: "1",
+    ord: 0,
+    name: "Front",
+    config: { fontName: "Arial", fontSize: 20 },
+  },
+];
 
-const templates = [{
-  ntid: "1",
-  ord: 0,
-  name: "Card",
-  qFormat: "{{Front}}",
-  aFormat: "{{Back}}"
-}];
+const templates = [
+  {
+    ntid: "1",
+    ord: 0,
+    name: "Card",
+    qFormat: "{{Front}}",
+    aFormat: "{{Back}}",
+  },
+];
 
-const notes = [{
-  id: 1,
-  mid: "1",
-  tags: ["tag1"],
-  fields: {
-    Front: "Question",
-    Back: "Answer"
-  }
-}];
+const notes = [
+  {
+    id: 1,
+    mid: "1",
+    tags: ["tag1"],
+    fields: {
+      Front: "Question",
+      Back: "Answer",
+    },
+  },
+];
 
 insertAnki21bData(db, notetypes, fields, templates, notes);
 ```

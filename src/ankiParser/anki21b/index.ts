@@ -1,6 +1,6 @@
 import { getNotesType } from "./proto";
 import { Database } from "sql.js";
-import { executeQueryAll, buildNoteToDeckMap, resolveDeckName } from "~/utils/sql";
+import { executeQueryAll } from "~/utils/sql";
 import { parseFieldConfigProto, parseTemplatesProto } from "./proto";
 import { assertTruthy } from "~/utils/assert";
 
@@ -55,8 +55,9 @@ export function getDataFromAnki21b(db: Database): AnkiDB21bData {
     const fields = executeQueryAll<{
       config: Uint8Array;
       name: string;
+      ord: number;
       ntid: string;
-    }>(db, "SELECT name, config, cast(ntid as text) as ntid FROM fields");
+    }>(db, "SELECT name, ord, config, cast(ntid as text) as ntid FROM fields");
 
     return fields.map((field) => ({
       ...field,
@@ -67,18 +68,27 @@ export function getDataFromAnki21b(db: Database): AnkiDB21bData {
   const templatesMap = (() => {
     const templates = executeQueryAll<{
       name: string;
+      ord: number;
       config: Uint8Array;
       ntid: string;
-    }>(db, "SELECT name, config, cast(ntid as text) as ntid FROM templates");
+    }>(db, "SELECT name, ord, config, cast(ntid as text) as ntid FROM templates");
 
-    const templatesMap = new Map<string, { name: string; afmt: string; qfmt: string }[]>();
+    const templatesMap = new Map<
+      string,
+      { name: string; afmt: string; qfmt: string; ord: number }[]
+    >();
 
     for (const template of templates) {
       const templateProto = parseTemplatesProto(template.config);
 
       const { aFormat, qFormat } = templateProto;
 
-      const curTemplate = { name: template.name, afmt: aFormat, qfmt: qFormat };
+      const curTemplate = {
+        name: template.name,
+        afmt: aFormat,
+        qfmt: qFormat,
+        ord: template.ord,
+      };
       templatesMap.set(template.ntid, [...(templatesMap.get(template.ntid) ?? []), curTemplate]);
     }
 
@@ -100,29 +110,56 @@ export function getDataFromAnki21b(db: Database): AnkiDB21bData {
       mid: string;
     }>(db, "SELECT id, flds, tags, cast(mid as text) as mid FROM notes");
 
-    const noteToDeckId = buildNoteToDeckMap(db);
+    const notesMap = new Map(notes.map((n) => [n.id, n]));
 
-    return notes.map((note) => {
-      const fieldNames = fields
-        .filter((field) => note.mid === field.ntid)
-        .map((field) => field.name);
+    // Query card rows to drive the output
+    const cardRows = executeQueryAll<{
+      id: number;
+      nid: number;
+      ord: number;
+      did: number;
+      odid: number;
+    }>(db, "SELECT id, nid, ord, did, odid FROM cards");
 
-      const templates = templatesMap.get(note.mid);
-      assertTruthy(templates, `Template for note ${note.mid} not found`);
+    return cardRows
+      .map((cardRow) => {
+        const note = notesMap.get(cardRow.nid);
+        if (!note) return null;
 
-      const cardDeckName = resolveDeckName(note.id, noteToDeckId, decks);
+        // Sort fields by ord to ensure correct mapping to \x1F-delimited values
+        const noteFields = fields
+          .filter((field) => note.mid === field.ntid)
+          .sort((a, b) => a.ord - b.ord);
+        const fieldNames = noteFields.map((field) => field.name);
 
-      return {
-        values: Object.fromEntries(
-          note.flds.split("\x1F").map((value, i) => [fieldNames[i], value]),
-        ),
-        // anki21b only has one template per model?
-        templates: templates,
-        css: notesTypeCssMap.get(note.mid) ?? "",
-        tags: [],
-        deckName: cardDeckName,
-      };
-    });
+        const allTemplates = templatesMap.get(note.mid);
+        assertTruthy(allTemplates, `Template for note ${note.mid} not found`);
+
+        // Find the template matching this card's ordinal
+        const matchingTemplate = allTemplates.find((t) => t.ord === cardRow.ord) ?? allTemplates[0];
+        assertTruthy(matchingTemplate, `No template found for ord ${cardRow.ord}`);
+
+        // Resolve deck name, using odid for filtered decks
+        const effectiveDid = cardRow.odid !== 0 ? cardRow.odid : cardRow.did;
+        const cardDeckName = decks[effectiveDid.toString()]?.name ?? "Unknown";
+
+        return {
+          values: Object.fromEntries(
+            note.flds.split("\x1F").map((value, i) => [fieldNames[i], value]),
+          ),
+          templates: [
+            {
+              name: matchingTemplate.name,
+              afmt: matchingTemplate.afmt,
+              qfmt: matchingTemplate.qfmt,
+            },
+          ],
+          css: notesTypeCssMap.get(note.mid) ?? "",
+          tags: note.tags.trim().split(/\s+/).filter(Boolean),
+          deckName: cardDeckName,
+        };
+      })
+      .filter((c): c is NonNullable<typeof c> => c !== null);
   })();
 
   return { cards, notesTypes, deckName, decks };

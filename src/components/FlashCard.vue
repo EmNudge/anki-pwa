@@ -30,10 +30,19 @@ function handleKeyDown(e: KeyboardEvent) {
     }
     return;
   }
-  if (e.key === "e") { playClickSoundMelodic(); emit("chooseAnswer", "easy"); }
-  else if (e.key === "h") { playClickSoundMelodic(); emit("chooseAnswer", "hard"); }
-  else if (e.key === "g") { playClickSoundMelodic(); emit("chooseAnswer", "good"); }
-  else if (e.key === "a") { playClickSoundMelodic(); emit("chooseAnswer", "again"); }
+  if (e.key === "e") {
+    playClickSoundMelodic();
+    emit("chooseAnswer", "easy");
+  } else if (e.key === "h") {
+    playClickSoundMelodic();
+    emit("chooseAnswer", "hard");
+  } else if (e.key === "g") {
+    playClickSoundMelodic();
+    emit("chooseAnswer", "good");
+  } else if (e.key === "a") {
+    playClickSoundMelodic();
+    emit("chooseAnswer", "again");
+  }
 }
 
 onMounted(() => document.addEventListener("keydown", handleKeyDown));
@@ -41,7 +50,10 @@ onUnmounted(() => document.removeEventListener("keydown", handleKeyDown));
 </script>
 
 <template>
-  <div :class="['card', `card--${activeSide}`]" :style="cardBackground ? { background: cardBackground } : undefined">
+  <div
+    :class="['card', `card--${activeSide}`]"
+    :style="cardBackground ? { background: cardBackground } : undefined"
+  >
     <div :class="['card-indicator', `card-indicator--${activeSide}`]">
       {{ activeSide === "front" ? "Front" : "Back" }}
     </div>
@@ -51,7 +63,7 @@ onUnmounted(() => document.removeEventListener("keydown", handleKeyDown));
         :card-css="cardCss"
         :theme="theme"
         @audio-button-click="(src: string) => emit('audioButtonClick', src)"
-        @background-detected="(color: string | null) => cardBackground = color"
+        @background-detected="(color: string | null) => (cardBackground = color)"
       />
     </div>
   </div>
@@ -70,8 +82,17 @@ onUnmounted(() => document.removeEventListener("keydown", handleKeyDown));
   position: relative;
   overflow: hidden;
 }
-@media (max-width: 1200px) { .card { width: 800px; } }
-@media (max-width: 768px) { .card { width: 100%; min-height: 400px; } }
+@media (max-width: 1200px) {
+  .card {
+    width: 800px;
+  }
+}
+@media (max-width: 768px) {
+  .card {
+    width: 100%;
+    min-height: 400px;
+  }
+}
 .card-indicator {
   display: inline-block;
   padding: var(--spacing-1) var(--spacing-3);
@@ -85,10 +106,28 @@ onUnmounted(() => document.removeEventListener("keydown", handleKeyDown));
   left: 0;
   opacity: 0.6;
 }
-.card-indicator--front { background: var(--color-primary-100); color: var(--color-primary-700); }
-.card-indicator--back { background: var(--color-success-100); color: var(--color-success-700); }
-:root[data-theme="dark"] .card-indicator--front { background: var(--color-primary-950); color: var(--color-primary-300); }
-:root[data-theme="dark"] .card-indicator--back { background: var(--color-success-950); color: var(--color-success-300); }
-.card-content { padding: var(--spacing-8) var(--spacing-4) var(--spacing-4); }
-h1 { margin: 0; font-weight: var(--font-weight-normal); font-size: var(--font-size-2xl); }
+.card-indicator--front {
+  background: var(--color-primary-100);
+  color: var(--color-primary-700);
+}
+.card-indicator--back {
+  background: var(--color-success-100);
+  color: var(--color-success-700);
+}
+:root[data-theme="dark"] .card-indicator--front {
+  background: var(--color-primary-950);
+  color: var(--color-primary-300);
+}
+:root[data-theme="dark"] .card-indicator--back {
+  background: var(--color-success-950);
+  color: var(--color-success-300);
+}
+.card-content {
+  padding: var(--spacing-8) var(--spacing-4) var(--spacing-4);
+}
+h1 {
+  margin: 0;
+  font-weight: var(--font-weight-normal);
+  font-size: var(--font-size-2xl);
+}
 </style>

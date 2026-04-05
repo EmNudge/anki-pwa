@@ -17,8 +17,25 @@ defineProps<{
 </template>
 
 <style scoped>
-.ds-side-panel { display: flex; flex-direction: column; gap: var(--spacing-4); }
-.ds-side-panel-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--color-border); padding-bottom: var(--spacing-2); }
-.ds-side-panel-title { font-weight: var(--font-weight-semibold); font-size: var(--font-size-lg); }
-.ds-side-panel-content { display: flex; flex-direction: column; gap: var(--spacing-3); }
+.ds-side-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-4);
+}
+.ds-side-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: var(--spacing-2);
+}
+.ds-side-panel-title {
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-lg);
+}
+.ds-side-panel-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3);
+}
 </style>

@@ -54,11 +54,20 @@ const currentPosition = computed(() => {
   return index === -1 ? 1 : index + 1;
 });
 
-const newBarWidth = computed(() => `${Math.min(100, (dailyProgress.value.newDone / dailyProgress.value.newLimit) * 100)}%`);
-const reviewBarWidth = computed(() => `${Math.min(100, (dailyProgress.value.reviewsDone / dailyProgress.value.reviewsLimit) * 100)}%`);
+const newBarWidth = computed(
+  () => `${Math.min(100, (dailyProgress.value.newDone / dailyProgress.value.newLimit) * 100)}%`,
+);
+const reviewBarWidth = computed(
+  () =>
+    `${Math.min(100, (dailyProgress.value.reviewsDone / dailyProgress.value.reviewsLimit) * 100)}%`,
+);
 
-function handleToggleScheduler() { toggleScheduler(); }
-function handleOpenSettings() { schedulerSettingsModalOpenSig.value = true; }
+function handleToggleScheduler() {
+  toggleScheduler();
+}
+function handleOpenSettings() {
+  schedulerSettingsModalOpenSig.value = true;
+}
 </script>
 
 <template>
@@ -104,7 +113,11 @@ function handleOpenSettings() { schedulerSettingsModalOpenSig.value = true; }
             </div>
             <div class="progress-bar-bg">
               <div
-                :class="dailyProgress.newDone >= dailyProgress.newLimit ? 'progress-bar-fill complete' : 'progress-bar-fill'"
+                :class="
+                  dailyProgress.newDone >= dailyProgress.newLimit
+                    ? 'progress-bar-fill complete'
+                    : 'progress-bar-fill'
+                "
                 :style="{ width: newBarWidth }"
               />
             </div>
@@ -117,7 +130,11 @@ function handleOpenSettings() { schedulerSettingsModalOpenSig.value = true; }
             </div>
             <div class="progress-bar-bg">
               <div
-                :class="dailyProgress.reviewsDone >= dailyProgress.reviewsLimit ? 'progress-bar-fill complete' : 'progress-bar-fill'"
+                :class="
+                  dailyProgress.reviewsDone >= dailyProgress.reviewsLimit
+                    ? 'progress-bar-fill complete'
+                    : 'progress-bar-fill'
+                "
                 :style="{ width: reviewBarWidth }"
               />
             </div>
@@ -189,32 +206,155 @@ function handleOpenSettings() { schedulerSettingsModalOpenSig.value = true; }
 </template>
 
 <style scoped>
-.srs-container { max-width: 100%; width: 100%; }
-@media (max-width: 1200px) { .srs-container { max-width: 800px; } }
-.status-badge { padding: var(--spacing-1) var(--spacing-3); border-radius: var(--radius-full); font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); cursor: pointer; border: none; transition: var(--transition-all); letter-spacing: var(--letter-spacing-wide); }
-.status-badge:hover { filter: brightness(1.1); transform: translateY(-1px); }
-.status-badge:active { transform: translateY(0); }
-.status-enabled { background: var(--color-success-500); color: var(--color-text-inverse); }
-.status-disabled { background: var(--color-neutral-400); color: var(--color-text-inverse); }
-.srs-section { display: flex; flex-direction: column; gap: var(--spacing-2); }
-.section-title { font-weight: var(--font-weight-semibold); font-size: var(--font-size-sm); color: var(--color-text-secondary); text-transform: uppercase; letter-spacing: var(--letter-spacing-wide); }
-.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--spacing-3); }
-.stat-card { background: var(--color-surface-elevated); border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: var(--spacing-3); display: flex; flex-direction: column; gap: var(--spacing-1); }
-.stat-label { font-size: var(--font-size-xs); color: var(--color-text-secondary); text-transform: uppercase; letter-spacing: var(--letter-spacing-wide); }
-.stat-value { font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-text-primary); }
-.stat-secondary { font-size: var(--font-size-sm); color: var(--color-text-secondary); }
-.progress-bar-container { display: flex; flex-direction: column; gap: var(--spacing-1); }
-.progress-bar-label { display: flex; justify-content: space-between; font-size: var(--font-size-sm); }
-.progress-bar-bg { width: 100%; height: var(--spacing-4); background: var(--color-surface-elevated); border: 1px solid var(--color-border); border-radius: var(--radius-sm); overflow: hidden; }
-.progress-bar-fill { height: 100%; background: linear-gradient(90deg, var(--color-primary-500), var(--color-primary-600)); transition: width var(--duration-slow) var(--ease-out); }
-.progress-bar-fill.complete { background: linear-gradient(90deg, var(--color-success-500), var(--color-success-600)); }
-.card-info-grid { display: grid; grid-template-columns: 1fr; gap: var(--spacing-2); }
-@media (max-width: 1200px) { .card-info-grid { grid-template-columns: repeat(2, 1fr); } }
-.info-item { display: flex; justify-content: space-between; padding: var(--spacing-2); background: var(--color-surface-elevated); border: 1px solid var(--color-border); border-radius: var(--radius-sm); }
-.info-label { color: var(--color-text-secondary); font-size: var(--font-size-sm); }
-.info-value { font-weight: var(--font-weight-semibold); font-size: var(--font-size-sm); color: var(--color-text-primary); }
-.info-value--muted { font-size: var(--font-size-2xs); opacity: 0.5; }
-.no-cards-message { text-align: center; padding: var(--spacing-8); color: var(--color-text-tertiary); font-style: italic; }
-.scheduler-controls { display: flex; flex-direction: column; gap: var(--spacing-2); padding-top: var(--spacing-4); margin-top: var(--spacing-4); border-top: 1px solid var(--color-border); }
-.button-group { display: flex; gap: var(--spacing-2); flex-wrap: wrap; }
+.srs-container {
+  max-width: 100%;
+  width: 100%;
+}
+@media (max-width: 1200px) {
+  .srs-container {
+    max-width: 800px;
+  }
+}
+.status-badge {
+  padding: var(--spacing-1) var(--spacing-3);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  border: none;
+  transition: var(--transition-all);
+  letter-spacing: var(--letter-spacing-wide);
+}
+.status-badge:hover {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+.status-badge:active {
+  transform: translateY(0);
+}
+.status-enabled {
+  background: var(--color-success-500);
+  color: var(--color-text-inverse);
+}
+.status-disabled {
+  background: var(--color-neutral-400);
+  color: var(--color-text-inverse);
+}
+.srs-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+}
+.section-title {
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: var(--letter-spacing-wide);
+}
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--spacing-3);
+}
+.stat-card {
+  background: var(--color-surface-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--spacing-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-1);
+}
+.stat-label {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: var(--letter-spacing-wide);
+}
+.stat-value {
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+}
+.stat-secondary {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+.progress-bar-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-1);
+}
+.progress-bar-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--font-size-sm);
+}
+.progress-bar-bg {
+  width: 100%;
+  height: var(--spacing-4);
+  background: var(--color-surface-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--color-primary-500), var(--color-primary-600));
+  transition: width var(--duration-slow) var(--ease-out);
+}
+.progress-bar-fill.complete {
+  background: linear-gradient(90deg, var(--color-success-500), var(--color-success-600));
+}
+.card-info-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--spacing-2);
+}
+@media (max-width: 1200px) {
+  .card-info-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+.info-item {
+  display: flex;
+  justify-content: space-between;
+  padding: var(--spacing-2);
+  background: var(--color-surface-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+.info-label {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+.info-value {
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+}
+.info-value--muted {
+  font-size: var(--font-size-2xs);
+  opacity: 0.5;
+}
+.no-cards-message {
+  text-align: center;
+  padding: var(--spacing-8);
+  color: var(--color-text-tertiary);
+  font-style: italic;
+}
+.scheduler-controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+  padding-top: var(--spacing-4);
+  margin-top: var(--spacing-4);
+  border-top: 1px solid var(--color-border);
+}
+.button-group {
+  display: flex;
+  gap: var(--spacing-2);
+  flex-wrap: wrap;
+}
 </style>

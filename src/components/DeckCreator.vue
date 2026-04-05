@@ -36,8 +36,8 @@ function exportDeck() {
   <div class="deck-creator">
     <h2 class="title">Create Deck</h2>
     <p class="description">
-      Paste a table with two columns. Column 1 becomes the front of each card,
-      column 2 becomes the back. Export as a text file you can import into Anki.
+      Paste a table with two columns. Column 1 becomes the front of each card, column 2 becomes the
+      back. Export as a text file you can import into Anki.
     </p>
 
     <div class="controls">
@@ -60,9 +60,7 @@ function exportDeck() {
     <div v-if="parsedRows.length > 0" class="preview-section">
       <div class="preview-header">
         <h3 class="preview-title">Preview ({{ parsedRows.length }} cards)</h3>
-        <Button variant="primary" size="sm" @click="exportDeck">
-          Export .txt
-        </Button>
+        <Button variant="primary" size="sm" @click="exportDeck"> Export .txt </Button>
       </div>
       <div class="table-wrapper">
         <table class="preview-table">

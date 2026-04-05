@@ -21,35 +21,60 @@ const emit = defineEmits<{
     variant="primary"
     size="lg"
     full-width
-    @click="() => { playClickSoundBasic(); emit('reveal'); }"
+    @click="
+      () => {
+        playClickSoundBasic();
+        emit('reveal');
+      }
+    "
   >
     Reveal
   </Button>
   <div v-else class="button-set">
     <Button
       variant="secondary"
-      @click="() => { playClickSoundMelodic(); emit('chooseAnswer', 'again'); }"
+      @click="
+        () => {
+          playClickSoundMelodic();
+          emit('chooseAnswer', 'again');
+        }
+      "
     >
       <span class="time">{{ intervals?.again ?? "&lt;1m" }}</span>
       <span class="answer">Again</span>
     </Button>
     <Button
       variant="secondary"
-      @click="() => { playClickSoundMelodic(); emit('chooseAnswer', 'hard'); }"
+      @click="
+        () => {
+          playClickSoundMelodic();
+          emit('chooseAnswer', 'hard');
+        }
+      "
     >
       <span class="time">{{ intervals?.hard ?? "&lt;6m" }}</span>
       <span class="answer">Hard</span>
     </Button>
     <Button
       variant="primary"
-      @click="() => { playClickSoundMelodic(); emit('chooseAnswer', 'good'); }"
+      @click="
+        () => {
+          playClickSoundMelodic();
+          emit('chooseAnswer', 'good');
+        }
+      "
     >
       <span class="time">{{ intervals?.good ?? "&lt;10m" }}</span>
       <span class="answer">Good</span>
     </Button>
     <Button
       variant="secondary"
-      @click="() => { playClickSoundMelodic(); emit('chooseAnswer', 'easy'); }"
+      @click="
+        () => {
+          playClickSoundMelodic();
+          emit('chooseAnswer', 'easy');
+        }
+      "
     >
       <span class="time">{{ intervals?.easy ?? "&lt;5d" }}</span>
       <span class="answer">Easy</span>
@@ -58,9 +83,20 @@ const emit = defineEmits<{
 </template>
 
 <style scoped>
-.reveal-button { width: 500px; max-width: 100%; }
-@media (max-width: 1200px) { .reveal-button { width: 800px; } }
-@media (max-width: 768px) { .reveal-button { width: 100%; } }
+.reveal-button {
+  width: 500px;
+  max-width: 100%;
+}
+@media (max-width: 1200px) {
+  .reveal-button {
+    width: 800px;
+  }
+}
+@media (max-width: 768px) {
+  .reveal-button {
+    width: 100%;
+  }
+}
 .button-set {
   display: flex;
   justify-content: center;
@@ -72,7 +108,17 @@ const emit = defineEmits<{
   flex: 1 1 0;
   min-width: 0;
 }
-.button-set .time { opacity: 0.5; }
-@media (max-width: 1200px) { .button-set { width: 800px; } }
-@media (max-width: 768px) { .button-set { width: 100%; } }
+.button-set .time {
+  opacity: 0.5;
+}
+@media (max-width: 1200px) {
+  .button-set {
+    width: 800px;
+  }
+}
+@media (max-width: 768px) {
+  .button-set {
+    width: 100%;
+  }
+}
 </style>
