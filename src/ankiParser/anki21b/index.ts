@@ -3,7 +3,7 @@ import { Database } from "sql.js";
 import { executeQuery, executeQueryAll } from "~/utils/sql";
 import { parseFieldConfigProto, parseTemplatesProto } from "./proto";
 import { assertTruthy } from "~/utils/assert";
-import { type CardScheduling, type RevlogEntry, parseFsrsData, getQueueName, getTypeName } from "../anki2";
+import { type CardScheduling, type RevlogEntry, parseFsrsData, getQueueName, getTypeName, getDueType, getRevlogTypeName } from "../anki2";
 
 export type AnkiDB21bData = {
   cards: {
@@ -30,6 +30,7 @@ export type AnkiDB21bData = {
   decks: Record<string, { id: number; name: string }>;
   revlog: RevlogEntry[];
   collectionCreationTime: number;
+  tagsTable: { tag: string; collapsed: boolean }[];
 };
 
 export function getDataFromAnki21b(db: Database): AnkiDB21bData {
@@ -147,10 +148,13 @@ export function getDataFromAnki21b(db: Database): AnkiDB21bData {
       factor: number;
       reps: number;
       lapses: number;
+      odue: number;
+      flags: number;
+      left: number;
       data: string | Uint8Array;
     }>(
       db,
-      "SELECT id, nid, ord, did, odid, type, queue, due, ivl, factor, reps, lapses, data FROM cards",
+      "SELECT id, nid, ord, did, odid, type, queue, due, ivl, factor, reps, lapses, odue, flags, left, data FROM cards",
     );
 
     return cardRows
@@ -199,19 +203,26 @@ export function getDataFromAnki21b(db: Database): AnkiDB21bData {
           noteType: noteTypeInfo?.kind ?? 0,
           latexSvg: noteTypeInfo?.latexSvg ?? false,
           latexPre: noteTypeInfo?.latexPre ?? "",
-          req: noteTypeInfo?.reqs
-            ? noteTypeInfo.reqs.map((r, i) => [i, r.kind === 1 ? "any" : "all", r.fieldOrds] as [number, string, number[]])
-            : null,
+          req: (noteTypeInfo?.reqs ?? []).map((r, i) => {
+            const mode = r.kind === 0 ? "none" : r.kind === 1 ? "any" : "all";
+            return [i, mode, r.fieldOrds] as [number, string, number[]];
+          }),
           scheduling: {
             type: cardRow.type,
             typeName: getTypeName(cardRow.type),
             queue: cardRow.queue,
             queueName: getQueueName(cardRow.queue),
             due: cardRow.due,
+            dueType: getDueType(cardRow.queue),
             ivl: cardRow.ivl,
+            ivlUnit: cardRow.ivl < 0 ? "seconds" as const : "days" as const,
             factor: cardRow.factor,
+            easeFactor: cardRow.factor === 0 ? null : cardRow.factor / 1000,
             reps: cardRow.reps,
             lapses: cardRow.lapses,
+            odue: cardRow.odue,
+            flags: cardRow.flags,
+            left: cardRow.left,
             fsrs,
           },
         };
@@ -222,15 +233,28 @@ export function getDataFromAnki21b(db: Database): AnkiDB21bData {
   // Parse revlog if the table exists
   const revlog = (() => {
     try {
-      return executeQueryAll<RevlogEntry>(
+      const rows = executeQueryAll<Omit<RevlogEntry, "typeName">>(
         db,
         "SELECT id, cid, usn, ease, ivl, lastIvl, factor, time, type FROM revlog",
       );
+      return rows.map((r) => ({ ...r, typeName: getRevlogTypeName(r.type) }));
     } catch {
       // revlog table may not exist in all databases
       return [];
     }
   })();
 
-  return { cards, notesTypes, deckName, decks, revlog, collectionCreationTime };
+  // Parse tags table if it exists (anki21b has a dedicated tags table)
+  const tagsTable = (() => {
+    try {
+      const rows = executeQueryAll<{ tag: string; collapsed: number }>(
+        db, "SELECT tag, collapsed FROM tags",
+      );
+      return rows.map((r) => ({ tag: r.tag, collapsed: r.collapsed !== 0 }));
+    } catch {
+      return [];
+    }
+  })();
+
+  return { cards, notesTypes, deckName, decks, revlog, collectionCreationTime, tagsTable };
 }

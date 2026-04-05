@@ -322,4 +322,206 @@ describe("getRenderedCardString", () => {
     expect(html).toContain("\\begin{align}"); // In MathML annotation
     expect(html).toContain("dfrac"); // The fraction commands were parsed
   });
+
+  describe("filter application order", () => {
+    it("should apply cloze before text in {{text:cloze:Field}}", () => {
+      const variables = {
+        Text: "The capital of France is {{c1::Paris}}",
+      };
+
+      const html = getRenderedCardString({
+        templateString: "{{text:cloze:Text}}",
+        variables,
+        mediaFiles: new Map(),
+        cardOrd: 0,
+        isAnswer: true,
+        isCloze: true,
+      });
+
+      // Right-to-left: cloze runs first, then text strips the <span class="cloze"> wrapper
+      expect(html).toContain("Paris");
+      expect(html).not.toContain("<span");
+      expect(html).not.toContain("cloze");
+    });
+
+    it("should apply filters right-to-left for {{hint:text:Field}}", () => {
+      const variables = {
+        Notes: "<b>Important</b> extra info",
+      };
+
+      const html = getRenderedCardString({
+        templateString: "{{hint:text:Notes}}",
+        variables,
+        mediaFiles: new Map(),
+      });
+
+      // Right-to-left: text strips HTML first, then hint wraps the plain text
+      expect(html).toContain("Important extra info");
+      expect(html).not.toContain("<b>");
+      expect(html).toContain('<a class="hint"');
+      expect(html).toContain("Show Notes");
+      expect(html).toContain("<span");
+    });
+  });
+
+  describe("special fields", () => {
+    it("should render {{CardFlag}} as the flag number", () => {
+      const html = getRenderedCardString({
+        templateString: "{{Front}} (flag: {{CardFlag}})",
+        variables: { Front: "Hello" },
+        mediaFiles: new Map(),
+      });
+
+      expect(html).toContain("(flag: 0)");
+    });
+
+    it("should render {{CardID}} as the card's unique ID", () => {
+      const html = getRenderedCardString({
+        templateString: "{{Front}} id={{CardID}}",
+        variables: { Front: "Hello" },
+        mediaFiles: new Map(),
+      });
+
+      expect(html).not.toBe("Hello id=");
+      expect(html).toMatch(/id=\d+/);
+    });
+  });
+
+  describe("type:cloze combined filter", () => {
+    it("should produce separate inputs per active cloze on question side", () => {
+      const html = getRenderedCardString({
+        templateString: "{{type:cloze:Text}}",
+        variables: { Text: "The {{c1::capital}} of {{c2::France}} is {{c1::Paris}}" },
+        mediaFiles: new Map(),
+        cardOrd: 0,
+        isAnswer: false,
+        isCloze: true,
+      });
+
+      const inputCount = (html.match(/<input/g) || []).length;
+      expect(inputCount).toBe(2);
+      expect(html).toContain("The ");
+      expect(html).toContain(" of France is ");
+    });
+
+    it("should show only the cloze answer in typeans on answer side", () => {
+      const html = getRenderedCardString({
+        templateString: "{{type:cloze:Text}}",
+        variables: { Text: "The {{c1::capital}} of France" },
+        mediaFiles: new Map(),
+        cardOrd: 0,
+        isAnswer: true,
+        isCloze: true,
+      });
+
+      expect(html).toContain("typeans");
+      expect(html).toContain("capital");
+      expect(html).not.toContain("of France");
+    });
+  });
+
+  describe("nested conditional sections", () => {
+    it("should handle empty outer with non-empty inner of same name", () => {
+      const html = getRenderedCardString({
+        templateString: "{{#A}}start{{#B}}middle{{/B}}{{#A}}deep{{/A}}end{{/A}}after",
+        variables: { A: "", B: "value" },
+        mediaFiles: new Map(),
+      });
+
+      expect(html).toBe("after");
+    });
+
+    it("should not leak content from removed outer block with same-name inner", () => {
+      const html = getRenderedCardString({
+        templateString: "{{#X}}hidden{{#X}}also hidden{{/X}}leaked{{/X}}visible",
+        variables: { X: "" },
+        mediaFiles: new Map(),
+      });
+
+      expect(html).toBe("visible");
+    });
+
+    it("should handle same-name nesting where inner content would leak", () => {
+      const html = getRenderedCardString({
+        templateString: "{{#A}}outer{{#A}}inner{{/A}}LEAKED{{/A}}",
+        variables: { A: "" },
+        mediaFiles: new Map(),
+      });
+
+      expect(html).toBe("");
+    });
+  });
+
+  describe("TTS filter chaining", () => {
+    it("should chain tts with cloze filter", () => {
+      const html = getRenderedCardString({
+        templateString: "{{tts fr_FR:cloze:Text}}",
+        variables: { Text: "The answer is {{c1::Paris}}" },
+        mediaFiles: new Map(),
+        cardOrd: 0,
+        isAnswer: true,
+        isCloze: true,
+      });
+
+      expect(html).toContain("Paris");
+      expect(html).toContain("tts");
+    });
+
+    it("should chain tts with text filter", () => {
+      const html = getRenderedCardString({
+        templateString: "{{tts en_US:text:Field}}",
+        variables: { Field: "<b>Hello</b> world" },
+        mediaFiles: new Map(),
+      });
+
+      expect(html).toContain("Hello world");
+      expect(html).not.toContain("<b>");
+      expect(html).toContain("tts");
+    });
+  });
+
+  describe("cloze-aware conditional emptiness", () => {
+    it("should treat field as empty when cloze content unwraps to empty", () => {
+      const htmlWithContent = getRenderedCardString({
+        templateString: "{{#Extra}}Has extra: {{Extra}}{{/Extra}}{{^Extra}}No extra{{/Extra}}",
+        variables: { Extra: "{{c2::Only on card 2}}" },
+        mediaFiles: new Map(),
+        cardOrd: 0,
+        isCloze: true,
+      });
+      expect(htmlWithContent).toContain("Has extra");
+
+      const htmlEmpty = getRenderedCardString({
+        templateString: "{{#Extra}}Has extra{{/Extra}}{{^Extra}}No extra{{/Extra}}",
+        variables: { Extra: "{{c2::}}" },
+        mediaFiles: new Map(),
+        cardOrd: 0,
+        isCloze: true,
+      });
+
+      expect(htmlEmpty).toBe("No extra");
+    });
+  });
+
+  describe("media filename normalization", () => {
+    it("should match files after stripping illegal characters", () => {
+      const html = getRenderedCardString({
+        templateString: "{{Front}}",
+        variables: { Front: '<img src="image[1].png">' },
+        mediaFiles: new Map([["image1.png", "blob:http://localhost/img1"]]),
+      });
+
+      expect(html).toContain("blob:http://localhost/img1");
+    });
+
+    it("should handle Windows reserved name normalization", () => {
+      const html = getRenderedCardString({
+        templateString: "{{Front}}",
+        variables: { Front: '<img src="CON.png">' },
+        mediaFiles: new Map([["_CON.png", "blob:http://localhost/con"]]),
+      });
+
+      expect(html).toContain("blob:http://localhost/con");
+    });
+  });
 });

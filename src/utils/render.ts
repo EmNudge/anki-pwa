@@ -19,6 +19,8 @@ export function getRenderedCardString({
   noteTypeName,
   isCloze = false,
   latexSvg = false,
+  cardFlag = 0,
+  cardId = 0,
 }: {
   templateString: string;
   variables: Variables;
@@ -34,6 +36,8 @@ export function getRenderedCardString({
   noteTypeName?: string;
   isCloze?: boolean;
   latexSvg?: boolean;
+  cardFlag?: number;
+  cardId?: number;
 }) {
   let renderedString = templateString;
 
@@ -83,6 +87,12 @@ export function getRenderedCardString({
   if (noteTypeName && !enrichedVariables.Type) {
     enrichedVariables.Type = noteTypeName;
   }
+  if (enrichedVariables.CardFlag === undefined) {
+    enrichedVariables.CardFlag = String(cardFlag ?? 0);
+  }
+  if (enrichedVariables.CardID === undefined) {
+    enrichedVariables.CardID = String(cardId ?? 0);
+  }
 
   // Detect cloze numbers present in variables for conditional sections
   const clozeNumbers = detectClozeNumbers(enrichedVariables);
@@ -92,7 +102,7 @@ export function getRenderedCardString({
     }
   }
 
-  renderedString = flattenOptionalSections(renderedString, enrichedVariables);
+  renderedString = flattenOptionalSections(renderedString, enrichedVariables, isCloze, cardOrd);
 
   renderedString = renderedString.replace(/\{\{(.*?)\}\}/g, (_match, p1: string) => {
     return processFieldReference(p1, enrichedVariables, cardOrd, isAnswer, isCloze);
@@ -146,7 +156,8 @@ function stripTypeInputs(html: string): string {
 
 /**
  * Process a field reference that may include filters.
- * Format: {{filter1:filter2:FieldName}} — filters applied left-to-right.
+ * Format: {{filter1:filter2:FieldName}} — filters applied right-to-left
+ * (innermost/closest to field first, per Anki source).
  */
 function processFieldReference(
   ref: string,
@@ -155,35 +166,73 @@ function processFieldReference(
   isAnswer: boolean,
   isCloze: boolean,
 ): string {
-  // Handle TTS filter: {{tts LANG OPTIONS:FieldName}}
-  // The tts prefix contains spaces, so we need special handling before splitting on ':'
-  const ttsMatch = ref.match(/^tts\s+([^:]+):(.+)$/);
+  // Handle TTS filter: {{tts LANG OPTIONS:other_filters:FieldName}}
+  // The tts prefix contains spaces, so we detect it and normalize it into the filter chain
+  let normalizedRef = ref;
+  let ttsFilter: string | null = null;
+  const ttsMatch = ref.match(/^(tts\s+[^:]+):(.+)$/);
   if (ttsMatch) {
-    const ttsOptions = ttsMatch[1]!;
-    const fieldName = ttsMatch[2]!;
-    const value = variables[fieldName] ?? "";
-    return `<span class="tts-speak" data-tts-options="${ttsOptions}">${value}</span>`;
+    ttsFilter = ttsMatch[1]!;
+    normalizedRef = ttsMatch[2]!;
   }
 
-  const parts = ref.split(":");
+  const parts = normalizedRef.split(":");
 
-  if (parts.length === 1) {
-    return variables[ref] ?? "";
+  if (parts.length === 1 && !ttsFilter) {
+    return variables[normalizedRef] ?? "";
   }
 
   // Last part is the field name, preceding parts are filters
   const fieldName = parts[parts.length - 1]!;
-  const filters = parts.slice(0, -1);
+  const filters = parts.length > 1 ? parts.slice(0, -1) : [];
+  if (ttsFilter) {
+    filters.unshift(ttsFilter);
+  }
+
+  // Detect type:cloze combined filter — special handling
+  if (filters.includes("type") && filters.some((f) => f === "cloze") && isCloze) {
+    return processTypeCloze(variables[fieldName] ?? "", cardOrd, isAnswer);
+  }
 
   let value = variables[fieldName] ?? "";
 
-  // Apply filters left-to-right (outermost first, per Anki source)
-  for (let i = 0; i < filters.length; i++) {
+  // Apply filters right-to-left (innermost first, per Anki source)
+  for (let i = filters.length - 1; i >= 0; i--) {
     const filter = filters[i]!;
     value = applyFilter(filter, value, cardOrd, isAnswer, isCloze, fieldName);
   }
 
   return value;
+}
+
+/**
+ * Process {{type:cloze:Field}} — a special combined filter.
+ * On question side: shows sentence with active cloze deletions replaced by input boxes.
+ * On answer side: shows only the active cloze answers in a typeans span.
+ */
+function processTypeCloze(text: string, cardOrd: number, isAnswer: boolean): string {
+  const clozeNum = cardOrd + 1;
+
+  if (isAnswer) {
+    // Extract only active cloze answers
+    const answers: string[] = [];
+    text.replace(/\{\{c(\d+)::(.+?)(?:::(.+?))?\}\}/gs, (_m, num: string, answer: string) => {
+      if (parseInt(num) === clozeNum) answers.push(answer);
+      return "";
+    });
+    return `<span id="typeans">${answers.join(", ")}</span>`;
+  }
+
+  // Question side: replace active clozes with inputs, unwrap inactive ones
+  return text.replace(
+    /\{\{c(\d+)::(.+?)(?:::(.+?))?\}\}/gs,
+    (_m, num: string, answer: string) => {
+      if (parseInt(num) === clozeNum) {
+        return `<input type="text" id="typeans" placeholder="type answer">`;
+      }
+      return answer;
+    },
+  );
 }
 
 function applyFilter(
@@ -217,6 +266,11 @@ function applyFilter(
     case "kana":
       return applyKanaFilter(value);
     default:
+      // Handle TTS filter: "tts en_US" or "tts en_US voices=..."
+      if (filter.startsWith("tts ")) {
+        const ttsOptions = filter.slice(4);
+        return `<span class="tts-speak" data-tts-options="${ttsOptions}">${value}</span>`;
+      }
       return value;
   }
 }
@@ -309,6 +363,13 @@ function replaceMediaFiles(renderedString: string, mediaFiles: Map<string, strin
         url = normalizedMap.get(truncated);
       }
     }
+    if (!url) {
+      // Try stripping illegal characters per Anki's filename normalization
+      const stripped = normalizeAnkiFilename(normalized);
+      if (stripped !== normalized) {
+        url = normalizedMap.get(stripped);
+      }
+    }
     return url ? `="${url}"` : match;
   });
 }
@@ -335,6 +396,24 @@ function truncateFilename(filename: string, maxBytes: number): string {
   const stemBytes = encoder.encode(stem);
   const truncatedStem = new TextDecoder().decode(stemBytes.slice(0, maxStemBytes));
   return truncatedStem + ext;
+}
+
+/**
+ * Normalize a media filename per Anki's rules:
+ * strip illegal characters []<>:"/?\*^\| and handle Windows reserved names.
+ */
+function normalizeAnkiFilename(filename: string): string {
+  // Strip illegal characters per Anki: []<>:"/?\*^|
+  let normalized = filename.replace(/[\[\]<>:"\/\\?\*\^|]/g, "");
+  // Strip trailing spaces and periods
+  normalized = normalized.replace(/[\s.]+$/, "");
+  // Handle Windows reserved names: CON, PRN, AUX, NUL, COM1-9, LPT1-9
+  const lastDot = normalized.lastIndexOf(".");
+  const stem = lastDot >= 0 ? normalized.slice(0, lastDot) : normalized;
+  if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i.test(stem)) {
+    normalized = "_" + normalized;
+  }
+  return normalized;
 }
 
 /**
@@ -569,65 +648,105 @@ function replaceTemplatingSyntax(renderedString: string) {
 /**
  * Check if a field value is "not empty" per Anki's rules:
  * strip HTML tags and whitespace, then check if anything remains.
+ * When isCloze is true, first unwraps cloze markers to check if
+ * the underlying content is non-empty.
  */
-function fieldIsNotEmpty(value: string | null | undefined): boolean {
+function fieldIsNotEmpty(
+  value: string | null | undefined,
+  isCloze?: boolean,
+  _cardOrd?: number,
+): boolean {
   if (!value) return false;
+  let processed = value;
+  if (isCloze) {
+    // Unwrap all cloze markers to their content before checking emptiness
+    processed = processed.replace(
+      /\{\{c(\d+)::(.*?)(?:::(.*?))?\}\}/gs,
+      (_m, _num: string, answer: string) => answer,
+    );
+  }
   // Strip HTML tags, then check for non-whitespace content
-  const stripped = value.replace(/<[^>]*>/g, "").trim();
+  const stripped = processed.replace(/<[^>]*>/g, "").trim();
   return stripped.length > 0;
 }
 
 /**
- * Optional/conditional sections:
+ * Token types for template conditional parsing.
+ */
+type ConditionalToken =
+  | { type: "text"; value: string }
+  | { type: "open"; field: string; positive: boolean }
+  | { type: "close"; field: string };
+
+/**
+ * Tokenize a template string into text segments and conditional markers.
+ */
+function tokenizeConditionals(template: string): ConditionalToken[] {
+  const tokens: ConditionalToken[] = [];
+  const re = /\{\{([#^/])(.+?)\}\}/g;
+  let lastIndex = 0;
+  let match;
+  while ((match = re.exec(template)) !== null) {
+    if (match.index > lastIndex) {
+      tokens.push({ type: "text", value: template.slice(lastIndex, match.index) });
+    }
+    const kind = match[1];
+    const field = match[2]!;
+    if (kind === "/") {
+      tokens.push({ type: "close", field });
+    } else {
+      tokens.push({ type: "open", field, positive: kind === "#" });
+    }
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < template.length) {
+    tokens.push({ type: "text", value: template.slice(lastIndex) });
+  }
+  return tokens;
+}
+
+/**
+ * Optional/conditional sections using stack-based parsing for proper nesting:
  * - {{#section}}content{{/section}} — shown if field is non-empty
  * - {{^section}}content{{/section}} — shown if field is empty (inverse)
  */
-function flattenOptionalSections(templateString: string, card: Variables) {
-  let renderedString = templateString;
+function flattenOptionalSections(
+  templateString: string,
+  card: Variables,
+  isCloze = false,
+  cardOrd = 0,
+): string {
+  const tokens = tokenizeConditionals(templateString);
 
-  // Process positive conditionals {{#field}}...{{/field}}
-  const positiveSections = [
-    ...new Set([...renderedString.matchAll(/\{\{#(.*?)\}\}/g)].map((match) => match[1])),
-  ];
-
-  for (const section of positiveSections) {
-    if (!section) continue;
-    const regex = new RegExp(
-      `\\{\\{\\#${escapeRegex(section)}\\}\\}((?:.|\\n)+?)\\{\\{\\/${escapeRegex(section)}\\}\\}`,
-      "g",
-    );
-
-    if (!fieldIsNotEmpty(card[section])) {
-      renderedString = renderedString.replace(regex, "");
-    } else {
-      renderedString = renderedString.replace(regex, "$1");
+  // Recursive descent parser
+  function parseTokens(pos: number, activeField?: string): { result: string; nextPos: number } {
+    let output = "";
+    while (pos < tokens.length) {
+      const token = tokens[pos]!;
+      if (token.type === "text") {
+        output += token.value;
+        pos++;
+      } else if (token.type === "open") {
+        // Parse the inner content recursively
+        const inner = parseTokens(pos + 1, token.field);
+        const show = token.positive
+          ? fieldIsNotEmpty(card[token.field], isCloze, cardOrd)
+          : !fieldIsNotEmpty(card[token.field], isCloze, cardOrd);
+        if (show) {
+          output += inner.result;
+        }
+        pos = inner.nextPos;
+      } else if (token.type === "close") {
+        // If this close matches our active field, consume it and return
+        if (activeField && token.field === activeField) {
+          return { result: output, nextPos: pos + 1 };
+        }
+        // Stray close tag — skip it
+        pos++;
+      }
     }
+    return { result: output, nextPos: pos };
   }
 
-  // Process inverse conditionals {{^field}}...{{/field}}
-  const inverseSections = [
-    ...new Set([...renderedString.matchAll(/\{\{\^(.*?)\}\}/g)].map((match) => match[1])),
-  ];
-
-  for (const section of inverseSections) {
-    if (!section) continue;
-    const regex = new RegExp(
-      `\\{\\{\\^${escapeRegex(section)}\\}\\}((?:.|\\n)+?)\\{\\{\\/${escapeRegex(section)}\\}\\}`,
-      "g",
-    );
-
-    if (fieldIsNotEmpty(card[section])) {
-      // Field has a value — remove the inverse section
-      renderedString = renderedString.replace(regex, "");
-    } else {
-      // Field is empty — keep the content, remove the guards
-      renderedString = renderedString.replace(regex, "$1");
-    }
-  }
-
-  return renderedString;
-}
-
-function escapeRegex(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return parseTokens(0).result;
 }
