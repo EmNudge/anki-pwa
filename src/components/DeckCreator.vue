@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
 import { Button } from "../design-system";
+import AiDeckGenerator from "./AiDeckGenerator.vue";
 
+const mode = ref<"manual" | "ai">("manual");
 const rawInput = ref("");
 const delimiter = ref<"tab" | "comma">("tab");
 
@@ -35,58 +37,72 @@ function exportDeck() {
 <template>
   <div class="deck-creator">
     <h2 class="title">Create Deck</h2>
-    <p class="description">
-      Paste a table with two columns. Column 1 becomes the front of each card, column 2 becomes the
-      back. Export as a text file you can import into Anki.
-    </p>
 
-    <div class="controls">
-      <label class="delimiter-label">
-        Delimiter:
-        <select v-model="delimiter" class="delimiter-select">
-          <option value="tab">Tab</option>
-          <option value="comma">Comma</option>
-        </select>
-      </label>
+    <div class="mode-toggle">
+      <button :class="['mode-btn', { 'mode-btn--active': mode === 'manual' }]" @click="mode = 'manual'">
+        Manual
+      </button>
+      <button :class="['mode-btn', { 'mode-btn--active': mode === 'ai' }]" @click="mode = 'ai'">
+        AI Generate
+      </button>
     </div>
 
-    <textarea
-      v-model="rawInput"
-      class="input-area"
-      placeholder="Paste your table here&#10;front1&#9;back1&#10;front2&#9;back2"
-      rows="10"
-    />
+    <template v-if="mode === 'manual'">
+      <p class="description">
+        Paste a table with two columns. Column 1 becomes the front of each card, column 2 becomes the
+        back. Export as a text file you can import into Anki.
+      </p>
 
-    <div v-if="parsedRows.length > 0" class="preview-section">
-      <div class="preview-header">
-        <h3 class="preview-title">Preview ({{ parsedRows.length }} cards)</h3>
-        <Button variant="primary" size="sm" @click="exportDeck"> Export .txt </Button>
+      <div class="controls">
+        <label class="delimiter-label">
+          Delimiter:
+          <select v-model="delimiter" class="delimiter-select">
+            <option value="tab">Tab</option>
+            <option value="comma">Comma</option>
+          </select>
+        </label>
       </div>
-      <div class="table-wrapper">
-        <table class="preview-table">
-          <thead>
-            <tr>
-              <th class="col-num">#</th>
-              <th>Front</th>
-              <th>Back</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(row, i) in parsedRows" :key="i">
-              <td class="col-num">{{ i + 1 }}</td>
-              <td>{{ row.front }}</td>
-              <td>{{ row.back }}</td>
-            </tr>
-          </tbody>
-        </table>
+
+      <textarea
+        v-model="rawInput"
+        class="input-area"
+        placeholder="Paste your table here&#10;front1&#9;back1&#10;front2&#9;back2"
+        rows="10"
+      />
+
+      <div v-if="parsedRows.length > 0" class="preview-section">
+        <div class="preview-header">
+          <h3 class="preview-title">Preview ({{ parsedRows.length }} cards)</h3>
+          <Button variant="primary" size="sm" @click="exportDeck"> Export .txt </Button>
+        </div>
+        <div class="table-wrapper">
+          <table class="preview-table">
+            <thead>
+              <tr>
+                <th class="col-num">#</th>
+                <th>Front</th>
+                <th>Back</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(row, i) in parsedRows" :key="i">
+                <td class="col-num">{{ i + 1 }}</td>
+                <td>{{ row.front }}</td>
+                <td>{{ row.back }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
-    </div>
+    </template>
+
+    <AiDeckGenerator v-else />
   </div>
 </template>
 
 <style scoped>
 .deck-creator {
-  max-width: 700px;
+  max-width: 800px;
   margin: 0 auto;
   padding: var(--spacing-8) var(--spacing-4);
 }
@@ -95,7 +111,40 @@ function exportDeck() {
   font-size: var(--font-size-xl);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-primary);
-  margin: 0 0 var(--spacing-2) 0;
+  margin: 0 0 var(--spacing-4) 0;
+}
+
+.mode-toggle {
+  display: flex;
+  gap: var(--spacing-1);
+  margin-bottom: var(--spacing-4);
+  padding: var(--spacing-1);
+  background: var(--color-surface-elevated);
+  border-radius: var(--radius-md);
+  width: fit-content;
+}
+
+.mode-btn {
+  padding: var(--spacing-1-5) var(--spacing-3);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: var(--transition-colors);
+  box-shadow: none;
+}
+
+.mode-btn:hover {
+  color: var(--color-text-primary);
+}
+
+.mode-btn--active {
+  color: var(--color-text-primary);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
 }
 
 .description {

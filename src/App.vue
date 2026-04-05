@@ -16,6 +16,7 @@ import {
   mediaFilesSig,
   moveToNextCard,
   moveToNextReviewCard,
+  reviewModeSig,
   reviewQueueSig,
   schedulerEnabledSig,
   schedulerSettingsModalOpenSig,
@@ -27,12 +28,10 @@ import {
 import StatusBar from "./components/StatusBar.vue";
 import FileLibrary from "./components/FileLibrary.vue";
 import DeckCreator from "./components/DeckCreator.vue";
-import AiDeckGenerator from "./components/AiDeckGenerator.vue";
+
 import SyncPanel from "./components/SyncPanel.vue";
-import SRSVisualization from "./components/SRSVisualization.vue";
 import SchedulerSettings from "./components/SchedulerSettings.vue";
 import CommandPalette from "./components/CommandPalette.vue";
-import FileInfo from "./components/FileInfo.vue";
 import { useCommands } from "./composables/useCommands";
 import { getAutoplayAudioSources, playAudio } from "./utils/sound";
 
@@ -175,26 +174,16 @@ async function handleChooseAnswer(answer: Answer) {
 <template>
   <StatusBar />
 
-  <!-- FILES VIEW -->
-  <FileLibrary v-if="activeViewSig === 'files'" />
-
   <!-- CREATE DECK VIEW -->
-  <DeckCreator v-else-if="activeViewSig === 'create'" />
-
-  <!-- AI GENERATE VIEW -->
-  <AiDeckGenerator v-else-if="activeViewSig === 'ai-generate'" />
+  <DeckCreator v-if="activeViewSig === 'create'" />
 
   <!-- SYNC VIEW -->
   <SyncPanel v-else-if="activeViewSig === 'sync'" />
 
-  <!-- REVIEW VIEW -->
-  <main v-else>
-    <!-- LEFT COLUMN: File Info -->
-    <div class="layout-left-column">
-      <FileInfo v-if="deckInfoSig" />
-    </div>
+  <!-- REVIEW VIEW: deck list or studying -->
+  <FileLibrary v-else-if="reviewModeSig === 'deck-list'" />
 
-    <!-- CENTER COLUMN: Card -->
+  <main v-else>
     <div class="layout-center-column">
       <template v-if="renderedCard">
         <FlashCard
@@ -215,14 +204,9 @@ async function handleChooseAnswer(answer: Answer) {
         />
       </template>
       <p v-else-if="cardsSig.length === 0" class="no-deck-message">
-        No deck loaded. Switch to the
-        <button class="link-btn" @click="activeViewSig = 'files'">Files</button> tab to open one.
+        No deck loaded. Click the
+        <button class="link-btn" @click="reviewModeSig = 'deck-list'">Review</button> tab to choose a deck.
       </p>
-    </div>
-
-    <!-- RIGHT COLUMN: SRS Visualization -->
-    <div class="layout-right-column">
-      <SRSVisualization v-if="cardsSig.length > 0" />
     </div>
   </main>
 
@@ -235,45 +219,15 @@ async function handleChooseAnswer(answer: Answer) {
 
 <style scoped>
 main {
-  display: grid;
-  grid-template-columns: 300px 1fr 400px;
   min-height: calc(100vh - 44px);
 }
 
-.layout-left-column {
-  grid-column: 1;
-  grid-row: 1;
-  position: sticky;
-  top: 44px;
-  height: calc(100vh - 44px);
-  overflow-y: auto;
-  background: var(--color-surface);
-  border-right: 1px solid var(--color-border);
-  padding: var(--spacing-4);
-  text-align: left;
-}
-
 .layout-center-column {
-  grid-column: 2;
-  grid-row: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: var(--spacing-4);
   padding: var(--spacing-8) var(--spacing-4);
-}
-
-.layout-right-column {
-  grid-column: 3;
-  grid-row: 1;
-  position: sticky;
-  top: 44px;
-  height: calc(100vh - 44px);
-  overflow-y: auto;
-  background: var(--color-surface);
-  border-left: 1px solid var(--color-border);
-  padding: var(--spacing-4);
-  text-align: left;
 }
 
 .no-deck-message {
@@ -291,35 +245,5 @@ main {
   box-shadow: none;
   cursor: pointer;
   text-decoration: underline;
-}
-
-@media (max-width: 1200px) {
-  main {
-    grid-template-columns: 1fr;
-    min-height: auto;
-  }
-
-  .layout-left-column,
-  .layout-center-column,
-  .layout-right-column {
-    grid-column: 1;
-    position: static;
-    height: auto;
-    overflow: visible;
-    border: none;
-  }
-
-  .layout-left-column {
-    grid-row: 1;
-    border-bottom: 1px solid var(--color-border);
-  }
-  .layout-center-column {
-    grid-row: 2;
-    background: transparent;
-  }
-  .layout-right-column {
-    grid-row: 3;
-    border-top: 1px solid var(--color-border);
-  }
 }
 </style>

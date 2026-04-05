@@ -11,7 +11,7 @@ import {
   clearSyncState,
   type SyncConfig,
 } from "../lib/ankiSync";
-import { loadSyncedCollection } from "../stores";
+import { loadSyncedCollection, clearSyncedCollection, syncActiveSig } from "../stores";
 import mime from "mime";
 
 const serverUrl = ref("");
@@ -22,7 +22,6 @@ const isSyncing = ref(false);
 const syncStatus = ref("");
 const syncError = ref("");
 const lastSyncTime = ref<number | null>(null);
-const includeMedia = ref(false);
 
 onMounted(() => {
   const config = readSyncConfig();
@@ -49,6 +48,7 @@ async function handleLogin() {
     writeSyncState({ hkey, lastSync: readSyncState().lastSync });
 
     isLoggedIn.value = true;
+    syncActiveSig.value = true;
     syncStatus.value = "Logged in successfully.";
     password.value = "";
   } catch (err) {
@@ -57,9 +57,11 @@ async function handleLogin() {
   }
 }
 
-function handleLogout() {
+async function handleLogout() {
   clearSyncState();
+  await clearSyncedCollection();
   isLoggedIn.value = false;
+  syncActiveSig.value = false;
   syncStatus.value = "";
   syncError.value = "";
   lastSyncTime.value = null;
@@ -79,30 +81,22 @@ async function handlePull() {
   try {
     const sqliteBytes = await downloadCollection(serverUrl.value, state.hkey);
 
-    let mediaFiles: Map<string, string> | undefined;
-
-    if (includeMedia.value) {
-      syncStatus.value = "Downloading media files...";
-      try {
-        const mediaBlobs = await downloadMedia(serverUrl.value, state.hkey);
-        if (mediaBlobs.size > 0) {
-          mediaFiles = new Map<string, string>();
-          for (const [filename, blob] of mediaBlobs) {
-            const typed = new Blob([blob], {
-              type: mime.getType(filename) ?? "application/octet-stream",
-            });
-            mediaFiles.set(filename, URL.createObjectURL(typed));
-          }
-          syncStatus.value = `Downloaded ${mediaBlobs.size} media files. Loading...`;
-        }
-      } catch {
-        // Media sync failure is non-fatal
-        syncStatus.value = "Media download failed (non-fatal). Loading collection...";
+    syncStatus.value = "Downloading media files...";
+    const mediaBlobs = await downloadMedia(serverUrl.value, state.hkey);
+    let typedMediaBlobs: Map<string, Blob> | undefined;
+    if (mediaBlobs.size > 0) {
+      typedMediaBlobs = new Map<string, Blob>();
+      for (const [filename, blob] of mediaBlobs) {
+        typedMediaBlobs.set(
+          filename,
+          new Blob([blob], { type: mime.getType(filename) ?? "application/octet-stream" }),
+        );
       }
+      syncStatus.value = `Downloaded ${mediaBlobs.size} media files. Loading...`;
     }
 
     syncStatus.value = "Parsing collection...";
-    loadSyncedCollection(sqliteBytes, mediaFiles);
+    await loadSyncedCollection(sqliteBytes, typedMediaBlobs);
 
     const now = Date.now();
     writeSyncState({ hkey: state.hkey, lastSync: now });
@@ -112,6 +106,7 @@ async function handlePull() {
   } catch (err) {
     if (err instanceof Error && err.message.includes("Authentication expired")) {
       isLoggedIn.value = false;
+      syncActiveSig.value = false;
       clearSyncState();
     }
     syncError.value = err instanceof Error ? err.message : "Sync failed";
@@ -121,13 +116,15 @@ async function handlePull() {
   }
 }
 
-function handleDisconnect() {
+async function handleDisconnect() {
   writeSyncConfig(null);
   clearSyncState();
+  await clearSyncedCollection();
   serverUrl.value = "";
   username.value = "";
   password.value = "";
   isLoggedIn.value = false;
+  syncActiveSig.value = false;
   syncStatus.value = "";
   syncError.value = "";
   lastSyncTime.value = null;
@@ -197,11 +194,6 @@ function formatLastSync(timestamp: number | null): string {
 
         <div class="sync-last-sync">Last sync: {{ formatLastSync(lastSyncTime) }}</div>
 
-        <label class="sync-checkbox-label">
-          <input v-model="includeMedia" type="checkbox" class="sync-checkbox" />
-          Include media files (images, audio)
-        </label>
-
         <div class="sync-actions">
           <button class="sync-btn sync-btn--primary" :disabled="isSyncing" @click="handlePull">
             {{ isSyncing ? "Syncing..." : "Pull Collection" }}
@@ -248,8 +240,8 @@ function formatLastSync(timestamp: number | null): string {
 
         <h3>What gets synced</h3>
         <p>
-          Pull downloads your entire card collection (decks, notes, templates, scheduling data).
-          Media files (images, audio) can optionally be included by checking the checkbox above.
+          Pull downloads your entire card collection (decks, notes, templates, scheduling data)
+          along with all media files (images, audio).
         </p>
       </div>
     </details>
@@ -338,19 +330,6 @@ function formatLastSync(timestamp: number | null): string {
 .sync-last-sync {
   font-size: var(--font-size-xs);
   color: var(--color-text-secondary);
-}
-
-.sync-checkbox-label {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-2);
-  font-size: var(--font-size-sm);
-  color: var(--color-text-primary);
-  cursor: pointer;
-}
-
-.sync-checkbox {
-  accent-color: var(--color-primary);
 }
 
 .sync-actions {
