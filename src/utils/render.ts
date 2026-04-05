@@ -1,4 +1,5 @@
 import katex from "katex";
+import { isClozeNode, parseClozeNodes, renderTemplateString } from "./templateParser";
 
 type Variables = { [key: string]: string | null };
 
@@ -102,10 +103,11 @@ export function getRenderedCardString({
     }
   }
 
-  renderedString = flattenOptionalSections(renderedString, enrichedVariables, isCloze, cardOrd);
-
-  renderedString = renderedString.replace(/\{\{(.*?)\}\}/g, (_match, p1: string) => {
-    return processFieldReference(p1, enrichedVariables, cardOrd, isAnswer, isCloze);
+  renderedString = renderTemplateString({
+    templateString: renderedString,
+    renderField: (reference) =>
+      processFieldReference(reference, enrichedVariables, cardOrd, isAnswer, isCloze),
+    shouldRenderConditional: (field) => fieldIsNotEmpty(enrichedVariables[field], isCloze, cardOrd),
   });
 
   renderedString = replaceTemplatingSyntax(renderedString);
@@ -214,25 +216,26 @@ function processTypeCloze(text: string, cardOrd: number, isAnswer: boolean): str
   const clozeNum = cardOrd + 1;
 
   if (isAnswer) {
-    // Extract only active cloze answers
     const answers: string[] = [];
-    text.replace(/\{\{c(\d+)::(.+?)(?:::(.+?))?\}\}/gs, (_m, num: string, answer: string) => {
-      if (parseInt(num) === clozeNum) answers.push(answer);
-      return "";
-    });
+    for (const node of parseClozeNodes(text)) {
+      if (isClozeNode(node) && node.ordinal === clozeNum) {
+        answers.push(node.answer);
+      }
+    }
     return `<span id="typeans">${answers.join(", ")}</span>`;
   }
 
-  // Question side: replace active clozes with inputs, unwrap inactive ones
-  return text.replace(
-    /\{\{c(\d+)::(.+?)(?:::(.+?))?\}\}/gs,
-    (_m, num: string, answer: string) => {
-      if (parseInt(num) === clozeNum) {
+  return parseClozeNodes(text)
+    .map((node) => {
+      if (node.type === "text") {
+        return node.value;
+      }
+      if (node.ordinal === clozeNum) {
         return `<input type="text" id="typeans" placeholder="type answer">`;
       }
-      return answer;
-    },
-  );
+      return node.answer;
+    })
+    .join("");
 }
 
 function applyFilter(
@@ -313,30 +316,31 @@ function applyKanaFilter(text: string): string {
 function processCloze(text: string, cardOrd: number, isAnswer: boolean): string {
   const clozeNum = cardOrd + 1;
 
-  return text.replace(
-    /\{\{c(\d+)::(.+?)(?:::(.+?))?\}\}/gs,
-    (_match, num: string, answer: string, hint?: string) => {
-      if (parseInt(num) === clozeNum) {
-        if (isAnswer) {
-          return `<span class="cloze">${answer}</span>`;
-        }
-        return hint ? `[${hint}]` : "[...]";
+  return parseClozeNodes(text)
+    .map((node) => {
+      if (node.type === "text") {
+        return node.value;
       }
-      return answer;
-    },
-  );
+      if (node.ordinal === clozeNum) {
+        if (isAnswer) {
+          return `<span class="cloze">${node.answer}</span>`;
+        }
+        return node.hint ? `[${node.hint}]` : "[...]";
+      }
+      return node.answer;
+    })
+    .join("");
 }
 
 function processClozeOnly(text: string, cardOrd: number): string {
   const clozeNum = cardOrd + 1;
   const matches: string[] = [];
 
-  text.replace(/\{\{c(\d+)::(.+?)(?:::(.+?))?\}\}/gs, (_match, num: string, answer: string) => {
-    if (parseInt(num) === clozeNum) {
-      matches.push(answer);
+  for (const node of parseClozeNodes(text)) {
+    if (isClozeNode(node) && node.ordinal === clozeNum) {
+      matches.push(node.answer);
     }
-    return "";
-  });
+  }
 
   return matches.join(", ");
 }
@@ -657,96 +661,11 @@ function fieldIsNotEmpty(
   _cardOrd?: number,
 ): boolean {
   if (!value) return false;
-  let processed = value;
-  if (isCloze) {
-    // Unwrap all cloze markers to their content before checking emptiness
-    processed = processed.replace(
-      /\{\{c(\d+)::(.*?)(?:::(.*?))?\}\}/gs,
-      (_m, _num: string, answer: string) => answer,
-    );
-  }
-  // Strip HTML tags, then check for non-whitespace content
+  const processed = isCloze
+    ? parseClozeNodes(value)
+        .map((node) => (node.type === "text" ? node.value : node.answer))
+        .join("")
+    : value;
   const stripped = processed.replace(/<[^>]*>/g, "").trim();
   return stripped.length > 0;
-}
-
-/**
- * Token types for template conditional parsing.
- */
-type ConditionalToken =
-  | { type: "text"; value: string }
-  | { type: "open"; field: string; positive: boolean }
-  | { type: "close"; field: string };
-
-/**
- * Tokenize a template string into text segments and conditional markers.
- */
-function tokenizeConditionals(template: string): ConditionalToken[] {
-  const tokens: ConditionalToken[] = [];
-  const re = /\{\{([#^/])(.+?)\}\}/g;
-  let lastIndex = 0;
-  let match;
-  while ((match = re.exec(template)) !== null) {
-    if (match.index > lastIndex) {
-      tokens.push({ type: "text", value: template.slice(lastIndex, match.index) });
-    }
-    const kind = match[1];
-    const field = match[2]!;
-    if (kind === "/") {
-      tokens.push({ type: "close", field });
-    } else {
-      tokens.push({ type: "open", field, positive: kind === "#" });
-    }
-    lastIndex = match.index + match[0].length;
-  }
-  if (lastIndex < template.length) {
-    tokens.push({ type: "text", value: template.slice(lastIndex) });
-  }
-  return tokens;
-}
-
-/**
- * Optional/conditional sections using stack-based parsing for proper nesting:
- * - {{#section}}content{{/section}} — shown if field is non-empty
- * - {{^section}}content{{/section}} — shown if field is empty (inverse)
- */
-function flattenOptionalSections(
-  templateString: string,
-  card: Variables,
-  isCloze = false,
-  cardOrd = 0,
-): string {
-  const tokens = tokenizeConditionals(templateString);
-
-  // Recursive descent parser
-  function parseTokens(pos: number, activeField?: string): { result: string; nextPos: number } {
-    let output = "";
-    while (pos < tokens.length) {
-      const token = tokens[pos]!;
-      if (token.type === "text") {
-        output += token.value;
-        pos++;
-      } else if (token.type === "open") {
-        // Parse the inner content recursively
-        const inner = parseTokens(pos + 1, token.field);
-        const show = token.positive
-          ? fieldIsNotEmpty(card[token.field], isCloze, cardOrd)
-          : !fieldIsNotEmpty(card[token.field], isCloze, cardOrd);
-        if (show) {
-          output += inner.result;
-        }
-        pos = inner.nextPos;
-      } else if (token.type === "close") {
-        // If this close matches our active field, consume it and return
-        if (activeField && token.field === activeField) {
-          return { result: output, nextPos: pos + 1 };
-        }
-        // Stray close tag — skip it
-        pos++;
-      }
-    }
-    return { result: output, nextPos: pos };
-  }
-
-  return parseTokens(0).result;
 }
