@@ -1,4 +1,4 @@
-/* Color Tokens - Refined palette with zinc neutrals, indigo primary */
+/* Color Tokens - Refined palette with zinc neutrals, violet primary (tagebook-inspired) */
 
 :root[data-theme="light"] {
   /* Neutral Scale - Zinc (subtle cool undertone, modern feel) */
@@ -14,18 +14,18 @@
   --color-neutral-900: #18181b;
   --color-neutral-950: #09090b;
 
-  /* Primary Scale - Indigo (refined, premium feel for productivity) */
-  --color-primary-50: #eef2ff;
-  --color-primary-100: #e0e7ff;
-  --color-primary-200: #c7d2fe;
-  --color-primary-300: #a5b4fc;
-  --color-primary-400: #818cf8;
-  --color-primary-500: #6366f1;
-  --color-primary-600: #4f46e5;
-  --color-primary-700: #4338ca;
-  --color-primary-800: #3730a3;
-  --color-primary-900: #312e81;
-  --color-primary-950: #1e1b4b;
+  /* Primary Scale - Violet (vibrant purple, matching tagebook accent) */
+  --color-primary-50: #f5f3ff;
+  --color-primary-100: #ede9fe;
+  --color-primary-200: #ddd6fe;
+  --color-primary-300: #c4b5fd;
+  --color-primary-400: #a78bfa;
+  --color-primary-500: #8b5cf6;
+  --color-primary-600: #7c3aed;
+  --color-primary-700: #6d28d9;
+  --color-primary-800: #5b21b6;
+  --color-primary-900: #4c1d95;
+  --color-primary-950: #2e1065;
 
   /* Success Scale - Emerald (clear, confident green) */
   --color-success-50: #ecfdf5;
@@ -115,18 +115,18 @@
   --color-neutral-900: #f4f4f5;
   --color-neutral-950: #fafafa;
 
-  /* Primary Scale - Indigo (same hues, used via semantic aliases) */
-  --color-primary-50: #eef2ff;
-  --color-primary-100: #e0e7ff;
-  --color-primary-200: #c7d2fe;
-  --color-primary-300: #a5b4fc;
-  --color-primary-400: #818cf8;
-  --color-primary-500: #6366f1;
-  --color-primary-600: #4f46e5;
-  --color-primary-700: #4338ca;
-  --color-primary-800: #3730a3;
-  --color-primary-900: #312e81;
-  --color-primary-950: #1e1b4b;
+  /* Primary Scale - Violet (same hues, used via semantic aliases) */
+  --color-primary-50: #f5f3ff;
+  --color-primary-100: #ede9fe;
+  --color-primary-200: #ddd6fe;
+  --color-primary-300: #c4b5fd;
+  --color-primary-400: #a78bfa;
+  --color-primary-500: #8b5cf6;
+  --color-primary-600: #7c3aed;
+  --color-primary-700: #6d28d9;
+  --color-primary-800: #5b21b6;
+  --color-primary-900: #4c1d95;
+  --color-primary-950: #2e1065;
 
   /* Success Scale - Emerald */
   --color-success-50: #ecfdf5;
@@ -173,21 +173,21 @@
   --color-error: var(--color-error-400);
   --color-warning: var(--color-warning-400);
 
-  /* Semantic Surface Colors (more contrast between levels) */
-  --color-background: #0c0c0e;
-  --color-surface: var(--color-neutral-100);
-  --color-surface-elevated: var(--color-neutral-200);
-  --color-surface-hover: var(--color-neutral-300);
+  /* Semantic Surface Colors - deeper blacks matching tagebook */
+  --color-background: #0a0a0c;
+  --color-surface: #111114;
+  --color-surface-elevated: #18181c;
+  --color-surface-hover: #222226;
 
   /* Semantic Text Colors */
-  --color-text-primary: var(--color-neutral-950);
-  --color-text-secondary: var(--color-neutral-700);
-  --color-text-tertiary: var(--color-neutral-600);
+  --color-text-primary: #e4e4e7;
+  --color-text-secondary: #a1a1aa;
+  --color-text-tertiary: #71717a;
   --color-text-inverse: var(--color-neutral-100);
 
-  /* Semantic Border Colors */
-  --color-border: var(--color-neutral-300);
-  --color-border-hover: var(--color-neutral-400);
+  /* Semantic Border Colors - low-opacity white matching tagebook */
+  --color-border: rgba(255, 255, 255, 0.07);
+  --color-border-hover: rgba(255, 255, 255, 0.13);
   --color-border-focus: var(--color-primary-400);
 
   /* Overlay */
