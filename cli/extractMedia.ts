@@ -11,6 +11,7 @@ import * as path from 'path';
 import { BlobReader, ZipReader, BlobWriter } from '@zip-js/zip-js';
 import { decompressZstd } from './utils/zstdNode.js';
 import { parseMediaProto } from '../src/ankiParser/parseMediaProto.js';
+import { mediaMappingSchema } from '../src/ankiParser/anki2/jsonParsers.js';
 
 async function extractAnkiMedia(filePath: string, outputDir: string) {
   const fileName = path.basename(filePath);
@@ -75,7 +76,7 @@ async function extractAnkiMedia(filePath: string, outputDir: string) {
   let mediaMapping: Record<string, string>;
   try {
     // Try parsing as JSON first (older format)
-    mediaMapping = JSON.parse(mediaContent);
+    mediaMapping = mediaMappingSchema.parse(JSON.parse(mediaContent));
   } catch (_jsonError) {
     // If JSON parsing fails, try parsing as Protocol Buffer (newer .anki21b format)
     try {

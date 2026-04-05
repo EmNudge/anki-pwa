@@ -12,6 +12,7 @@ import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import initSqlJs from 'sql.js';
 import { BlobReader, ZipReader, BlobWriter } from '@zip-js/zip-js';
+import { modelSchema, deckSchema } from '../src/ankiParser/anki2/jsonParsers.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -99,8 +100,8 @@ async function inspectAnkiFile(filePath: string) {
     tags: string;
   }>(db, "SELECT * from col");
 
-  const models = JSON.parse(colData.models);
-  const decks = JSON.parse(colData.decks);
+  const models = modelSchema.parse(JSON.parse(colData.models));
+  const decks = deckSchema.parse(JSON.parse(colData.decks));
 
   // Get notes
   const notes = executeQueryAll<{ id: number; modelId: string; tags: string; fields: string }>(
