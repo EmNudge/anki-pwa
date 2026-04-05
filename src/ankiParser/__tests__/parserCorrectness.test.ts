@@ -152,15 +152,10 @@ describe("Parser Correctness Issues (expected to fail)", () => {
       const result = getDataFromAnki2(db);
 
       // The Reverse card (ord=1) should be suppressed since Back (field 1) is empty
-      // This test documents that the parser doesn't filter based on req
-      // In practice, Anki wouldn't even create the card row for ord=1,
-      // but the parser should still be aware of req for validation
-      expect(result.cards).toHaveLength(2); // Currently passes — both cards returned
-      // A correct implementation would either:
-      // 1. Filter out cards that don't meet req, or
-      // 2. Expose the req data so the consumer can filter
+      // The parser now filters cards based on req
+      expect(result.cards).toHaveLength(1); // Only Forward card remains
       const card = result.cards[0] as Record<string, unknown>;
-      // At minimum, the model's req field should be accessible
+      // The model's req field should be accessible
       expect(card).toHaveProperty("req");
     });
   });
