@@ -34,6 +34,11 @@ function handleFileChange(event: Event) {
 </template>
 
 <style scoped>
-.file-input { display: none; }
-.icon { width: var(--spacing-5); height: var(--spacing-5); }
+.file-input {
+  display: none;
+}
+.icon {
+  width: var(--spacing-5);
+  height: var(--spacing-5);
+}
 </style>

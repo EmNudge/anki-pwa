@@ -59,6 +59,7 @@ export function parseMediaProto(buffer: Uint8Array): Record<string, string> {
       // Parse the entry message
       let entryOffset = 0;
       let filename = "";
+      let mediaIndex = -1;
 
       while (entryOffset < entryData.length) {
         const entryTag = entryData[entryOffset++];
@@ -77,8 +78,9 @@ export function parseMediaProto(buffer: Uint8Array): Record<string, string> {
           filename = new TextDecoder().decode(filenameData);
           entryOffset = afterFilename;
         } else if (entryFieldNumber === 2 && entryWireType === 0) {
-          // Some kind of index/timestamp - skip it
-          const { newOffset: afterIndex } = readVarint(entryData, entryOffset);
+          // Index field — maps to the ZIP entry number
+          const { value, newOffset: afterIndex } = readVarint(entryData, entryOffset);
+          mediaIndex = value;
           entryOffset = afterIndex;
         } else if (entryFieldNumber === 3 && entryWireType === 2) {
           // SHA1 hash (bytes, length-delimited) - we can skip this
@@ -102,9 +104,9 @@ export function parseMediaProto(buffer: Uint8Array): Record<string, string> {
       }
 
       if (filename) {
-        // The ZIP entries are numbered sequentially: 0, 1, 2, 3, etc.
-        // The protobuf entries are in the same order
-        result[entryIndex.toString()] = filename;
+        // Use the proto index field if present, otherwise fall back to sequential
+        const key = mediaIndex >= 0 ? mediaIndex : entryIndex;
+        result[key.toString()] = filename;
         entryIndex++;
       }
     } else {

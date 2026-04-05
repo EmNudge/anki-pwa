@@ -1,16 +1,19 @@
 <script setup lang="ts">
 import { computed } from "vue";
 
-const props = withDefaults(defineProps<{
-  error?: boolean;
-  errorMessage?: string;
-  label?: string;
-  helperText?: string;
-  id?: string;
-  modelValue?: string | number;
-}>(), {
-  error: false,
-});
+const props = withDefaults(
+  defineProps<{
+    error?: boolean;
+    errorMessage?: string;
+    label?: string;
+    helperText?: string;
+    id?: string;
+    modelValue?: string | number;
+  }>(),
+  {
+    error: false,
+  },
+);
 
 const emit = defineEmits<{
   "update:modelValue": [value: string];
@@ -19,9 +22,7 @@ const emit = defineEmits<{
 const inputId = computed(() => props.id ?? `input-${Math.random().toString(36).slice(2, 11)}`);
 
 const inputClasses = computed(() =>
-  ["ds-input", props.error ? "ds-input--error" : undefined]
-    .filter(Boolean)
-    .join(" ")
+  ["ds-input", props.error ? "ds-input--error" : undefined].filter(Boolean).join(" "),
 );
 
 function onInput(e: Event) {
@@ -73,12 +74,34 @@ function onInput(e: Event) {
   transition: var(--transition-colors);
 }
 
-.ds-input::placeholder { color: var(--color-text-tertiary); }
-.ds-input:hover:not(:disabled) { border-color: var(--color-border-hover); }
-.ds-input:focus { outline: none; border-color: var(--color-border-focus); box-shadow: var(--shadow-focus-ring); }
-.ds-input:disabled { opacity: 0.5; cursor: not-allowed; }
-.ds-input--error { border-color: var(--color-error-500); }
-.ds-input--error:focus { border-color: var(--color-error-500); box-shadow: var(--shadow-focus-ring-error); }
-.ds-input-helper-text { font-size: var(--font-size-xs); color: var(--color-text-secondary); }
-.ds-input-error-message { font-size: var(--font-size-xs); color: var(--color-error-500); }
+.ds-input::placeholder {
+  color: var(--color-text-tertiary);
+}
+.ds-input:hover:not(:disabled) {
+  border-color: var(--color-border-hover);
+}
+.ds-input:focus {
+  outline: none;
+  border-color: var(--color-border-focus);
+  box-shadow: var(--shadow-focus-ring);
+}
+.ds-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.ds-input--error {
+  border-color: var(--color-error-500);
+}
+.ds-input--error:focus {
+  border-color: var(--color-error-500);
+  box-shadow: var(--shadow-focus-ring-error);
+}
+.ds-input-helper-text {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+.ds-input-error-message {
+  font-size: var(--font-size-xs);
+  color: var(--color-error-500);
+}
 </style>

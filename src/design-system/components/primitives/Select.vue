@@ -1,16 +1,19 @@
 <script setup lang="ts">
 import { computed } from "vue";
 
-const props = withDefaults(defineProps<{
-  error?: boolean;
-  errorMessage?: string;
-  label?: string;
-  helperText?: string;
-  id?: string;
-  modelValue?: string | number;
-}>(), {
-  error: false,
-});
+const props = withDefaults(
+  defineProps<{
+    error?: boolean;
+    errorMessage?: string;
+    label?: string;
+    helperText?: string;
+    id?: string;
+    modelValue?: string | number;
+  }>(),
+  {
+    error: false,
+  },
+);
 
 const emit = defineEmits<{
   "update:modelValue": [value: string];
@@ -19,9 +22,7 @@ const emit = defineEmits<{
 const selectId = computed(() => props.id ?? `select-${Math.random().toString(36).slice(2, 11)}`);
 
 const selectClasses = computed(() =>
-  ["ds-select", props.error ? "ds-select--error" : undefined]
-    .filter(Boolean)
-    .join(" ")
+  ["ds-select", props.error ? "ds-select--error" : undefined].filter(Boolean).join(" "),
 );
 
 function onChange(e: Event) {
@@ -76,11 +77,31 @@ function onChange(e: Event) {
   cursor: pointer;
 }
 
-.ds-select:hover:not(:disabled) { border-color: var(--color-border-hover); }
-.ds-select:focus { outline: none; border-color: var(--color-border-focus); box-shadow: var(--shadow-focus-ring); }
-.ds-select:disabled { opacity: 0.5; cursor: not-allowed; }
-.ds-select--error { border-color: var(--color-error-500); }
-.ds-select--error:focus { border-color: var(--color-error-500); box-shadow: var(--shadow-focus-ring-error); }
-.ds-select-helper-text { font-size: var(--font-size-xs); color: var(--color-text-secondary); }
-.ds-select-error-message { font-size: var(--font-size-xs); color: var(--color-error-500); }
+.ds-select:hover:not(:disabled) {
+  border-color: var(--color-border-hover);
+}
+.ds-select:focus {
+  outline: none;
+  border-color: var(--color-border-focus);
+  box-shadow: var(--shadow-focus-ring);
+}
+.ds-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.ds-select--error {
+  border-color: var(--color-error-500);
+}
+.ds-select--error:focus {
+  border-color: var(--color-error-500);
+  box-shadow: var(--shadow-focus-ring-error);
+}
+.ds-select-helper-text {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+.ds-select-error-message {
+  font-size: var(--font-size-xs);
+  color: var(--color-error-500);
+}
 </style>

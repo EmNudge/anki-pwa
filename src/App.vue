@@ -213,7 +213,8 @@ async function handleChooseAnswer(answer: Answer) {
         />
       </template>
       <p v-else-if="cardsSig.length === 0" class="no-deck-message">
-        No deck loaded. Switch to the <button class="link-btn" @click="activeViewSig = 'files'">Files</button> tab to open one.
+        No deck loaded. Switch to the
+        <button class="link-btn" @click="activeViewSig = 'files'">Files</button> tab to open one.
       </p>
     </div>
 
@@ -306,9 +307,17 @@ main {
     border: none;
   }
 
-  .layout-left-column { grid-row: 1; border-bottom: 1px solid var(--color-border); }
-  .layout-center-column { grid-row: 2; background: transparent; }
-  .layout-right-column { grid-row: 3; border-top: 1px solid var(--color-border); }
+  .layout-left-column {
+    grid-row: 1;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .layout-center-column {
+    grid-row: 2;
+    background: transparent;
+  }
+  .layout-right-column {
+    grid-row: 3;
+    border-top: 1px solid var(--color-border);
+  }
 }
-
 </style>

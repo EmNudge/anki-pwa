@@ -69,8 +69,11 @@ describe("Anki2 Parser", () => {
     it("should parse tags correctly", () => {
       const result = getDataFromAnki2(db);
 
+      // Tags are space-delimited in Anki; the parser splits on whitespace
       expect(result.cards[0]?.tags).toEqual(["vocabulary", "spanish"]);
-      expect(result.cards[1]?.tags).toEqual(["vocabulary"]);
+      // Second note has tag "vocabulary" — it maps to card at ord=0
+      const vocabCard = result.cards.find((c) => c.values.Front === "Adiós");
+      expect(vocabCard?.tags).toEqual(["vocabulary"]);
     });
 
     it("should include templates in cards", () => {
@@ -249,10 +252,12 @@ describe("Anki2 Parser", () => {
       insertAnki2Data(db, models, notes);
       const result = getDataFromAnki2(db);
 
-      expect(result.cards).toHaveLength(1);
-      expect(result.cards[0]?.templates).toHaveLength(2);
+      // One card per template ordinal (card-driven expansion)
+      expect(result.cards).toHaveLength(2);
+      expect(result.cards[0]?.templates).toHaveLength(1);
       expect(result.cards[0]?.templates[0]?.name).toBe("Forward");
-      expect(result.cards[0]?.templates[1]?.name).toBe("Reverse");
+      expect(result.cards[1]?.templates).toHaveLength(1);
+      expect(result.cards[1]?.templates[0]?.name).toBe("Reverse");
     });
 
     it("should handle empty fields gracefully", async () => {

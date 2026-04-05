@@ -124,12 +124,12 @@ describe("Anki21b Parser", () => {
       expect(result.notesTypes[0]?.latexPre).toBe("\\documentclass[12pt]{article}");
     });
 
-    it("should handle empty tags", () => {
+    it("should parse tags from notes table", () => {
       const result = getDataFromAnki21b(db);
 
-      // Note: The current implementation returns empty tags array
-      expect(result.cards[0]?.tags).toEqual([]);
-      expect(result.cards[1]?.tags).toEqual([]);
+      // Tags are now parsed from the notes.tags column (space-delimited)
+      expect(result.cards[0]?.tags).toEqual(["vocabulary", "french"]);
+      expect(result.cards[1]?.tags).toEqual(["vocabulary"]);
     });
   });
 
@@ -336,10 +336,12 @@ describe("Anki21b Parser", () => {
       insertAnki21bData(db, notetypes, fields, templates, notes);
       const result = getDataFromAnki21b(db);
 
-      expect(result.cards).toHaveLength(1);
-      expect(result.cards[0]?.templates).toHaveLength(2);
+      // One card per template ordinal (card-driven expansion)
+      expect(result.cards).toHaveLength(2);
+      expect(result.cards[0]?.templates).toHaveLength(1);
       expect(result.cards[0]?.templates[0]?.name).toBe("English → Spanish");
-      expect(result.cards[0]?.templates[1]?.name).toBe("Spanish → English");
+      expect(result.cards[1]?.templates).toHaveLength(1);
+      expect(result.cards[1]?.templates[0]?.name).toBe("Spanish → English");
     });
 
     it("should handle complex field configurations", async () => {

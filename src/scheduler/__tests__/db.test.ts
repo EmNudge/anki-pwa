@@ -66,9 +66,7 @@ describe("ReviewDB", () => {
 
       // Vue ref wraps the object in a reactive proxy.
       // IndexedDB's structured clone algorithm cannot clone proxies.
-      await expect(
-        db.saveSettings("deck-1", settingsRef.value),
-      ).rejects.toThrow();
+      await expect(db.saveSettings("deck-1", settingsRef.value)).rejects.toThrow();
     });
 
     it("should save a Vue ref value after JSON round-trip (the fix)", async () => {
@@ -96,9 +94,7 @@ describe("ReviewDB", () => {
         showAheadOfSchedule: false,
       });
 
-      await expect(
-        db.saveSettings("deck-1", settings),
-      ).rejects.toThrow();
+      await expect(db.saveSettings("deck-1", settings)).rejects.toThrow();
     });
 
     it("should save a ref that was mutated via spread (matches SchedulerSettings pattern)", async () => {
@@ -116,9 +112,7 @@ describe("ReviewDB", () => {
       };
 
       // Without the fix: this throws DataCloneError
-      await expect(
-        db.saveSettings("deck-1", settingsRef.value),
-      ).rejects.toThrow();
+      await expect(db.saveSettings("deck-1", settingsRef.value)).rejects.toThrow();
 
       // With the fix: JSON round-trip strips proxies
       const plain = JSON.parse(JSON.stringify(settingsRef.value)) as SchedulerSettings;

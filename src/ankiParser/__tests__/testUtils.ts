@@ -236,7 +236,8 @@ export function insertAnki2Data(db: Database, models: Anki2Model[], notes: Anki2
 
     const fieldValues = model.fields.map((f) => note.fields[f.name] ?? "");
     const fldsString = fieldValues.join("\x1F");
-    const tagsString = note.tags.join("\x1F");
+    // Anki stores tags as space-delimited with leading/trailing spaces
+    const tagsString = note.tags.length > 0 ? ` ${note.tags.join(" ")} ` : "";
 
     db.run(
       `INSERT INTO notes (id, guid, mid, mod, usn, tags, flds, sfld, csum, flags, data)
@@ -244,12 +245,14 @@ export function insertAnki2Data(db: Database, models: Anki2Model[], notes: Anki2
       [note.id, `guid${note.id}`, note.modelId, tagsString, fldsString],
     );
 
-    // Insert a card for this note (using deck id 1 = Default)
-    db.run(
-      `INSERT INTO cards (id, nid, did, ord, mod, usn, type, queue, due, ivl, factor, reps, lapses, left, odue, odid, flags, data)
-       VALUES (?, ?, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, '')`,
-      [note.id * 1000, note.id], // Simple card id generation
-    );
+    // Insert one card per template (Anki generates one card per template ordinal)
+    for (const tmpl of model.templates) {
+      db.run(
+        `INSERT INTO cards (id, nid, did, ord, mod, usn, type, queue, due, ivl, factor, reps, lapses, left, odue, odid, flags, data)
+         VALUES (?, ?, 1, ?, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, '')`,
+        [note.id * 1000 + tmpl.ord, note.id, tmpl.ord],
+      );
+    }
   }
 }
 
@@ -406,7 +409,8 @@ export function insertAnki21bData(
       .sort((a, b) => a.ord - b.ord)
       .map((f) => note.fields[f.name] ?? "");
     const fldsString = fieldValues.join("\x1F");
-    const tagsString = note.tags.join("\x1F");
+    // Anki stores tags as space-delimited with leading/trailing spaces
+    const tagsString = note.tags.length > 0 ? ` ${note.tags.join(" ")} ` : "";
 
     db.run(`INSERT INTO notes (id, guid, mid, mod, usn, tags, flds) VALUES (?, ?, ?, 0, 0, ?, ?)`, [
       note.id,
@@ -416,11 +420,14 @@ export function insertAnki21bData(
       fldsString,
     ]);
 
-    // Insert a card for this note (using deck id 1 = Default)
-    db.run(
-      `INSERT INTO cards (id, nid, did, ord, mod, usn, type, queue, due, ivl, factor, reps, lapses, left, odue, odid, flags, data)
-       VALUES (?, ?, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, '')`,
-      [note.id * 1000, note.id], // Simple card id generation
-    );
+    // Insert one card per template for this note
+    const noteTemplates = templates.filter((t) => t.ntid === note.mid);
+    for (const tmpl of noteTemplates) {
+      db.run(
+        `INSERT INTO cards (id, nid, did, ord, mod, usn, type, queue, due, ivl, factor, reps, lapses, left, odue, odid, flags, data)
+         VALUES (?, ?, 1, ?, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, '')`,
+        [note.id * 1000 + tmpl.ord, note.id, tmpl.ord],
+      );
+    }
   }
 }

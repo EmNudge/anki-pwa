@@ -64,7 +64,10 @@ function cardPreview(cardHtml: string): VNode {
   ]);
 }
 
-function getCardTextPreview(card: { values: Record<string, string | null> }, maxLen: number): string {
+function getCardTextPreview(
+  card: { values: Record<string, string | null> },
+  maxLen: number,
+): string {
   const firstFieldValue = Object.values(card.values)[0];
   const raw = typeof firstFieldValue === "string" ? firstFieldValue : "";
   const text = raw.replace(/<[^>]*>/g, "").trim();
@@ -268,7 +271,9 @@ export function useCommands() {
               icon: icon(Layers),
               children: ankiData.cards.map((card, index) => {
                 const previewText = getCardTextPreview(card, 30);
-                const title = previewText ? `Note ${index + 1}: ${previewText}` : `Note ${index + 1}`;
+                const title = previewText
+                  ? `Note ${index + 1}: ${previewText}`
+                  : `Note ${index + 1}`;
                 const label =
                   currentDeckName && card.deckName === currentDeckName
                     ? "In current deck"

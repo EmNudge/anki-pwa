@@ -8,27 +8,158 @@ export function getRenderedCardString({
   templateString,
   variables,
   mediaFiles,
+  cardOrd = 0,
+  isAnswer = false,
+  frontTemplate,
+  tags,
+  deckName,
+  cardName,
+  latexPre,
 }: {
   templateString: string;
   variables: Variables;
   mediaFiles: Map<string, string>;
+  cardOrd?: number;
+  isAnswer?: boolean;
+  frontTemplate?: string;
+  tags?: string[];
+  deckName?: string;
+  cardName?: string;
+  latexPre?: string;
 }) {
   let renderedString = templateString;
 
-  renderedString = flattenOptionalSections(templateString, variables);
+  // Handle FrontSide: if the template references {{FrontSide}} and it's not in variables,
+  // render the front template and inject it
+  let enrichedVariables = { ...variables };
+  if (frontTemplate && renderedString.includes("{{FrontSide}}") && !enrichedVariables.FrontSide) {
+    const frontSideHtml = getRenderedCardString({
+      templateString: frontTemplate,
+      variables,
+      mediaFiles,
+      cardOrd,
+      tags,
+      deckName,
+      cardName,
+      latexPre,
+    });
+    enrichedVariables = { ...enrichedVariables, FrontSide: frontSideHtml };
+  }
 
-  renderedString = renderedString.replace(/\{\{(.*?)\}\}/g, (_match, p1) => {
-    const field = variables[p1];
-    return field ?? "";
+  // Add special fields if not already present
+  if (tags && !enrichedVariables.Tags) {
+    enrichedVariables.Tags = tags.join(" ");
+  }
+  if (deckName) {
+    if (!enrichedVariables.Deck) enrichedVariables.Deck = deckName;
+    if (!enrichedVariables.Subdeck) {
+      const parts = deckName.split("::");
+      enrichedVariables.Subdeck = parts[parts.length - 1] ?? deckName;
+    }
+  }
+  if (cardName && !enrichedVariables.Card) {
+    enrichedVariables.Card = cardName;
+  }
+
+  renderedString = flattenOptionalSections(renderedString, enrichedVariables);
+
+  renderedString = renderedString.replace(/\{\{(.*?)\}\}/g, (_match, p1: string) => {
+    return processFieldReference(p1, enrichedVariables, cardOrd, isAnswer);
   });
 
   renderedString = replaceTemplatingSyntax(renderedString);
 
-  renderedString = replaceLatex(renderedString);
+  const katexMacros = latexPre ? parseLatexMacros(latexPre) : {};
+  renderedString = replaceLatex(renderedString, katexMacros);
 
   renderedString = replaceMediaFiles(renderedString, mediaFiles);
 
   return renderedString;
+}
+
+/**
+ * Process a field reference that may include filters.
+ * Format: {{filter1:filter2:FieldName}} — filters applied right-to-left.
+ */
+function processFieldReference(
+  ref: string,
+  variables: Variables,
+  cardOrd: number,
+  isAnswer: boolean,
+): string {
+  const parts = ref.split(":");
+
+  if (parts.length === 1) {
+    return variables[ref] ?? "";
+  }
+
+  // Last part is the field name, preceding parts are filters
+  const fieldName = parts[parts.length - 1]!;
+  const filters = parts.slice(0, -1);
+
+  let value = variables[fieldName] ?? "";
+
+  // Apply filters from right to left (innermost first)
+  for (let i = filters.length - 1; i >= 0; i--) {
+    const filter = filters[i]!;
+    value = applyFilter(filter, value, cardOrd, isAnswer);
+  }
+
+  return value;
+}
+
+function applyFilter(filter: string, value: string, cardOrd: number, isAnswer: boolean): string {
+  switch (filter) {
+    case "text":
+      return value.replace(/<[^>]*>/g, "");
+    case "cloze":
+      return processCloze(value, cardOrd, isAnswer);
+    case "cloze-only":
+      return processClozeOnly(value, cardOrd);
+    case "hint":
+      return `<a class="hint" onclick="this.style.display='none';this.nextSibling.style.display='inline-block';">Show Hint</a><span style="display:none">${value}</span>`;
+    case "type":
+      return `<input type="text" id="typeans" placeholder="type answer">`;
+    default:
+      return value;
+  }
+}
+
+/**
+ * Process cloze deletions in text.
+ * On the question side, the active cloze (matching cardOrd+1) is replaced with [...] or [hint].
+ * On the answer side, the active cloze is revealed in a <span class="cloze">.
+ * Non-active cloze markers are always unwrapped to show their content.
+ */
+function processCloze(text: string, cardOrd: number, isAnswer: boolean): string {
+  const clozeNum = cardOrd + 1;
+
+  return text.replace(
+    /\{\{c(\d+)::(.+?)(?:::(.+?))?\}\}/g,
+    (_match, num: string, answer: string, hint?: string) => {
+      if (parseInt(num) === clozeNum) {
+        if (isAnswer) {
+          return `<span class="cloze">${answer}</span>`;
+        }
+        return hint ? `[${hint}]` : "[...]";
+      }
+      return answer;
+    },
+  );
+}
+
+function processClozeOnly(text: string, cardOrd: number): string {
+  const clozeNum = cardOrd + 1;
+  const matches: string[] = [];
+
+  text.replace(/\{\{c(\d+)::(.+?)(?:::(.+?))?\}\}/g, (_match, num: string, answer: string) => {
+    if (parseInt(num) === clozeNum) {
+      matches.push(answer);
+    }
+    return "";
+  });
+
+  return matches.join(", ");
 }
 
 /**
@@ -41,7 +172,45 @@ function replaceMediaFiles(renderedString: string, mediaFiles: Map<string, strin
   });
 }
 
-function replaceLatex(renderedString: string) {
+/**
+ * Parse \newcommand definitions from latexPre into KaTeX macro format.
+ */
+function parseLatexMacros(latexPre: string): Record<string, string> {
+  const macros: Record<string, string> = {};
+  // Match \newcommand{\name}{expansion} with balanced braces in expansion
+  const re = /\\(?:newcommand|renewcommand|def)\*?\{?(\\[a-zA-Z]+)\}?/g;
+  let match;
+  while ((match = re.exec(latexPre)) !== null) {
+    const name = match[1];
+    if (!name) continue;
+    // Extract the balanced-brace body after the command name
+    const afterMatch = latexPre.slice(match.index + match[0].length);
+    const body = extractBracedBody(afterMatch);
+    if (body !== null) {
+      macros[name] = body;
+    }
+  }
+  return macros;
+}
+
+function extractBracedBody(str: string): string | null {
+  const trimmed = str.trimStart();
+  if (!trimmed.startsWith("{")) return null;
+  let depth = 0;
+  for (let i = 0; i < trimmed.length; i++) {
+    if (trimmed[i] === "{") depth++;
+    else if (trimmed[i] === "}") depth--;
+    if (depth === 0) return trimmed.slice(1, i);
+  }
+  return null;
+}
+
+function replaceLatex(renderedString: string, macros: Record<string, string> = {}) {
+  const katexOptions = (displayMode: boolean) => ({
+    displayMode,
+    ...(Object.keys(macros).length > 0 ? { macros } : {}),
+  });
+
   const cleanAndUnescapeLatex = (latex: string) => {
     // Strip HTML tags that Anki may have inserted
     let cleanLatex = latex.replace(/<[^>]+>/g, "");
@@ -69,7 +238,7 @@ function replaceLatex(renderedString: string) {
       }
 
       // Render as display mode LaTeX
-      return katex.renderToString(cleanLatex, { displayMode: true });
+      return katex.renderToString(cleanLatex, katexOptions(true));
     } catch (error) {
       console.error(new Error("could not parse latex for: " + latex, { cause: error }));
       // Return cleaned content without the tags
@@ -93,7 +262,7 @@ function replaceLatex(renderedString: string) {
 
         // Render the environment as display mode LaTeX
         try {
-          result += katex.renderToString(envPart.trim(), { displayMode: true });
+          result += katex.renderToString(envPart.trim(), katexOptions(true));
         } catch (e) {
           result += envPart; // Keep original if parsing fails
         }
@@ -102,7 +271,7 @@ function replaceLatex(renderedString: string) {
         if (textPart.trim()) {
           result += textPart.replace(/\$(.+?)\$/g, (_, math) => {
             try {
-              return katex.renderToString(math, { displayMode: false });
+              return katex.renderToString(math, katexOptions(false));
             } catch (e) {
               return `$${math}$`; // Return original if parsing fails
             }
@@ -110,16 +279,22 @@ function replaceLatex(renderedString: string) {
         }
 
         return result;
-      } else {
-        // No LaTeX environment - this is text with potential inline $...$ expressions
-        // Replace inline math expressions within the text
+      } else if (cleanLatex.includes("$")) {
+        // Text with inline $...$ expressions
         return cleanLatex.replace(/\$(.+?)\$/g, (_, math) => {
           try {
-            return katex.renderToString(math, { displayMode: false });
+            return katex.renderToString(math, katexOptions(false));
           } catch (e) {
             return `$${math}$`; // Return original if parsing fails
           }
         });
+      } else {
+        // Bare LaTeX content (no environment, no inline $) — render directly
+        try {
+          return katex.renderToString(cleanLatex, katexOptions(false));
+        } catch (e) {
+          return cleanLatex;
+        }
       }
     } catch (error) {
       console.error(new Error("could not parse latex for: " + latex, { cause: error }));
@@ -128,9 +303,25 @@ function replaceLatex(renderedString: string) {
     }
   };
 
-  return renderedString
-    .replace(/\[\$\$?\](.+?)\[\/\$\$?\]/gs, replaceDisplayMathBlock)
-    .replace(/\[latex\](.+?)\[\/latex\]/gs, replaceLatexBlock);
+  const replaceInlineMath = (_match: string, latex: string) => {
+    try {
+      const cleanLatex = cleanAndUnescapeLatex(latex);
+      if (!cleanLatex) return "";
+      return katex.renderToString(cleanLatex, katexOptions(false));
+    } catch (error) {
+      console.error(new Error("could not parse latex for: " + latex, { cause: error }));
+      return cleanAndUnescapeLatex(latex);
+    }
+  };
+
+  return (
+    renderedString
+      .replace(/\[\$\$?\](.+?)\[\/\$\$?\]/gs, replaceDisplayMathBlock)
+      .replace(/\[latex\](.+?)\[\/latex\]/gs, replaceLatexBlock)
+      // Standard LaTeX delimiters: \[...\] for display, \(...\) for inline
+      .replace(/\\\[(.+?)\\\]/gs, replaceDisplayMathBlock)
+      .replace(/\\\((.+?)\\\)/gs, replaceInlineMath)
+  );
 }
 
 const SOUND_ICON_SVG =
@@ -146,38 +337,65 @@ function replaceTemplatingSyntax(renderedString: string) {
         "</div>",
       ].join("");
     })
-    .replace(/(\w+)\[(\w+)\]/g, (_match, rubyBase, rubyText) => {
-      return `<ruby>${rubyBase}<rt>${rubyText}</rt></ruby>`;
-    });
+    .replace(
+      /([\u3000-\u9fff\uf900-\ufaff])\[([\u3000-\u9fff\uf900-\ufaffぁ-んァ-ヶa-zA-Z]+)\]/g,
+      (_match, rubyBase, rubyText) => {
+        return `<ruby>${rubyBase}<rt>${rubyText}</rt></ruby>`;
+      },
+    );
 }
 
 /**
- * Optional sections of the form {#section}content{{/section}} are flattened.
- * If card[section] is not present, the section is removed.
- * If it is present, the guards are removed and the content remains.
+ * Optional/conditional sections:
+ * - {{#section}}content{{/section}} — shown if field is non-empty
+ * - {{^section}}content{{/section}} — shown if field is empty (inverse)
  */
 function flattenOptionalSections(templateString: string, card: Variables) {
   let renderedString = templateString;
 
-  const optionalSections = [
+  // Process positive conditionals {{#field}}...{{/field}}
+  const positiveSections = [
     ...new Set([...renderedString.matchAll(/\{\{#(.*?)\}\}/g)].map((match) => match[1])),
   ];
 
-  if (optionalSections) {
-    for (const section of optionalSections) {
-      const regex = new RegExp(
-        `\\{\\{\\#${section}\\}\\}((?:.|\n)+?)\\{\\{\\/${section}\\}\\}`,
-        "g",
-      );
+  for (const section of positiveSections) {
+    if (!section) continue;
+    const regex = new RegExp(
+      `\\{\\{\\#${escapeRegex(section)}\\}\\}((?:.|\\n)+?)\\{\\{\\/${escapeRegex(section)}\\}\\}`,
+      "g",
+    );
 
-      if (section && !card[section]) {
-        renderedString = renderedString.replace(regex, "");
-        continue;
-      }
+    if (!card[section]) {
+      renderedString = renderedString.replace(regex, "");
+    } else {
+      renderedString = renderedString.replace(regex, "$1");
+    }
+  }
 
+  // Process inverse conditionals {{^field}}...{{/field}}
+  const inverseSections = [
+    ...new Set([...renderedString.matchAll(/\{\{\^(.*?)\}\}/g)].map((match) => match[1])),
+  ];
+
+  for (const section of inverseSections) {
+    if (!section) continue;
+    const regex = new RegExp(
+      `\\{\\{\\^${escapeRegex(section)}\\}\\}((?:.|\\n)+?)\\{\\{\\/${escapeRegex(section)}\\}\\}`,
+      "g",
+    );
+
+    if (card[section]) {
+      // Field has a value — remove the inverse section
+      renderedString = renderedString.replace(regex, "");
+    } else {
+      // Field is empty — keep the content, remove the guards
       renderedString = renderedString.replace(regex, "$1");
     }
   }
 
   return renderedString;
+}
+
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

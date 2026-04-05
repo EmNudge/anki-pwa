@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { computed } from "vue";
 
-const props = withDefaults(defineProps<{
-  required?: boolean;
-}>(), {
-  required: false,
-});
+const props = withDefaults(
+  defineProps<{
+    required?: boolean;
+  }>(),
+  {
+    required: false,
+  },
+);
 
 const classes = computed(() => ["ds-label"].filter(Boolean).join(" "));
 </script>

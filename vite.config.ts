@@ -1,7 +1,6 @@
 import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
 import inspect from "vite-plugin-inspect";
-import path from "path";
 import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig({
@@ -13,7 +12,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      "~": path.resolve(__dirname, "src"),
+      "~": new URL("./src", import.meta.url).pathname,
     },
   },
   plugins: [
