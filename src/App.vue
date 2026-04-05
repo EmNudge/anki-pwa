@@ -14,6 +14,7 @@ import {
   deckInfoSig,
   initializeReviewQueue,
   mediaFilesSig,
+  moveToNextCard,
   moveToNextReviewCard,
   reviewQueueSig,
   schedulerEnabledSig,
@@ -31,7 +32,7 @@ import SchedulerSettings from "./components/SchedulerSettings.vue";
 import CommandPalette from "./components/CommandPalette.vue";
 import FileInfo from "./components/FileInfo.vue";
 import { useCommands } from "./composables/useCommands";
-import { isTruthy } from "./utils/assert";
+import { getAutoplayAudioSources, playAudio } from "./utils/sound";
 
 const activeSide = ref<"front" | "back">("front");
 const reviewStartTime = ref<number>(Date.now());
@@ -110,28 +111,21 @@ const renderedCard = computed(() => {
   return { frontSideHtml, backSideHtml, cardCss: card.css ?? "" };
 });
 
-function getAudioFilenames(html: string) {
-  const allAudioContainers = new DOMParser()
-    .parseFromString(html, "text/html")
-    .querySelectorAll<HTMLAudioElement>(`div.audio-container[data-autoplay] audio`);
-  return [...allAudioContainers].map((audio) => audio.src).filter(isTruthy);
-}
-
 function updateActiveSide(side: "front" | "back") {
   activeSide.value = side;
   const card = renderedCard.value;
   if (!card) return;
 
   if (side === "front") {
-    for (const filename of getAudioFilenames(card.frontSideHtml)) {
-      new Audio(filename).play();
+    for (const filename of getAutoplayAudioSources(card.frontSideHtml)) {
+      playAudio(filename);
     }
   } else {
-    const frontSideAudioFilenames = new Set(getAudioFilenames(card.frontSideHtml));
-    const backSideAudioFilenames = new Set(getAudioFilenames(card.backSideHtml));
+    const frontSideAudioFilenames = new Set(getAutoplayAudioSources(card.frontSideHtml));
+    const backSideAudioFilenames = new Set(getAutoplayAudioSources(card.backSideHtml));
     const newAudioFilenames = backSideAudioFilenames.difference(frontSideAudioFilenames);
     for (const filename of newAudioFilenames) {
-      new Audio(filename).play();
+      playAudio(filename);
     }
   }
 }
@@ -149,7 +143,7 @@ const intervals = computed(() => {
 });
 
 function handleAudioButtonClick(src: string) {
-  new Audio(src).play();
+  playAudio(src);
 }
 
 function handleReveal() {
@@ -168,7 +162,7 @@ async function handleChooseAnswer(answer: Answer) {
       moveToNextReviewCard();
     }
   } else {
-    selectedCardSig.value = selectedCardSig.value + 1;
+    moveToNextCard();
   }
 
   updateActiveSide("front");

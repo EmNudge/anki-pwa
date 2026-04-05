@@ -1,83 +1,54 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import { Button } from "../design-system";
-import { playClickSoundBasic, playClickSoundMelodic } from "../utils/sound";
 import type { Answer } from "../scheduler/types";
+import {
+  getReviewControls,
+  triggerReviewControl,
+  type ReviewIntervals,
+} from "./reviewControls";
 
 const props = defineProps<{
   activeSide: "front" | "back";
-  intervals?: { again: string; hard: string; good: string; easy: string };
+  intervals?: ReviewIntervals;
 }>();
 
 const emit = defineEmits<{
   reveal: [];
   chooseAnswer: [answer: Answer];
 }>();
+
+const visibleControls = computed(() => getReviewControls(props.activeSide));
 </script>
 
 <template>
   <Button
     v-if="activeSide === 'front'"
     class="reveal-button"
-    variant="primary"
+    :variant="visibleControls[0]?.variant ?? 'primary'"
     size="lg"
     full-width
-    @click="
-      () => {
-        playClickSoundBasic();
-        emit('reveal');
-      }
-    "
+    @click="() => triggerReviewControl('reveal', { reveal: () => emit('reveal'), chooseAnswer: (answer) => emit('chooseAnswer', answer) })"
   >
-    Reveal
+    {{ visibleControls[0]?.label ?? "Reveal" }}
   </Button>
   <div v-else class="button-set">
     <Button
-      variant="secondary"
+      v-for="control in visibleControls"
+      :key="control.action"
+      :variant="control.variant"
       @click="
-        () => {
-          playClickSoundMelodic();
-          emit('chooseAnswer', 'again');
-        }
+        () =>
+          triggerReviewControl(control.action, {
+            reveal: () => emit('reveal'),
+            chooseAnswer: (answer) => emit('chooseAnswer', answer),
+          })
       "
     >
-      <span class="time">{{ intervals?.again ?? "&lt;1m" }}</span>
-      <span class="answer">Again</span>
-    </Button>
-    <Button
-      variant="secondary"
-      @click="
-        () => {
-          playClickSoundMelodic();
-          emit('chooseAnswer', 'hard');
-        }
-      "
-    >
-      <span class="time">{{ intervals?.hard ?? "&lt;6m" }}</span>
-      <span class="answer">Hard</span>
-    </Button>
-    <Button
-      variant="primary"
-      @click="
-        () => {
-          playClickSoundMelodic();
-          emit('chooseAnswer', 'good');
-        }
-      "
-    >
-      <span class="time">{{ intervals?.good ?? "&lt;10m" }}</span>
-      <span class="answer">Good</span>
-    </Button>
-    <Button
-      variant="secondary"
-      @click="
-        () => {
-          playClickSoundMelodic();
-          emit('chooseAnswer', 'easy');
-        }
-      "
-    >
-      <span class="time">{{ intervals?.easy ?? "&lt;5d" }}</span>
-      <span class="answer">Easy</span>
+      <span class="time">
+        {{ control.interval ? intervals?.[control.interval] ?? control.fallbackInterval : "" }}
+      </span>
+      <span class="answer">{{ control.label }}</span>
     </Button>
   </div>
 </template>

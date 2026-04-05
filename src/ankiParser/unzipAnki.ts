@@ -5,8 +5,7 @@ import { isTruthy } from "../utils/assert";
 import { assertTruthy } from "../utils/assert";
 import mime from "mime";
 import { decompressZstd } from "../utils/zstd";
-import { parseMediaProto } from "./parseMediaProto";
-import { mediaMappingSchema } from "./anki2/jsonParsers";
+import { decompressMediaFile, parseMediaMapping } from "./mediaMappings";
 
 /**
  * Type guard to check if an Entry is a FileEntry (has getData method)
@@ -45,35 +44,7 @@ async function getFilesFromEntries(entries: Entry[]): Promise<Map<string, string
   const mediaFileBlob = await mediaFileEntry.getData(new BlobWriter());
   const mediaFileBytes = new Uint8Array(await mediaFileBlob.arrayBuffer());
 
-  // Try to decompress if it's Zstandard compressed
-  let mediaFileText: string;
-  let decompressedBytes: Uint8Array;
-  try {
-    const decompressed = await decompressZstd(mediaFileBytes);
-    decompressedBytes = decompressed;
-    mediaFileText = new TextDecoder().decode(decompressed);
-  } catch {
-    // Not compressed, try as plain text
-    decompressedBytes = mediaFileBytes;
-    mediaFileText = new TextDecoder().decode(mediaFileBytes);
-  }
-
-  const mediaFile = (() => {
-    try {
-      // Try parsing as JSON first (older format)
-      return mediaMappingSchema.parse(JSON.parse(mediaFileText));
-      // eslint-disable-next-line no-unused-vars
-    } catch {
-      // If JSON parsing fails, try parsing as Protocol Buffer (newer .anki21b format)
-      try {
-        return parseMediaProto(decompressedBytes);
-        // eslint-disable-next-line no-unused-vars
-      } catch {
-        // If both parsers fail, return empty object
-        return {};
-      }
-    }
-  })();
+  const mediaFile = await parseMediaMapping(mediaFileBytes, decompressZstd).catch(() => ({}));
   const mediaFileMap = new Map(Object.entries(mediaFile));
 
   const filePromises = entries
@@ -92,29 +63,13 @@ async function getFilesFromEntries(entries: Entry[]): Promise<Map<string, string
     .filter(isTruthy)
     .map(async ({ entry, actualFilename }) => {
       const blob = await entry.getData(new BlobWriter());
-      let fileBytes = new Uint8Array(await blob.arrayBuffer());
-
-      // Check if file is Zstandard compressed and decompress if needed
-      // Zstandard magic number is 0x28 0xB5 0x2F 0xFD
-      const isZstdCompressed =
-        fileBytes.length >= 4 &&
-        fileBytes[0] === 0x28 &&
-        fileBytes[1] === 0xb5 &&
-        fileBytes[2] === 0x2f &&
-        fileBytes[3] === 0xfd;
-
-      if (isZstdCompressed) {
-        try {
-          const decompressed = await decompressZstd(fileBytes);
-          fileBytes = new Uint8Array(decompressed);
-        } catch {
-          // If decompression fails, use original bytes
-          // This allows graceful fallback for files that aren't actually compressed
-        }
-      }
+      const fileBytes = await decompressMediaFile(
+        new Uint8Array(await blob.arrayBuffer()),
+        decompressZstd,
+      );
 
       return {
-        data: new Blob([fileBytes], {
+        data: new Blob([Uint8Array.from(fileBytes)], {
           type: mime.getType(actualFilename) ?? "application/octet-stream",
         }),
         name: actualFilename,

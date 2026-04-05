@@ -10,9 +10,12 @@ interface ThemeContextValue {
 
 const theme = ref<Theme>("light");
 
-// Initialize on first import
-const savedTheme = localStorage.getItem("theme") as Theme | null;
-if (savedTheme) {
+function isTheme(value: string): value is Theme {
+  return value === "light" || value === "dark";
+}
+
+const savedTheme = localStorage.getItem("theme");
+if (savedTheme && isTheme(savedTheme)) {
   theme.value = savedTheme;
   document.documentElement.setAttribute("data-theme", savedTheme);
 } else if (window.matchMedia("(prefers-color-scheme: dark)").matches) {

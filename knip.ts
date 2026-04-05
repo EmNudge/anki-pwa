@@ -1,9 +1,5 @@
 import type { KnipConfig } from 'knip';
 
-const config: KnipConfig = {
-  ignore: [
-    'src/design-system/hooks/**',
-  ],
-};
+const config: KnipConfig = {};
 
 export default config;

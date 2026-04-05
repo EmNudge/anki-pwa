@@ -1,11 +1,22 @@
 import { ref, computed, watch, shallowRef } from "vue";
 import { getAnkiDataFromBlob } from "./ankiParser";
+import type { AnkiData } from "./ankiParser";
 import { ReviewQueue, type ReviewCard } from "./scheduler/queue";
 import { DEFAULT_SCHEDULER_SETTINGS, type SchedulerSettings } from "./scheduler/types";
 import { reviewDB } from "./scheduler/db";
 import type { DeckInfo } from "./types";
-import { cachedFileEntrySchema } from "./ankiParser/anki2/jsonParsers";
-import type { z } from "zod";
+import { sampleDeckMap, sampleDecks } from "./sampleDecks";
+import {
+  importedDeckFileName,
+  persistActiveDeckSourceId as persistStoredActiveDeckSourceId,
+  readCachedFiles,
+  readStoredActiveDeckSourceId,
+  removeCachedFileEntry,
+  type CachedFileEntry,
+  type DeckInput,
+  upsertCachedFileEntry,
+  writeCachedFiles,
+} from "./deckLibrary";
 
 // View state
 export type AppView = "files" | "review" | "create";
@@ -15,28 +26,28 @@ export const deckInfoSig = shallowRef<DeckInfo | null>(null);
 
 export const selectedDeckIdSig = ref<string | null>(null);
 
-// Multi-file cache management
-type CachedFileEntry = z.infer<typeof cachedFileEntrySchema>[number];
+const ankiCachePromise = caches.open("anki-cache");
+const sampleDeckIds = new Set(sampleDecks.map((deck) => deck.id));
+const activeDeckInputSig = shallowRef<DeckInput | null>(null);
+export const cachedFilesSig = ref<CachedFileEntry[]>(readCachedFiles());
+export const activeDeckSourceIdSig = ref<string | null>(null);
 
-export const ankiCachePromise = caches.open("anki-cache");
-export const blobSig = shallowRef<Blob | null>(null);
-export const cachedFilesSig = ref<CachedFileEntry[]>([]);
-export const activeFileNameSig = ref<string | null>(null);
+activeDeckSourceIdSig.value = readStoredActiveDeckSourceId({
+  cachedFiles: cachedFilesSig.value,
+  sampleDeckIds,
+});
 
-// Load cached files manifest from localStorage
-const storedFiles = localStorage.getItem("anki-cached-files");
-if (storedFiles) {
-  try {
-    cachedFilesSig.value = cachedFileEntrySchema.parse(JSON.parse(storedFiles));
-  } catch {
-    // ignore corrupt data
-  }
+function persistActiveDeckSourceId(id: string | null) {
+  activeDeckSourceIdSig.value = id;
+  persistStoredActiveDeckSourceId(id);
 }
 
-// Restore last active file from localStorage
-const storedActiveFile = localStorage.getItem("anki-active-file");
-if (storedActiveFile && cachedFilesSig.value.some((f) => f.name === storedActiveFile)) {
-  activeFileNameSig.value = storedActiveFile;
+function clearLoadedDeck() {
+  persistActiveDeckSourceId(null);
+  activeDeckInputSig.value = null;
+  deckInfoSig.value = null;
+  selectedDeckIdSig.value = null;
+  activeViewSig.value = "files";
 }
 
 // Initialize: migrate old single-file cache and load active file
@@ -45,47 +56,54 @@ ankiCachePromise.then(async (cache) => {
   const oldResponse = await cache.match("anki-deck");
   if (oldResponse) {
     const blob = await oldResponse.blob();
-    const name = "imported-deck.apkg";
+    const name = importedDeckFileName;
     await cache.put(`/files/${name}`, new Response(blob));
     await cache.delete("anki-deck");
-    if (!cachedFilesSig.value.some((f) => f.name === name)) {
-      cachedFilesSig.value = [
-        ...cachedFilesSig.value,
-        { name, size: blob.size, addedAt: Date.now() },
-      ];
-      localStorage.setItem("anki-cached-files", JSON.stringify(cachedFilesSig.value));
-    }
-    if (!activeFileNameSig.value) {
-      activeFileNameSig.value = name;
-      localStorage.setItem("anki-active-file", name);
+    cachedFilesSig.value = upsertCachedFileEntry(cachedFilesSig.value, {
+      name,
+      size: blob.size,
+      addedAt: Date.now(),
+    });
+    writeCachedFiles(cachedFilesSig.value);
+    if (!activeDeckSourceIdSig.value) {
+      persistActiveDeckSourceId(name);
     }
   }
 
-  // Load the active file
-  if (activeFileNameSig.value) {
-    const response = await cache.match(`/files/${activeFileNameSig.value}`);
-    if (response) {
-      blobSig.value = await response.blob();
-      activeViewSig.value = "review";
-    }
+  if (!activeDeckSourceIdSig.value) {
+    return;
   }
+
+  const sampleDeck = sampleDeckMap.get(activeDeckSourceIdSig.value);
+  if (sampleDeck) {
+    activeDeckInputSig.value = { kind: "sample", data: sampleDeck.data };
+    activeViewSig.value = "review";
+    return;
+  }
+
+  const response = await cache.match(`/files/${activeDeckSourceIdSig.value}`);
+  if (response) {
+    activeDeckInputSig.value = { kind: "blob", blob: await response.blob() };
+    activeViewSig.value = "review";
+    return;
+  }
+
+  persistActiveDeckSourceId(null);
 });
 
 export async function addCachedFile(file: File) {
   const cache = await ankiCachePromise;
   await cache.put(`/files/${file.name}`, new Response(file));
 
-  if (!cachedFilesSig.value.some((f) => f.name === file.name)) {
-    cachedFilesSig.value = [
-      ...cachedFilesSig.value,
-      { name: file.name, size: file.size, addedAt: Date.now() },
-    ];
-  }
-  localStorage.setItem("anki-cached-files", JSON.stringify(cachedFilesSig.value));
+  cachedFilesSig.value = upsertCachedFileEntry(cachedFilesSig.value, {
+    name: file.name,
+    size: file.size,
+    addedAt: Date.now(),
+  });
+  writeCachedFiles(cachedFilesSig.value);
 
-  activeFileNameSig.value = file.name;
-  localStorage.setItem("anki-active-file", file.name);
-  blobSig.value = file;
+  persistActiveDeckSourceId(file.name);
+  activeDeckInputSig.value = { kind: "blob", blob: file };
   activeViewSig.value = "review";
 }
 
@@ -93,41 +111,67 @@ export async function loadCachedFile(name: string) {
   const cache = await ankiCachePromise;
   const response = await cache.match(`/files/${name}`);
   if (response) {
-    activeFileNameSig.value = name;
-    localStorage.setItem("anki-active-file", name);
-    blobSig.value = await response.blob();
+    persistActiveDeckSourceId(name);
+    activeDeckInputSig.value = { kind: "blob", blob: await response.blob() };
     activeViewSig.value = "review";
   }
+}
+
+export function loadSampleDeck(id: string) {
+  const sampleDeck = sampleDeckMap.get(id);
+  if (!sampleDeck) {
+    return;
+  }
+
+  persistActiveDeckSourceId(id);
+  activeDeckInputSig.value = { kind: "sample", data: sampleDeck.data };
+  activeViewSig.value = "review";
 }
 
 export async function deleteCachedFile(name: string) {
   const cache = await ankiCachePromise;
   await cache.delete(`/files/${name}`);
-  cachedFilesSig.value = cachedFilesSig.value.filter((f) => f.name !== name);
-  localStorage.setItem("anki-cached-files", JSON.stringify(cachedFilesSig.value));
+  cachedFilesSig.value = removeCachedFileEntry(cachedFilesSig.value, name);
+  writeCachedFiles(cachedFilesSig.value);
 
-  if (activeFileNameSig.value === name) {
-    if (cachedFilesSig.value.length > 0) {
-      await loadCachedFile(cachedFilesSig.value[0]!.name);
-    } else {
-      activeFileNameSig.value = null;
-      localStorage.removeItem("anki-active-file");
-      blobSig.value = null;
-      ankiDataSig.value = null;
-    }
+  if (activeDeckSourceIdSig.value !== name) {
+    return;
   }
+
+  const nextFile = cachedFilesSig.value[0];
+  if (nextFile) {
+    await loadCachedFile(nextFile.name);
+    return;
+  }
+
+  clearLoadedDeck();
 }
 
-// Resource replacement: watch blobSig and fetch data
-type AnkiData = Awaited<ReturnType<typeof getAnkiDataFromBlob>>;
+export const sampleDecksSig = sampleDecks;
+
+// Resource replacement: watch active deck input and fetch data
 export const ankiDataSig = shallowRef<AnkiData | null>(null);
 
-watch(blobSig, async (newBlob) => {
-  if (!newBlob) {
+let activeDeckLoadVersion = 0;
+
+watch(activeDeckInputSig, async (newInput) => {
+  const loadVersion = activeDeckLoadVersion + 1;
+  activeDeckLoadVersion = loadVersion;
+
+  if (!newInput) {
     ankiDataSig.value = null;
     return;
   }
-  ankiDataSig.value = await getAnkiDataFromBlob(newBlob);
+
+  if (newInput.kind === "sample") {
+    ankiDataSig.value = newInput.data;
+    return;
+  }
+
+  const parsedDeck = await getAnkiDataFromBlob(newInput.blob);
+  if (activeDeckLoadVersion === loadVersion) {
+    ankiDataSig.value = parsedDeck;
+  }
 });
 
 export const selectedCardSig = ref(0);
@@ -177,10 +221,7 @@ export function toggleScheduler() {
   const newValue = !schedulerEnabledSig.value;
   schedulerEnabledSig.value = newValue;
   localStorage.setItem("schedulerEnabled", newValue.toString());
-  // Reset queue when toggling
-  reviewQueueSig.value = null;
-  dueCardsSig.value = [];
-  currentReviewCardSig.value = null;
+  clearReviewQueueState();
 }
 
 export const schedulerSettingsSig = ref<SchedulerSettings>(DEFAULT_SCHEDULER_SETTINGS);
@@ -193,6 +234,12 @@ export const currentReviewCardSig = shallowRef<ReviewCard | null>(null);
 
 export const schedulerSettingsModalOpenSig = ref(false);
 
+function clearReviewQueueState() {
+  reviewQueueSig.value = null;
+  dueCardsSig.value = [];
+  currentReviewCardSig.value = null;
+}
+
 /**
  * Initialize the review queue for the current deck
  */
@@ -201,9 +248,7 @@ export async function initializeReviewQueue() {
   const templates = templatesSig.value;
 
   if (cards.length === 0 || !templates || templates.length === 0) {
-    reviewQueueSig.value = null;
-    dueCardsSig.value = [];
-    currentReviewCardSig.value = null;
+    clearReviewQueueState();
     return;
   }
 
@@ -255,11 +300,13 @@ export function moveToNextReviewCard() {
 export async function resetScheduler() {
   await reviewDB.clearAll();
 
-  reviewQueueSig.value = null;
-  dueCardsSig.value = [];
-  currentReviewCardSig.value = null;
+  clearReviewQueueState();
 
   if (schedulerEnabledSig.value && cardsSig.value.length > 0) {
     await initializeReviewQueue();
   }
+}
+
+export function moveToNextCard() {
+  selectedCardSig.value = selectedCardSig.value + 1;
 }

@@ -1,7 +1,6 @@
 import { computed, h, markRaw, type Component, type VNode } from "vue";
+import type { AnkiData } from "../ankiParser";
 import {
-  ankiCachePromise,
-  blobSig,
   ankiDataSig,
   schedulerEnabledSig,
   soundEffectsEnabledSig,
@@ -14,6 +13,8 @@ import {
   selectedCardSig,
   mediaFilesSig,
   cardsSig,
+  addCachedFile,
+  moveToNextCard,
 } from "../stores";
 import type { Command } from "../commandPaletteStore";
 import {
@@ -35,6 +36,12 @@ import {
 import { useTheme } from "../design-system/hooks/useTheme";
 import { getRenderedCardString } from "../utils/render";
 import { sanitizeHtmlForPreview } from "../utils/sanitize";
+
+type CommandCard = {
+  deckName: string;
+  templates: { name: string; afmt: string; qfmt: string }[];
+  values: Record<string, string | null>;
+};
 
 function icon(comp: Component): Component {
   return markRaw(comp);
@@ -75,7 +82,7 @@ function getCardTextPreview(
 }
 
 function renderFirstCardPreview(
-  cards: { values: Record<string, string | null>; templates: { qfmt: string }[] }[],
+  cards: readonly { values: Record<string, string | null>; templates: { qfmt: string }[] }[],
   mediaFiles: Map<string, string>,
 ): VNode | null {
   const firstCard = cards[0];
@@ -88,6 +95,116 @@ function renderFirstCardPreview(
     mediaFiles,
   });
   return cardPreview(renderedFront);
+}
+
+function getCardMetadata(card: CommandCard) {
+  return [
+    ...Object.entries(card.values).map(([fieldName, fieldValue]) => ({
+      label: fieldName,
+      value: metadataHtml(fieldValue ?? ""),
+    })),
+    ...(card.deckName ? [{ label: "Deck", value: card.deckName }] : []),
+  ];
+}
+
+function getUniqueTemplateNames(cards: readonly CommandCard[]): string[] {
+  return Array.from(new Set(cards.flatMap((card) => card.templates.map((template) => template.name))));
+}
+
+function buildDeckCommand({
+  cardCount,
+  cards,
+  id,
+  isSelected,
+  mediaFiles,
+  title,
+  onSelect,
+}: {
+  cardCount: number;
+  cards: readonly CommandCard[];
+  id: string;
+  isSelected: boolean;
+  mediaFiles: Map<string, string>;
+  onSelect: () => void;
+  title: string;
+}): Command {
+  const preview = renderFirstCardPreview(cards, mediaFiles);
+
+  return {
+    id,
+    title,
+    icon: icon(Layers),
+    label: isSelected ? "Currently selected" : undefined,
+    metadata: [
+      { label: "Cards", value: cardCount.toString() },
+      { label: "Templates", value: getUniqueTemplateNames(cards).join(", ") || "None" },
+      ...(preview ? [{ label: "Example Card", value: preview }] : []),
+    ],
+    handler: onSelect,
+  };
+}
+
+function buildBrowseNotesCommand(ankiData: AnkiData, currentDeckName: string | null): Command {
+  return {
+    id: "browse-notes",
+    title: "Browse All Notes",
+    icon: icon(Layers),
+    children: ankiData.cards.map((card, index) => {
+      const previewText = getCardTextPreview(card, 30);
+      const title = previewText ? `Note ${index + 1}: ${previewText}` : `Note ${index + 1}`;
+      const label =
+        currentDeckName && card.deckName === currentDeckName ? "In current deck" : undefined;
+
+      return {
+        id: `Note ${index + 1}`,
+        title,
+        icon: icon(Layers),
+        label,
+        metadata: [
+          ...getCardMetadata(card),
+          {
+            label: `Templates ${card.templates.length}`,
+            value: card.templates.map((template) => template.name).join(", "),
+          },
+        ],
+        handler: () => {
+          return { keepOpen: true };
+        },
+      } satisfies Command;
+    }),
+  };
+}
+
+function buildBrowseTemplatesCommand(ankiData: AnkiData, currentDeckName: string | null): Command {
+  const uniqueTemplates = Array.from(
+    new Map(ankiData.cards.flatMap((card) => card.templates).map((template) => [template.name, template] as const)).values(),
+  );
+  const currentDeckTemplateNames = new Set(
+    (currentDeckName
+      ? ankiData.cards.filter((card) => card.deckName === currentDeckName)
+      : []
+    ).flatMap((card) => card.templates.map((template) => template.name)),
+  );
+
+  return {
+    id: "browse-templates",
+    title: "Browse All Templates",
+    icon: icon(ClipboardList),
+    hotkey: "ctrl+L",
+    children: uniqueTemplates.map((template) => ({
+      id: `AllTpl:${template.name}`,
+      title: template.name,
+      icon: icon(FileText),
+      label:
+        currentDeckName && currentDeckTemplateNames.has(template.name)
+          ? "In current deck"
+          : undefined,
+      metadata: [
+        { label: "Template Front", value: templateViewer(template.qfmt) },
+        { label: "Template Back", value: templateViewer(template.afmt) },
+      ],
+    })),
+  };
 }
 
 export function useCommands() {
@@ -113,8 +230,7 @@ export function useCommands() {
           inputEl.addEventListener("change", async (e) => {
             const file = (e.target as HTMLInputElement).files?.[0];
             if (file) {
-              await ankiCachePromise.then((cache) => cache.put("anki-deck", new Response(file)));
-              blobSig.value = file;
+              await addCachedFile(file);
             }
           });
           inputEl.click();
@@ -126,7 +242,7 @@ export function useCommands() {
         icon: icon(ArrowRight),
         hotkey: ">",
         handler: () => {
-          selectedCardSig.value = selectedCardSig.value + 1;
+          moveToNextCard();
         },
       },
       ...(!schedulerEnabledSig.value && ankiData && cardsSig.value.length > 0
@@ -148,11 +264,7 @@ export function useCommands() {
                   label: isCurrentCard ? "Currently viewing" : undefined,
                   metadata: [
                     { label: "Card Number", value: (index + 1).toString() },
-                    ...Object.entries(card.values).map(([fieldName, fieldValue]) => ({
-                      label: fieldName,
-                      value: metadataHtml(fieldValue ?? ""),
-                    })),
-                    ...(card.deckName ? [{ label: "Deck", value: card.deckName }] : []),
+                    ...getCardMetadata(card),
                   ],
                   handler: () => {
                     selectedCardSig.value = index;
@@ -215,49 +327,33 @@ export function useCommands() {
               icon: icon(Grid3x3),
               hotkey: "ctrl+D",
               children: [
-                {
+                buildDeckCommand({
                   id: "all",
                   title: "All Cards",
-                  icon: icon(Layers),
-                  label: selectedDeckId === null ? "Currently selected" : undefined,
-                  metadata: (() => {
-                    const allTemplateNames = Array.from(
-                      new Set(ankiData.cards.flatMap((c) => c.templates.map((t) => t.name))),
-                    );
-                    const preview = renderFirstCardPreview(ankiData.cards, mediaFilesSig.value);
-                    return [
-                      { label: "Cards", value: deckInfo.cardCount.toString() },
-                      { label: "Templates", value: allTemplateNames.join(", ") },
-                      ...(preview ? [{ label: "Example Card", value: preview }] : []),
-                    ];
-                  })(),
-                  handler: () => {
+                  cards: ankiData.cards,
+                  cardCount: deckInfo.cardCount,
+                  isSelected: selectedDeckId === null,
+                  mediaFiles: mediaFilesSig.value,
+                  onSelect: () => {
                     selectedDeckIdSig.value = null;
                   },
-                },
+                }),
                 ...deckInfo.subdecks.map((subdeck) => {
                   const subdeckCards = ankiData.cards.filter((c) => {
                     const deck = ankiData.decks[subdeck.id];
                     return deck && c.deckName === deck.name;
                   });
-                  const templateNames = Array.from(
-                    new Set(subdeckCards.flatMap((c) => c.templates.map((t) => t.name))),
-                  );
-                  const preview = renderFirstCardPreview(subdeckCards, mediaFilesSig.value);
-                  return {
+                  return buildDeckCommand({
                     id: subdeck.id,
                     title: subdeck.name,
-                    icon: icon(Layers),
-                    label: selectedDeckId === subdeck.id ? "Currently selected" : undefined,
-                    metadata: [
-                      { label: "Cards", value: subdeck.cardCount.toString() },
-                      { label: "Templates", value: templateNames.join(", ") || "None" },
-                      ...(preview ? [{ label: "Example Card", value: preview }] : []),
-                    ],
-                    handler: () => {
+                    cards: subdeckCards,
+                    cardCount: subdeck.cardCount,
+                    isSelected: selectedDeckId === subdeck.id,
+                    mediaFiles: mediaFilesSig.value,
+                    onSelect: () => {
                       selectedDeckIdSig.value = subdeck.id;
                     },
-                  };
+                  });
                 }),
               ],
             },
@@ -265,77 +361,8 @@ export function useCommands() {
         : []),
       ...(ankiData
         ? [
-            {
-              id: "browse-notes",
-              title: "Browse All Notes",
-              icon: icon(Layers),
-              children: ankiData.cards.map((card, index) => {
-                const previewText = getCardTextPreview(card, 30);
-                const title = previewText
-                  ? `Note ${index + 1}: ${previewText}`
-                  : `Note ${index + 1}`;
-                const label =
-                  currentDeckName && card.deckName === currentDeckName
-                    ? "In current deck"
-                    : undefined;
-                const metadata = [
-                  ...Object.entries(card.values).map(([fieldName, fieldValue]) => ({
-                    label: fieldName,
-                    value: metadataHtml(fieldValue ?? ""),
-                  })),
-                  ...(card.deckName ? [{ label: "Deck", value: card.deckName }] : []),
-                  {
-                    label: `Templates ${card.templates.length}`,
-                    value: card.templates.map((t) => t.name).join(", "),
-                  },
-                ];
-                return {
-                  id: `Note ${index + 1}`,
-                  title,
-                  icon: icon(Layers),
-                  label,
-                  metadata,
-                  handler: () => {
-                    return { keepOpen: true };
-                  },
-                } satisfies Command;
-              }),
-            },
-            ...(() => {
-              const allTemplates = ankiData.cards.flatMap((c) => c.templates) ?? [];
-              const uniqueTemplates = Array.from(
-                new Map(allTemplates.map((t) => [t.name, t] as const)).values(),
-              );
-              const currentDeckTemplateNames = new Set(
-                (currentDeckName
-                  ? ankiData.cards.filter((c) => c.deckName === currentDeckName)
-                  : []
-                ).flatMap((c) => c.templates.map((t) => t.name)),
-              );
-
-              const items: Command[] = [
-                {
-                  id: "browse-templates",
-                  title: "Browse All Templates",
-                  icon: icon(ClipboardList),
-                  hotkey: "ctrl+L",
-                  children: uniqueTemplates.map((t) => ({
-                    id: `AllTpl:${t.name}`,
-                    title: t.name,
-                    icon: icon(FileText),
-                    label:
-                      currentDeckName && currentDeckTemplateNames.has(t.name)
-                        ? "In current deck"
-                        : undefined,
-                    metadata: [
-                      { label: "Template Front", value: templateViewer(t.qfmt) },
-                      { label: "Template Back", value: templateViewer(t.afmt) },
-                    ],
-                  })),
-                },
-              ];
-              return items;
-            })(),
+            buildBrowseNotesCommand(ankiData, currentDeckName),
+            buildBrowseTemplatesCommand(ankiData, currentDeckName),
           ]
         : []),
     ];
