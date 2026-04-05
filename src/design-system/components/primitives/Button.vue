@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed } from "vue";
 
-export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
-export type ButtonSize = "sm" | "md" | "lg";
+type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
+type ButtonSize = "sm" | "md" | "lg";
 
 const props = withDefaults(
   defineProps<{

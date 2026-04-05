@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { watch, onUnmounted } from "vue";
 
-export type ModalSize = "sm" | "md" | "lg" | "xl";
+type ModalSize = "sm" | "md" | "lg" | "xl";
 
 const props = withDefaults(
   defineProps<{

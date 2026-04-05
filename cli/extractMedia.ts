@@ -66,7 +66,7 @@ async function extractAnkiMedia(filePath: string, outputDir: string) {
     const decompressed = await decompressZstd(mediaBuffer);
     mediaBytes = decompressed;
     mediaContent = new TextDecoder().decode(decompressed);
-  } catch (_e) {
+  } catch {
     // Not compressed, try as plain text
     mediaBytes = mediaBuffer;
     mediaContent = new TextDecoder().decode(mediaBuffer);
@@ -77,11 +77,11 @@ async function extractAnkiMedia(filePath: string, outputDir: string) {
   try {
     // Try parsing as JSON first (older format)
     mediaMapping = mediaMappingSchema.parse(JSON.parse(mediaContent));
-  } catch (_jsonError) {
+  } catch {
     // If JSON parsing fails, try parsing as Protocol Buffer (newer .anki21b format)
     try {
       mediaMapping = parseMediaProto(mediaBytes);
-    } catch (_protoError) {
+    } catch {
       console.error('❌ Failed to parse media mapping as JSON or Protocol Buffer');
       console.log('First 100 bytes (hex):');
       console.log(Array.from(mediaBuffer.slice(0, 100))

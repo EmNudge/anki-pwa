@@ -1,4 +1,4 @@
-export type TemplateNode =
+type TemplateNode =
   | { type: "text"; value: string }
   | { type: "field"; reference: string }
   | { type: "conditional"; field: string; positive: boolean; children: TemplateNode[] };
@@ -8,7 +8,7 @@ type TemplateTag =
   | { type: "close"; field: string }
   | { type: "field"; reference: string };
 
-export type ClozeNode =
+type ClozeNode =
   | { type: "text"; value: string }
   | { type: "cloze"; ordinal: number; answer: string; hint: string | null };
 

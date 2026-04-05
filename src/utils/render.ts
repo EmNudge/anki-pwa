@@ -283,8 +283,7 @@ function applyFilter(
  * Uses Anki's space-delimited format for multi-character bases.
  */
 function applyFuriganaFilter(text: string): string {
-  // Match space-delimited ruby groups: " BASE[READING]"
-  return text.replace(/ ?([^\s\[]+)\[([^\]]+)\]/g, (_match, base: string, reading: string) => {
+  return text.replace(/ ?([^\s[]+)\[([^\]]+)\]/g, (_match, base: string, reading: string) => {
     return `<ruby>${base}<rt>${reading}</rt></ruby>`;
   });
 }
@@ -293,7 +292,7 @@ function applyFuriganaFilter(text: string): string {
  * Kanji filter: strip bracketed readings, keep base characters.
  */
 function applyKanjiFilter(text: string): string {
-  return text.replace(/ ?([^\s\[]+)\[([^\]]+)\]/g, (_match, base: string) => {
+  return text.replace(/ ?([^\s[]+)\[([^\]]+)\]/g, (_match, base: string) => {
     return base;
   });
 }
@@ -302,7 +301,7 @@ function applyKanjiFilter(text: string): string {
  * Kana filter: replace base+reading pairs with just the reading.
  */
 function applyKanaFilter(text: string): string {
-  return text.replace(/ ?([^\s\[]+)\[([^\]]+)\]/g, (_match, _base: string, reading: string) => {
+  return text.replace(/ ?([^\s[]+)\[([^\]]+)\]/g, (_match, _base: string, reading: string) => {
     return reading;
   });
 }
@@ -408,7 +407,7 @@ function truncateFilename(filename: string, maxBytes: number): string {
  */
 function normalizeAnkiFilename(filename: string): string {
   // Strip illegal characters per Anki: []<>:"/?\*^|
-  let normalized = filename.replace(/[\[\]<>:"\/\\?\*\^|]/g, "");
+  let normalized = filename.replace(/[[\]<>:"/\\?*^|]/g, "");
   // Strip trailing spaces and periods
   normalized = normalized.replace(/[\s.]+$/, "");
   // Handle Windows reserved names: CON, PRN, AUX, NUL, COM1-9, LPT1-9
@@ -549,7 +548,7 @@ function replaceLatex(renderedString: string, macros: Record<string, string> = {
         // Render the environment as display mode LaTeX
         try {
           result += katex.renderToString(envPart.trim(), katexOptions(true));
-        } catch (e) {
+        } catch {
           result += envPart; // Keep original if parsing fails
         }
 
@@ -558,7 +557,7 @@ function replaceLatex(renderedString: string, macros: Record<string, string> = {
           result += textPart.replace(/\$(.+?)\$/g, (_, math) => {
             try {
               return katex.renderToString(math, katexOptions(false));
-            } catch (e) {
+            } catch {
               return `$${math}$`; // Return original if parsing fails
             }
           });
@@ -570,7 +569,7 @@ function replaceLatex(renderedString: string, macros: Record<string, string> = {
         return cleanLatex.replace(/\$(.+?)\$/g, (_, math) => {
           try {
             return katex.renderToString(math, katexOptions(false));
-          } catch (e) {
+          } catch {
             return `$${math}$`; // Return original if parsing fails
           }
         });
@@ -578,7 +577,7 @@ function replaceLatex(renderedString: string, macros: Record<string, string> = {
         // Bare LaTeX content (no environment, no inline $) — render directly
         try {
           return katex.renderToString(cleanLatex, katexOptions(false));
-        } catch (e) {
+        } catch {
           return cleanLatex;
         }
       }
