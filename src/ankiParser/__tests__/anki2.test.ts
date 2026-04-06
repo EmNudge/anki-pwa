@@ -302,8 +302,8 @@ describe("Anki2 Parser", () => {
 
       expect(result.cards[0]?.values).toEqual({
         Field1: "Only first field",
-        Field2: null,
-        Field3: null,
+        Field2: "",
+        Field3: "",
       });
     });
 

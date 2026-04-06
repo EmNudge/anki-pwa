@@ -3,6 +3,7 @@ import { executeQuery, executeQueryAll } from "~/utils/sql";
 import { modelSchema, deckSchema, fsrsJsonSchema } from "./jsonParsers";
 import { z } from "zod";
 import { assertTruthy } from "~/utils/assert";
+import { buildScheduling, resolveCardDeckName, isBlankCard, parseRevlog } from "../shared";
 
 export type CardScheduling = {
   type: number;
@@ -199,7 +200,7 @@ export function getDataFromAnki2(db: Database): AnkiDB2Data {
         const keys = modelForCard.flds.map((fld) => fld.name);
         const values = note.fields.split("\x1F");
         const valuesMap = Object.fromEntries(
-          keys.map((key, index) => [key, values[index] || null]),
+          keys.map((key, index) => [key, values[index] ?? null]),
         );
 
         // Find the template matching this card's ordinal
@@ -207,34 +208,12 @@ export function getDataFromAnki2(db: Database): AnkiDB2Data {
           modelForCard.tmpls.find((t) => t.ord === cardRow.ord) ?? modelForCard.tmpls[0];
         assertTruthy(matchingTemplate, `No template found for ord ${cardRow.ord}`);
 
-        // Resolve deck name, using odid (original deck) for filtered decks
-        const effectiveDid = cardRow.odid !== 0 ? cardRow.odid : cardRow.did;
-        const cardDeckName = decks[effectiveDid.toString()]?.name ?? "Unknown";
+        const cardDeckName = resolveCardDeckName(cardRow, decks);
 
         // Check req (blank card filtering)
-        const req = modelForCard.req;
-        if (req) {
-          const reqForOrd = req.find((r) => r[0] === cardRow.ord);
-          if (reqForOrd) {
-            const [, mode, fieldIndices] = reqForOrd;
-            if (mode === "any") {
-              const anyFilled = fieldIndices.some((idx) => {
-                const fieldName = keys[idx];
-                return fieldName && (valuesMap[fieldName]?.trim() ?? "") !== "";
-              });
-              if (!anyFilled) return null;
-            } else if (mode === "all") {
-              const allFilled = fieldIndices.every((idx) => {
-                const fieldName = keys[idx];
-                return fieldName && (valuesMap[fieldName]?.trim() ?? "") !== "";
-              });
-              if (!allFilled) return null;
-            }
-          }
+        if (isBlankCard(modelForCard.req ?? null, cardRow.ord, keys, valuesMap)) {
+          return null;
         }
-
-        // Parse FSRS state from card.data (JSON or protobuf)
-        const fsrs = parseFsrsData(cardRow.data);
 
         return {
           values: valuesMap,
@@ -251,42 +230,13 @@ export function getDataFromAnki2(db: Database): AnkiDB2Data {
           noteData: note.data || null,
           csum: note.csum ?? null,
           sfld: note.sfld ?? null,
-          scheduling: {
-            type: cardRow.type,
-            typeName: getTypeName(cardRow.type),
-            queue: cardRow.queue,
-            queueName: getQueueName(cardRow.queue),
-            due: cardRow.due,
-            dueType: getDueType(cardRow.queue),
-            ivl: cardRow.ivl,
-            ivlUnit: cardRow.ivl < 0 ? "seconds" as const : "days" as const,
-            factor: cardRow.factor,
-            easeFactor: cardRow.factor === 0 ? null : cardRow.factor / 1000,
-            reps: cardRow.reps,
-            lapses: cardRow.lapses,
-            odue: cardRow.odue,
-            flags: cardRow.flags,
-            left: cardRow.left,
-            fsrs,
-          },
+          scheduling: buildScheduling(cardRow),
         };
       })
       .filter((c): c is NonNullable<typeof c> => c !== null);
   })();
 
-  // Parse revlog if the table exists
-  const revlog = (() => {
-    try {
-      const rows = executeQueryAll<Omit<RevlogEntry, "typeName">>(
-        db,
-        "SELECT id, cid, usn, ease, ivl, lastIvl, factor, time, type FROM revlog",
-      );
-      return rows.map((r) => ({ ...r, typeName: getRevlogTypeName(r.type) }));
-    } catch {
-      // revlog table may not exist in all databases
-      return [];
-    }
-  })();
+  const revlog = parseRevlog(db);
 
   // Parse deck configs from col.dconf JSON (anki2 format)
   const deckConfigs = (() => {

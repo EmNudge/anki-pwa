@@ -9,6 +9,7 @@ import {
 } from "../lib/ollama";
 import { createApkg } from "../ankiExporter";
 import { addCachedFile } from "../stores";
+import { downloadBlob } from "../utils/downloadBlob";
 
 // --- Generated deck cache (Cache API + localStorage index) ---
 
@@ -113,25 +114,13 @@ async function handleGenerate() {
 
 function handleDownload() {
   if (!generatedBlob.value || !generatedSpec.value) return;
-
-  const url = URL.createObjectURL(generatedBlob.value);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `${generatedSpec.value.deckName.replace(/[^a-zA-Z0-9 _-]/g, "")}.apkg`;
-  a.click();
-  URL.revokeObjectURL(url);
+  downloadBlob(generatedBlob.value, `${generatedSpec.value.deckName.replace(/[^a-zA-Z0-9 _-]/g, "")}.apkg`);
 }
 
 async function handleDownloadEntry(entry: GeneratedEntry) {
   const blob = await loadGeneratedBlob(entry.name);
   if (!blob) return;
-
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = entry.name;
-  a.click();
-  URL.revokeObjectURL(url);
+  downloadBlob(blob, entry.name);
 }
 
 async function handleLoadInApp() {

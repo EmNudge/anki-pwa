@@ -131,34 +131,43 @@ export class ReviewQueue {
    */
   getDueCards(queue: ReviewCard[]): ReviewCard[] {
     const now = new Date();
-    const safe = queue
-      .map((card) => {
-        try {
-          const dueDate = this.algorithm.getDueDate(card.reviewState.cardState);
-          const isDue = dueDate <= now;
-          return { card, isDue };
-        } catch (error) {
-          console.error("Error processing card in queue:", error, card);
-          return null;
+    const nowMs = now.getTime();
+
+    // Single pass: classify cards and cache due dates
+    const newCards: ReviewCard[] = [];
+    const dueReviews: ReviewCard[] = [];
+    const aheadCards: ReviewCard[] = [];
+    const dueDateCache = new Map<string, number>();
+
+    for (const card of queue) {
+      try {
+        const dueDate = this.algorithm.getDueDate(card.reviewState.cardState);
+        const dueMs = dueDate.getTime();
+        dueDateCache.set(card.cardId, dueMs);
+
+        if (card.isNew) {
+          newCards.push(card);
+        } else if (dueMs <= nowMs) {
+          dueReviews.push(card);
+        } else {
+          aheadCards.push(card);
         }
-      })
-      .filter((x): x is { card: ReviewCard; isDue: boolean } => Boolean(x));
+      } catch (error) {
+        console.error("Error processing card in queue:", error, card);
+      }
+    }
 
     const newLeft = Math.max(0, this.settings.dailyNewLimit - this.todayStats.newCount);
     const reviewLeft = Math.max(0, this.settings.dailyReviewLimit - this.todayStats.reviewCount);
 
-    const newCandidates = safe.filter((x) => x.card.isNew).map((x) => x.card);
-    const dueReviewCandidates = safe.filter((x) => !x.card.isNew && x.isDue).map((x) => x.card);
-    const aheadCandidates = safe.filter((x) => !x.card.isNew && !x.isDue).map((x) => x.card);
+    const selectedNew = newCards.slice(0, newLeft);
+    const extraNew = newCards.slice(newLeft);
 
-    const selectedNew = newCandidates.slice(0, newLeft);
-    const extraNew = newCandidates.slice(newLeft);
-
-    const selectedReviews = dueReviewCandidates.slice(0, reviewLeft);
-    const extraReviews = dueReviewCandidates.slice(reviewLeft);
+    const selectedReviews = dueReviews.slice(0, reviewLeft);
+    const extraReviews = dueReviews.slice(reviewLeft);
 
     const includeAhead =
-      this.settings.showAheadOfSchedule && reviewLeft <= 0 ? aheadCandidates : [];
+      this.settings.showAheadOfSchedule && reviewLeft <= 0 ? aheadCards : [];
 
     const coreDue = [...selectedNew, ...selectedReviews, ...includeAhead];
     const extras = [...extraNew, ...extraReviews];
@@ -168,15 +177,7 @@ export class ReviewQueue {
     return finalDue.sort((a, b) => {
       if (a.isNew && !b.isNew) return -1;
       if (!a.isNew && b.isNew) return 1;
-
-      try {
-        const aDue = this.algorithm.getDueDate(a.reviewState.cardState).getTime();
-        const bDue = this.algorithm.getDueDate(b.reviewState.cardState).getTime();
-        return aDue - bDue;
-      } catch (error) {
-        console.error("Error sorting cards:", error);
-        return 0;
-      }
+      return (dueDateCache.get(a.cardId) ?? 0) - (dueDateCache.get(b.cardId) ?? 0);
     });
   }
 
