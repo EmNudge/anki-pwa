@@ -59,4 +59,10 @@ export interface SchedulingAlgorithm {
     difficulty?: number;
     [key: string]: number | string | undefined;
   };
+
+  /**
+   * Whether the card is currently in a learning or relearning phase.
+   * Learning cards need to be re-shown within the same session.
+   */
+  isInLearning?(cardState: unknown): boolean;
 }

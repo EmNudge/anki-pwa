@@ -9,20 +9,6 @@ type AlgorithmType = "sm2" | "fsrs";
 export type Answer = "again" | "hard" | "good" | "easy";
 
 /**
- * Maps Answer to SM-2 rating (0-5 scale)
- * - Again: 0 (complete blackout)
- * - Hard: 3 (correct but with serious difficulty)
- * - Good: 4 (correct with hesitation)
- * - Easy: 5 (perfect response)
- */
-export const ANSWER_TO_RATING: Record<Answer, number> = {
-  again: 0,
-  hard: 3,
-  good: 4,
-  easy: 5,
-};
-
-/**
  * Review state for a card, combining our card ID with scheduling data
  */
 export interface CardReviewState {
@@ -60,6 +46,48 @@ export interface CardReviewState {
 }
 
 /**
+ * SM-2 specific parameters matching Anki's modified SM-2
+ */
+export interface SM2Params {
+  /** Learning steps in minutes (default: [1, 10]) */
+  learningSteps: number[];
+  /** Relearning steps in minutes (default: [10]) */
+  relearningSteps: number[];
+  /** Interval in days when graduating via Good (default: 1) */
+  graduatingInterval: number;
+  /** Interval in days when graduating via Easy (default: 4) */
+  easyInterval: number;
+  /** Starting ease factor for new cards (default: 2.5) */
+  startingEase: number;
+  /** Multiplier for Easy button on review cards (default: 1.3) */
+  easyBonus: number;
+  /** Multiplier for Hard button on review cards (default: 1.2) */
+  hardMultiplier: number;
+  /** Global interval multiplier (default: 1.0) */
+  intervalModifier: number;
+  /** Interval multiplier after lapse, 0 = reset (default: 0) */
+  lapseNewInterval: number;
+  /** Minimum interval after lapse in days (default: 1) */
+  minLapseInterval: number;
+  /** Maximum review interval in days (default: 36500) */
+  maximumInterval: number;
+}
+
+export const DEFAULT_SM2_PARAMS: SM2Params = {
+  learningSteps: [1, 10],
+  relearningSteps: [10],
+  graduatingInterval: 1,
+  easyInterval: 4,
+  startingEase: 2.5,
+  easyBonus: 1.3,
+  hardMultiplier: 1.2,
+  intervalModifier: 1.0,
+  lapseNewInterval: 0,
+  minLapseInterval: 1,
+  maximumInterval: 36500,
+};
+
+/**
  * Settings for the scheduler
  */
 export interface SchedulerSettings {
@@ -87,6 +115,11 @@ export interface SchedulerSettings {
    * Show cards ahead of schedule if daily reviews are complete
    */
   showAheadOfSchedule: boolean;
+
+  /**
+   * SM-2 specific parameters (only used if algorithm is 'sm2')
+   */
+  sm2Params?: Partial<SM2Params>;
 
   /**
    * FSRS-specific settings (only used if algorithm is 'fsrs')
