@@ -4,7 +4,6 @@ import {
   ankiDataSig,
   schedulerEnabledSig,
   soundEffectsEnabledSig,
-  toggleScheduler,
   toggleSoundEffects,
   schedulerSettingsModalOpenSig,
   resetScheduler,
@@ -24,8 +23,6 @@ import {
   Moon,
   Volume2,
   VolumeX,
-  Pause,
-  Play,
   Settings,
   RefreshCw,
   ClipboardList,
@@ -291,15 +288,6 @@ export function useCommands() {
         hotkey: "ctrl+E",
         handler: () => {
           toggleSoundEffects();
-        },
-      },
-      {
-        id: "toggle-scheduler",
-        title: `${schedulerEnabledSig.value ? "Disable" : "Enable"} Scheduler`,
-        icon: icon(schedulerEnabledSig.value ? Pause : Play),
-        hotkey: "ctrl+R",
-        handler: () => {
-          toggleScheduler();
         },
       },
       {

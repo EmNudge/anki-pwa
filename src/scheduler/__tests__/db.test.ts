@@ -20,6 +20,7 @@ describe("ReviewDB", () => {
   describe("saveSettings / getSettings round-trip", () => {
     it("should save and retrieve plain settings", async () => {
       const settings: SchedulerSettings = {
+        enabled: true,
         algorithm: "fsrs",
         dailyNewLimit: 30,
         dailyReviewLimit: 300,
@@ -57,6 +58,7 @@ describe("ReviewDB", () => {
   describe("Vue reactive proxy handling", () => {
     it("should fail to save a Vue ref value directly (demonstrates the bug)", async () => {
       const settingsRef = ref<SchedulerSettings>({
+        enabled: true,
         algorithm: "fsrs",
         dailyNewLimit: 20,
         dailyReviewLimit: 200,
@@ -71,6 +73,7 @@ describe("ReviewDB", () => {
 
     it("should save a Vue ref value after JSON round-trip (the fix)", async () => {
       const settingsRef = ref<SchedulerSettings>({
+        enabled: true,
         algorithm: "fsrs",
         dailyNewLimit: 30,
         dailyReviewLimit: 300,
@@ -88,6 +91,7 @@ describe("ReviewDB", () => {
 
     it("should fail to save a Vue reactive object directly", async () => {
       const settings = reactive<SchedulerSettings>({
+        enabled: true,
         algorithm: "fsrs",
         dailyNewLimit: 20,
         dailyReviewLimit: 200,

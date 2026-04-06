@@ -3,6 +3,7 @@ import { type AppView, activeViewSig, reviewModeSig } from "../stores";
 
 const tabs: { id: AppView; label: string }[] = [
   { id: "review", label: "Review" },
+  { id: "browse", label: "Browse" },
   { id: "create", label: "Create Deck" },
   { id: "sync", label: "Sync" },
 ];

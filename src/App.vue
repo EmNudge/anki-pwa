@@ -29,6 +29,7 @@ import StatusBar from "./components/StatusBar.vue";
 import FileLibrary from "./components/FileLibrary.vue";
 import DeckCreator from "./components/DeckCreator.vue";
 
+import CardBrowser from "./components/CardBrowser.vue";
 import SyncPanel from "./components/SyncPanel.vue";
 import SchedulerSettings from "./components/SchedulerSettings.vue";
 import CommandPalette from "./components/CommandPalette.vue";
@@ -58,11 +59,11 @@ watch(computedDeckInfo, (newDeckInfo, oldDeckInfo) => {
   }
 });
 
-// Initialize review queue when cards are loaded and scheduler is enabled
+// Initialize review queue when cards are loaded (scheduler enabled state is per-deck, checked inside)
 watch(
-  [cardsSig, templatesSig, schedulerEnabledSig, selectedDeckIdSig],
-  ([cards, templates, schedulerEnabled]) => {
-    if (cards.length > 0 && templates && templates.length > 0 && schedulerEnabled) {
+  [cardsSig, templatesSig, selectedDeckIdSig],
+  ([cards, templates]) => {
+    if (cards.length > 0 && templates && templates.length > 0) {
       initializeReviewQueue();
     }
   },
@@ -174,8 +175,11 @@ async function handleChooseAnswer(answer: Answer) {
 <template>
   <StatusBar />
 
+  <!-- BROWSE VIEW -->
+  <CardBrowser v-if="activeViewSig === 'browse'" />
+
   <!-- CREATE DECK VIEW -->
-  <DeckCreator v-if="activeViewSig === 'create'" />
+  <DeckCreator v-else-if="activeViewSig === 'create'" />
 
   <!-- SYNC VIEW -->
   <SyncPanel v-else-if="activeViewSig === 'sync'" />
