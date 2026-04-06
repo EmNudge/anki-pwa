@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 const SYNC_CONFIG_KEY = "anki-sync-config";
 const SYNC_STATE_KEY = "anki-sync-state";
 
@@ -56,10 +58,12 @@ function normalizeUrl(serverUrl: string): string {
  * - "data": JSON-encoded payload
  * - "c": compression flag ("0" = none, "1" = gzip)
  * - Authenticated endpoints also get "k" (host key) as a separate top-level field.
+ * - "v": client version string (media sync endpoints)
  */
 function buildSyncForm(
-  data: Record<string, unknown>,
+  data: unknown,
   hkey?: string,
+  extra?: Record<string, string>,
 ): FormData {
   const form = new FormData();
   if (hkey) {
@@ -67,13 +71,18 @@ function buildSyncForm(
   }
   form.append("data", JSON.stringify(data));
   form.append("c", "0");
+  if (extra) {
+    for (const [key, value] of Object.entries(extra)) {
+      form.append(key, value);
+    }
+  }
   return form;
 }
 
 /**
  * Post to an unauthenticated sync endpoint (e.g. hostKey).
  */
-async function syncPost(url: string, data: Record<string, unknown>): Promise<Response> {
+async function syncPost(url: string, data: unknown = {}): Promise<Response> {
   const form = buildSyncForm(data);
   return fetch(url, { method: "POST", body: form });
 }
@@ -84,7 +93,7 @@ async function syncPost(url: string, data: Record<string, unknown>): Promise<Res
 async function syncPostAuth(
   url: string,
   hkey: string,
-  data: Record<string, unknown> = {},
+  data: unknown = {},
 ): Promise<Response> {
   const form = buildSyncForm(data, hkey);
   return fetch(url, { method: "POST", body: form });
@@ -143,6 +152,22 @@ export async function downloadCollection(
   return decompressIfNeeded(bytes);
 }
 
+const DOWNLOAD_BATCH_SIZE = 25;
+
+const mediaSyncBeginSchema = z.object({
+  usn: z.number(),
+});
+
+const mediaChangeSchema = z.tuple([
+  z.string(),
+  z.number(),
+  z.string().nullable(),
+]);
+
+const mediaChangesSchema = z.array(mediaChangeSchema);
+
+const mediaMetaSchema = z.record(z.string(), z.string());
+
 /**
  * Download media files from the sync server.
  * Returns a map of filename -> Blob.
@@ -154,17 +179,20 @@ export async function downloadMedia(
   const base = normalizeUrl(serverUrl);
   const mediaFiles = new Map<string, Blob>();
 
-  // Begin media sync
-  const beginResponse = await syncPostAuth(`${base}/msync/begin`, hkey);
+  // Begin media sync — "v" must be a top-level multipart field
+  const beginForm = buildSyncForm({}, hkey, { v: "anki-pwa,0.1,web" });
+  const beginResponse = await fetch(`${base}/msync/begin`, {
+    method: "POST",
+    body: beginForm,
+  });
 
   if (!beginResponse.ok) {
-    return mediaFiles;
+    const body = await beginResponse.text().catch(() => "(unreadable)");
+    throw new Error(`msync/begin failed: ${beginResponse.status} ${beginResponse.statusText} — ${body}`);
   }
 
-  const beginData = await tryParseResponse(beginResponse);
-  if (!beginData?.data) return mediaFiles;
-
-  const serverUsn = (beginData.data.usn as number) ?? 0;
+  const beginJson = await readResponseJson(beginResponse);
+  const { usn: serverUsn } = mediaSyncBeginSchema.parse(beginJson);
   if (serverUsn === 0) return mediaFiles;
 
   // Fetch media changes in batches
@@ -172,15 +200,16 @@ export async function downloadMedia(
 
   while (lastUsn < serverUsn) {
     const changesResponse = await syncPostAuth(`${base}/msync/mediaChanges`, hkey, {
-      last_usn: lastUsn,
+      lastUsn,
     });
 
-    if (!changesResponse.ok) break;
+    if (!changesResponse.ok) {
+      const body = await changesResponse.text().catch(() => "(unreadable)");
+      throw new Error(`msync/mediaChanges failed: ${changesResponse.status} ${changesResponse.statusText} — ${body}`);
+    }
 
-    const changesData = await tryParseResponse(changesResponse);
-    if (!changesData?.data) break;
-
-    const changes = (changesData.data.changes ?? []) as [string, number, string | null][];
+    const changesJson = await readResponseJson(changesResponse);
+    const changes = mediaChangesSchema.parse(changesJson);
     if (changes.length === 0) break;
 
     // Files with non-null sha1 need downloading
@@ -188,41 +217,62 @@ export async function downloadMedia(
       .filter(([, , sha1]) => sha1 !== null)
       .map(([filename]) => filename);
 
-    if (filesToDownload.length > 0) {
+    // Download in batches — server may return fewer files than requested
+    // (zip size limit), so advance by actual count received, like the
+    // official client does.
+    let dlOffset = 0;
+    while (dlOffset < filesToDownload.length) {
+      const batch = filesToDownload.slice(dlOffset, dlOffset + DOWNLOAD_BATCH_SIZE);
+
       const dlResponse = await syncPostAuth(`${base}/msync/downloadFiles`, hkey, {
-        files: filesToDownload,
+        files: batch,
       });
 
-      if (dlResponse.ok) {
-        const zipBlob = await dlResponse.blob();
-        const zipBytes = new Uint8Array(await zipBlob.arrayBuffer());
-        const decompressed = await decompressIfNeeded(zipBytes);
+      if (!dlResponse.ok) {
+        const body = await dlResponse.text().catch(() => "(unreadable)");
+        throw new Error(`msync/downloadFiles failed: ${dlResponse.status} ${dlResponse.statusText} — ${body}`);
+      }
 
-        try {
-          const { ZipReader, BlobReader, BlobWriter } = await import("@zip-js/zip-js");
-          const zipReader = new ZipReader(
-            new BlobReader(new Blob([decompressed.buffer as ArrayBuffer])),
-          );
-          const entries = await zipReader.getEntries();
+      const zipBlob = await dlResponse.blob();
+      const zipBytes = new Uint8Array(await zipBlob.arrayBuffer());
+      const decompressed = await decompressIfNeeded(zipBytes);
 
-          for (const entry of entries) {
-            if (entry.directory || !("getData" in entry)) continue;
-            const idx = parseInt(entry.filename, 10);
-            const filename = filesToDownload[idx];
-            if (filename) {
-              const blob = await (
-                entry as {
-                  getData: (w: InstanceType<typeof BlobWriter>) => Promise<Blob>;
-                }
-              ).getData(new BlobWriter());
-              mediaFiles.set(filename, blob);
-            }
-          }
+      const { ZipReader, BlobReader, BlobWriter, TextWriter } = await import("@zip-js/zip-js");
+      const zipReader = new ZipReader(
+        new BlobReader(new Blob([decompressed.buffer as ArrayBuffer])),
+      );
+      const entries = await zipReader.getEntries();
 
-          await zipReader.close();
-        } catch {
-          // ZIP parsing failed — skip media for this batch
+      // Read _meta entry to get index-to-filename mapping
+      type EntryWithGetData = {
+        getData: (w: InstanceType<typeof BlobWriter> | InstanceType<typeof TextWriter>) => Promise<Blob | string>;
+      };
+      const metaEntry = entries.find((e) => e.filename === "_meta");
+      if (!metaEntry || !("getData" in metaEntry)) {
+        throw new Error("msync/downloadFiles ZIP missing _meta entry");
+      }
+      const metaText = await (metaEntry as EntryWithGetData).getData(new TextWriter());
+      const meta = mediaMetaSchema.parse(JSON.parse(metaText as string));
+
+      let received = 0;
+      for (const entry of entries) {
+        if (entry.directory || entry.filename === "_meta" || !("getData" in entry)) continue;
+        const filename = meta[entry.filename];
+        if (filename) {
+          const blob = await (entry as EntryWithGetData).getData(new BlobWriter());
+          mediaFiles.set(filename, blob as Blob);
+          received++;
         }
+      }
+
+      await zipReader.close();
+
+      if (received === 0) {
+        // Server returned no files — skip this batch to avoid infinite loop
+        dlOffset += batch.length;
+      } else {
+        // Advance by actual files received (server may have hit zip size limit)
+        dlOffset += received;
       }
     }
 
@@ -237,19 +287,16 @@ export async function downloadMedia(
   return mediaFiles;
 }
 
-async function tryParseResponse(
-  response: Response,
-): Promise<{ data?: Record<string, unknown>; err?: string } | null> {
-  try {
-    const bytes = new Uint8Array(await response.arrayBuffer());
-    const decompressed = await decompressIfNeeded(bytes);
-    const text = new TextDecoder().decode(decompressed);
-    const parsed = JSON.parse(text);
-    if (parsed.err) return null;
-    return parsed;
-  } catch {
-    return null;
+async function readResponseJson(response: Response): Promise<unknown> {
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  const decompressed = await decompressIfNeeded(bytes);
+  const text = new TextDecoder().decode(decompressed);
+  const parsed = JSON.parse(text);
+  // Unwrap {data: ...} envelope used by some server implementations
+  if (parsed && typeof parsed === "object" && "data" in parsed && parsed.data != null) {
+    return parsed.data;
   }
+  return parsed;
 }
 
 async function decompressIfNeeded(bytes: Uint8Array): Promise<Uint8Array> {

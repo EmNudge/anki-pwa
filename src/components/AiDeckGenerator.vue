@@ -175,8 +175,6 @@ function formatDate(timestamp: number): string {
 
 <template>
   <div class="ai-generator">
-    <h2 class="title">AI Deck Generator</h2>
-
     <div v-if="ollamaAvailable === null" class="status-message">Checking Ollama availability...</div>
 
     <div v-else-if="!ollamaAvailable" class="status-message status-message--error">
@@ -298,16 +296,6 @@ function formatDate(timestamp: number): string {
 
 <style scoped>
 .ai-generator {
-  max-width: 800px;
-  margin: 0 auto;
-  padding: var(--spacing-8) var(--spacing-4);
-}
-
-.title {
-  font-size: var(--font-size-xl);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text-primary);
-  margin: 0 0 var(--spacing-2) 0;
 }
 
 .description {

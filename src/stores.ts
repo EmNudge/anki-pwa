@@ -17,10 +17,12 @@ import {
   upsertCachedFileEntry,
   writeCachedFiles,
 } from "./deckLibrary";
+import { readSyncState } from "./lib/ankiSync";
 
 // View state
-export type AppView = "files" | "review" | "create" | "ai-generate" | "sync";
-export const activeViewSig = ref<AppView>("files");
+export type AppView = "review" | "create" | "sync";
+export const activeViewSig = ref<AppView>("review");
+export const reviewModeSig = ref<"deck-list" | "studying">("deck-list");
 
 export const deckInfoSig = shallowRef<DeckInfo | null>(null);
 
@@ -47,7 +49,8 @@ function clearLoadedDeck() {
   activeDeckInputSig.value = null;
   deckInfoSig.value = null;
   selectedDeckIdSig.value = null;
-  activeViewSig.value = "files";
+  activeViewSig.value = "review";
+  reviewModeSig.value = "deck-list";
 }
 
 // Initialize: migrate old single-file cache and load active file
@@ -74,10 +77,48 @@ ankiCachePromise.then(async (cache) => {
     return;
   }
 
+  // Restore synced collection from cache
+  if (activeDeckSourceIdSig.value === SYNC_COLLECTION_ID) {
+    const sqliteResp = await cache.match("/sync/collection.sqlite");
+    if (sqliteResp) {
+      const bytes = new Uint8Array(await sqliteResp.arrayBuffer());
+
+      // Restore cached media blobs as object URLs
+      const allKeys = await cache.keys();
+      const mediaKeys = allKeys.filter((req) =>
+        new URL(req.url).pathname.startsWith("/sync/media/"),
+      );
+      let mediaFiles: Map<string, string> | undefined;
+      if (mediaKeys.length > 0) {
+        mediaFiles = new Map<string, string>();
+        for (const req of mediaKeys) {
+          const mediaResp = await cache.match(req);
+          if (mediaResp) {
+            const filename = new URL(req.url).pathname.replace("/sync/media/", "");
+            mediaFiles.set(filename, URL.createObjectURL(await mediaResp.blob()));
+          }
+        }
+      }
+
+      activeDeckInputSig.value = { kind: "sqlite", bytes, mediaFiles };
+      activeViewSig.value = "review";
+      reviewModeSig.value = "studying";
+      return;
+    }
+    persistActiveDeckSourceId(null);
+    return;
+  }
+
   const sampleDeck = sampleDeckMap.get(activeDeckSourceIdSig.value);
   if (sampleDeck) {
+    // Don't auto-load sample decks when sync is active
+    if (syncActiveSig.value) {
+      persistActiveDeckSourceId(null);
+      return;
+    }
     activeDeckInputSig.value = { kind: "sample", data: sampleDeck.data };
     activeViewSig.value = "review";
+    reviewModeSig.value = "studying";
     return;
   }
 
@@ -85,6 +126,7 @@ ankiCachePromise.then(async (cache) => {
   if (response) {
     activeDeckInputSig.value = { kind: "blob", blob: await response.blob() };
     activeViewSig.value = "review";
+    reviewModeSig.value = "studying";
     return;
   }
 
@@ -105,6 +147,7 @@ export async function addCachedFile(file: File) {
   persistActiveDeckSourceId(file.name);
   activeDeckInputSig.value = { kind: "blob", blob: file };
   activeViewSig.value = "review";
+  reviewModeSig.value = "studying";
 }
 
 export async function loadCachedFile(name: string) {
@@ -114,6 +157,7 @@ export async function loadCachedFile(name: string) {
     persistActiveDeckSourceId(name);
     activeDeckInputSig.value = { kind: "blob", blob: await response.blob() };
     activeViewSig.value = "review";
+    reviewModeSig.value = "studying";
   }
 }
 
@@ -126,6 +170,7 @@ export function loadSampleDeck(id: string) {
   persistActiveDeckSourceId(id);
   activeDeckInputSig.value = { kind: "sample", data: sampleDeck.data };
   activeViewSig.value = "review";
+  reviewModeSig.value = "studying";
 }
 
 export async function deleteCachedFile(name: string) {
@@ -147,14 +192,62 @@ export async function deleteCachedFile(name: string) {
   clearLoadedDeck();
 }
 
-export function loadSyncedCollection(bytes: Uint8Array, mediaFiles?: Map<string, string>) {
-  const sourceId = "sync-collection";
-  persistActiveDeckSourceId(sourceId);
+const SYNC_COLLECTION_ID = "sync-collection";
+
+export async function loadSyncedCollection(
+  bytes: Uint8Array,
+  mediaBlobs?: Map<string, Blob>,
+) {
+  // Cache SQLite bytes and media blobs so they survive page reloads
+  const cache = await ankiCachePromise;
+  await cache.put(
+    "/sync/collection.sqlite",
+    new Response(new Blob([bytes.buffer as ArrayBuffer])),
+  );
+
+  // Clear old media entries and store new ones
+  const existingKeys = await cache.keys();
+  await Promise.all(
+    existingKeys
+      .filter((req) => new URL(req.url).pathname.startsWith("/sync/media/"))
+      .map((req) => cache.delete(req)),
+  );
+
+  let mediaFiles: Map<string, string> | undefined;
+  if (mediaBlobs && mediaBlobs.size > 0) {
+    mediaFiles = new Map<string, string>();
+    const puts: Promise<void>[] = [];
+    for (const [filename, blob] of mediaBlobs) {
+      mediaFiles.set(filename, URL.createObjectURL(blob));
+      puts.push(cache.put(`/sync/media/${filename}`, new Response(blob)));
+    }
+    await Promise.all(puts);
+  }
+
+  persistActiveDeckSourceId(SYNC_COLLECTION_ID);
   activeDeckInputSig.value = { kind: "sqlite", bytes, mediaFiles };
   activeViewSig.value = "review";
+  reviewModeSig.value = "studying";
+}
+
+export async function clearSyncedCollection() {
+  const cache = await ankiCachePromise;
+  await cache.delete("/sync/collection.sqlite");
+  const allKeys = await cache.keys();
+  await Promise.all(
+    allKeys
+      .filter((req) => new URL(req.url).pathname.startsWith("/sync/media/"))
+      .map((req) => cache.delete(req)),
+  );
+  if (activeDeckSourceIdSig.value === SYNC_COLLECTION_ID) {
+    clearLoadedDeck();
+  }
 }
 
 export const sampleDecksSig = sampleDecks;
+
+// Sync state: tracks whether user is logged in to a sync server
+export const syncActiveSig = ref(readSyncState().hkey !== null);
 
 // Resource replacement: watch active deck input and fetch data
 export const ankiDataSig = shallowRef<AnkiData | null>(null);
@@ -243,7 +336,7 @@ export const schedulerSettingsSig = ref<SchedulerSettings>(DEFAULT_SCHEDULER_SET
 
 export const reviewQueueSig = shallowRef<ReviewQueue | null>(null);
 
-export const dueCardsSig = shallowRef<ReviewCard[]>([]);
+const dueCardsSig = shallowRef<ReviewCard[]>([]);
 
 export const currentReviewCardSig = shallowRef<ReviewCard | null>(null);
 

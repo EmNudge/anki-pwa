@@ -10,6 +10,10 @@ import {
   deleteCachedFile,
   loadSampleDeck,
   sampleDecksSig,
+  syncActiveSig,
+  deckInfoSig,
+  selectedDeckIdSig,
+  reviewModeSig,
 } from "../stores";
 
 const fileInput = ref<HTMLInputElement>();
@@ -24,6 +28,11 @@ const uploadedDecks = computed(() =>
 function handleFileInput(event: Event) {
   const file = (event.target as HTMLInputElement).files?.[0];
   if (file) addCachedFile(file);
+}
+
+function selectSubdeck(deckId: string) {
+  selectedDeckIdSig.value = deckId;
+  reviewModeSig.value = "studying";
 }
 </script>
 
@@ -41,7 +50,7 @@ function handleFileInput(event: Event) {
       <Button variant="primary" size="sm" @click="fileInput?.click()"> Add File </Button>
     </div>
 
-    <section class="library-section">
+    <section v-if="!syncActiveSig" class="library-section">
       <div class="section-header">
         <h3 class="section-title">Sample Decks</h3>
         <span class="section-count">{{ sampleDecks.length }}</span>
@@ -59,6 +68,35 @@ function handleFileInput(event: Event) {
             <span class="file-meta">{{ sampleDeck.meta }}</span>
           </div>
         </div>
+      </div>
+    </section>
+
+    <section v-if="syncActiveSig && deckInfoSig" class="library-section">
+      <div class="section-header">
+        <h3 class="section-title">Synced Decks</h3>
+        <span class="section-count">{{ deckInfoSig.subdecks.length }}</span>
+      </div>
+      <div v-if="deckInfoSig.subdecks.length === 0" class="empty-state">
+        <p class="empty-text">No decks synced yet. Pull your collection from the Sync tab.</p>
+      </div>
+      <div v-else class="file-grid">
+        <div
+          v-for="subdeck in deckInfoSig.subdecks"
+          :key="subdeck.id"
+          :class="['file-card', { 'file-card--active': selectedDeckIdSig === subdeck.id }]"
+          @click="selectSubdeck(subdeck.id)"
+        >
+          <div class="file-info">
+            <span class="file-name">{{ subdeck.name }}</span>
+            <span class="file-meta">{{ subdeck.cardCount }} cards</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section v-if="syncActiveSig && !deckInfoSig" class="library-section">
+      <div class="empty-state">
+        <p class="empty-text">No collection loaded. Pull your collection from the Sync tab.</p>
       </div>
     </section>
 

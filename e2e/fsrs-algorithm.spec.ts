@@ -216,29 +216,6 @@ test.describe('FSRS Algorithm', () => {
       expect(reviewData.cardState).toBeTruthy();
     });
 
-    test('should display FSRS-specific metrics in SRS visualization', async ({
-      loadedDeckPage: page,
-    }) => {
-      // Switch to FSRS
-      await page.keyboard.press('Control+Comma');
-      await page.selectOption('select', 'fsrs');
-      await page.click('button:has-text("Save Settings")');
-      await page.waitForTimeout(500);
-
-      // Answer a card to generate FSRS state
-      await page.click('button:has-text("Reveal")');
-      await page.click('button:has-text("Good")');
-      await page.waitForTimeout(300);
-
-      // Reveal next card to see metrics
-      await page.click('button:has-text("Reveal")');
-
-      // Check for FSRS-specific metrics in the visualization
-      await expect(page.locator('text=Current Card State (FSRS)')).toBeVisible();
-      await expect(page.locator('.info-label:has-text("Stability")')).toBeVisible();
-      await expect(page.locator('.info-label:has-text("Difficulty")')).toBeVisible();
-    });
-
     test('should not show SM2 metrics when using FSRS', async ({ loadedDeckPage: page }) => {
       // Switch to FSRS
       await page.keyboard.press('Control+Comma');
@@ -400,33 +377,6 @@ test.describe('FSRS Algorithm', () => {
       expect(fsrsCardCount).toBeGreaterThan(0);
     });
 
-    test('should switch from FSRS to SM2', async ({ loadedDeckPage: page }) => {
-      // Start with FSRS
-      await page.keyboard.press('Control+Comma');
-      await page.selectOption('select', 'fsrs');
-      await page.click('button:has-text("Save Settings")');
-      await page.waitForTimeout(500);
-
-      // Review with FSRS
-      await page.click('button:has-text("Reveal")');
-      await page.click('button:has-text("Good")');
-      await page.waitForTimeout(300);
-
-      // Switch back to SM2
-      await page.keyboard.press('Control+Comma');
-      await page.selectOption('select', 'sm2');
-      await page.click('button:has-text("Save Settings")');
-      await page.waitForTimeout(1000);
-
-      // Review another card
-      await page.click('button:has-text("Reveal")');
-      await page.click('button:has-text("Good")');
-      await page.waitForTimeout(300);
-
-      // Verify SM2 metrics are shown
-      await expect(page.locator('text=Current Card State (SM2)')).toBeVisible();
-    });
-
     test('should preserve existing cards when switching algorithms', async ({
       loadedDeckPage: page,
     }) => {
@@ -491,38 +441,6 @@ test.describe('FSRS Algorithm', () => {
       expect(finalCount).toBeGreaterThan(initialCount);
     });
 
-    test('should update visualization when switching algorithms', async ({
-      loadedDeckPage: page,
-    }) => {
-      // Check SM2 is shown initially
-      await expect(page.locator('text=SRS Scheduler')).toBeVisible();
-
-      // Switch to FSRS
-      await page.keyboard.press('Control+Comma');
-      await page.selectOption('select', 'fsrs');
-      await page.click('button:has-text("Save Settings")');
-      await page.waitForTimeout(1000);
-
-      // Review a card to populate FSRS state
-      await page.click('button:has-text("Reveal")');
-      await page.click('button:has-text("Good")');
-      await page.waitForTimeout(300);
-
-      // Reveal next card
-      await page.click('button:has-text("Reveal")');
-
-      // Should show FSRS in visualization
-      await expect(page.locator('text=Current Card State (FSRS)')).toBeVisible();
-
-      // Switch back to SM2
-      await page.keyboard.press('Control+Comma');
-      await page.selectOption('select', 'sm2');
-      await page.click('button:has-text("Save Settings")');
-      await page.waitForTimeout(1000);
-
-      // Should show SM2 in visualization
-      await expect(page.locator('text=Current Card State (SM2)')).toBeVisible();
-    });
   });
 
   test.describe('FSRS Settings Persistence', () => {

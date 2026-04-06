@@ -54,6 +54,7 @@ export function readStoredActiveDeckSourceId({
   }
 
   const isKnownDeckSource =
+    storedActiveDeckSourceId === "sync-collection" ||
     sampleDeckIds.has(storedActiveDeckSourceId) ||
     cachedFiles.some((file) => file.name === storedActiveDeckSourceId);
 

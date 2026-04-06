@@ -83,12 +83,13 @@ function setupIframe() {
     img.addEventListener("load", updateHeight);
   }
 
-  // Wire up audio buttons — clicks emit to parent since scripts are blocked
+  // Wire up audio buttons — emit raw src attribute to parent for playback
   for (const btn of doc.querySelectorAll<HTMLElement>(".audio-container button")) {
     btn.addEventListener("click", () => {
       const audio = btn.closest(".audio-container")?.querySelector("audio");
-      if (audio?.src) {
-        emit("audioButtonClick", audio.src);
+      const src = audio?.getAttribute("src");
+      if (src) {
+        emit("audioButtonClick", src);
       }
     });
   }
@@ -131,7 +132,7 @@ onBeforeUnmount(() => {
   <iframe
     ref="iframeRef"
     :srcdoc="srcdoc"
-    sandbox="allow-same-origin"
+    sandbox="allow-same-origin allow-scripts"
     class="sandboxed-card"
     @load="setupIframe"
   />

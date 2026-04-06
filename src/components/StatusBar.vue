@@ -1,13 +1,19 @@
 <script setup lang="ts">
-import { type AppView, activeViewSig } from "../stores";
+import { type AppView, activeViewSig, reviewModeSig } from "../stores";
 
 const tabs: { id: AppView; label: string }[] = [
-  { id: "files", label: "Files" },
   { id: "review", label: "Review" },
   { id: "create", label: "Create Deck" },
-  { id: "ai-generate", label: "AI Generate" },
   { id: "sync", label: "Sync" },
 ];
+
+function handleTabClick(tabId: AppView) {
+  if (tabId === "review" && activeViewSig.value === "review") {
+    reviewModeSig.value = "deck-list";
+  } else {
+    activeViewSig.value = tabId;
+  }
+}
 </script>
 
 <template>
@@ -17,7 +23,7 @@ const tabs: { id: AppView; label: string }[] = [
         v-for="tab in tabs"
         :key="tab.id"
         :class="['tab', { 'tab--active': activeViewSig === tab.id }]"
-        @click="activeViewSig = tab.id"
+        @click="handleTabClick(tab.id)"
       >
         {{ tab.label }}
       </button>
