@@ -83,11 +83,6 @@ export const test = base.extend<{
     await clearReviewData(page);
     await clearDeckCache(page);
 
-    // Enable scheduler by default for tests (SRS algorithm needs this)
-    await page.evaluate(() => {
-      localStorage.setItem('schedulerEnabled', 'true');
-    });
-
     // Reload to ensure clean state
     await page.reload({ waitUntil: 'networkidle' });
 

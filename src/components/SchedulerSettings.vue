@@ -1,7 +1,12 @@
 <script setup lang="ts">
 import { ref, watch } from "vue";
 import { reviewDB } from "../scheduler/db";
-import { schedulerSettingsSig, initializeReviewQueue, cardsSig } from "../stores";
+import {
+  schedulerSettingsSig,
+  initializeReviewQueue,
+  settingsTargetDeckIdSig,
+  getActiveDeckId,
+} from "../stores";
 import type { SchedulerSettings } from "../scheduler/types";
 import { Button, Modal } from "../design-system";
 
@@ -25,12 +30,14 @@ watch(
 
 async function handleSave() {
   const newSettings = JSON.parse(JSON.stringify(settings.value)) as SchedulerSettings;
-  schedulerSettingsSig.value = newSettings;
+  const deckId = settingsTargetDeckIdSig.value ?? getActiveDeckId();
 
-  const cards = cardsSig.value;
-  if (cards.length > 0) {
-    const deckId = `deck-${cards.length}`;
-    await reviewDB.saveSettings(deckId, newSettings);
+  await reviewDB.saveSettings(deckId, newSettings);
+  schedulerSettingsSig.value = newSettings;
+  settingsTargetDeckIdSig.value = null;
+
+  // Re-initialize if this is the active deck
+  if (deckId === getActiveDeckId()) {
     await initializeReviewQueue();
   }
 
@@ -53,8 +60,23 @@ function updateFsrsParam<K extends keyof NonNullable<SchedulerSettings["fsrsPara
 </script>
 
 <template>
-  <Modal title="Scheduler Settings" :is-open="isOpen" size="sm" @close="emit('close')">
+  <Modal title="Deck Settings" :is-open="isOpen" size="sm" @close="emit('close')">
     <div class="form-section">
+      <div class="section-title">Scheduler</div>
+      <div class="form-group">
+        <label class="toggle-row">
+          <span class="form-label" style="margin-bottom: 0">Enable Scheduler</span>
+          <input
+            type="checkbox"
+            :checked="settings.enabled"
+            @change="updateSetting('enabled', ($event.target as HTMLInputElement).checked)"
+          />
+        </label>
+        <div class="help-text">When disabled, cards are shown sequentially without spaced repetition</div>
+      </div>
+    </div>
+
+    <div v-if="settings.enabled" class="form-section">
       <div class="section-title">Algorithm</div>
       <div class="form-group">
         <label class="form-label">Scheduling Algorithm</label>
@@ -78,7 +100,7 @@ function updateFsrsParam<K extends keyof NonNullable<SchedulerSettings["fsrsPara
       </div>
     </div>
 
-    <div class="form-section">
+    <div v-if="settings.enabled" class="form-section">
       <div class="section-title">Daily Limits</div>
       <div class="form-group">
         <label class="form-label">New Cards per Day</label>
@@ -111,7 +133,7 @@ function updateFsrsParam<K extends keyof NonNullable<SchedulerSettings["fsrsPara
       </div>
     </div>
 
-    <div v-if="settings.algorithm === 'fsrs'" class="form-section">
+    <div v-if="settings.enabled && settings.algorithm === 'fsrs'" class="form-section">
       <div class="section-title">FSRS Parameters</div>
       <div class="form-group">
         <label class="form-label">Target Retention (0-1)</label>
@@ -200,5 +222,11 @@ function updateFsrsParam<K extends keyof NonNullable<SchedulerSettings["fsrsPara
   font-size: var(--font-size-xs);
   color: var(--color-text-secondary);
   margin-top: var(--spacing-1);
+}
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
 }
 </style>

@@ -64,6 +64,11 @@ export interface CardReviewState {
  */
 export interface SchedulerSettings {
   /**
+   * Whether the scheduler is enabled for this deck
+   */
+  enabled: boolean;
+
+  /**
    * Scheduling algorithm to use
    */
   algorithm: AlgorithmType;
@@ -108,6 +113,7 @@ export interface SchedulerSettings {
  * Default scheduler settings
  */
 export const DEFAULT_SCHEDULER_SETTINGS: SchedulerSettings = {
+  enabled: true,
   algorithm: "sm2",
   dailyNewLimit: 20,
   dailyReviewLimit: 200,

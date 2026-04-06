@@ -20,7 +20,7 @@ import {
 import { readSyncState } from "./lib/ankiSync";
 
 // View state
-export type AppView = "review" | "create" | "sync";
+export type AppView = "review" | "browse" | "create" | "sync";
 export const activeViewSig = ref<AppView>("review");
 export const reviewModeSig = ref<"deck-list" | "studying">("deck-list");
 
@@ -294,7 +294,11 @@ export const cardsSig = computed(() => {
   const selectedDeck = ankiData.decks[selectedDeckId];
   if (!selectedDeck) return ankiData.cards;
 
-  return ankiData.cards.filter((card) => card.deckName === selectedDeck.name);
+  // Include cards from this deck and all child decks (prefix match on "Name::")
+  const prefix = selectedDeck.name + "::";
+  return ankiData.cards.filter(
+    (card) => card.deckName === selectedDeck.name || card.deckName.startsWith(prefix),
+  );
 });
 
 // Reset selection when cards change
@@ -323,16 +327,9 @@ export function toggleSoundEffects() {
 }
 
 // Scheduler and review queue state
-export const schedulerEnabledSig = ref(localStorage.getItem("schedulerEnabled") === "true");
-
-export function toggleScheduler() {
-  const newValue = !schedulerEnabledSig.value;
-  schedulerEnabledSig.value = newValue;
-  localStorage.setItem("schedulerEnabled", newValue.toString());
-  clearReviewQueueState();
-}
-
 export const schedulerSettingsSig = ref<SchedulerSettings>(DEFAULT_SCHEDULER_SETTINGS);
+
+export const schedulerEnabledSig = computed(() => schedulerSettingsSig.value.enabled);
 
 export const reviewQueueSig = shallowRef<ReviewQueue | null>(null);
 
@@ -341,6 +338,27 @@ const dueCardsSig = shallowRef<ReviewCard[]>([]);
 export const currentReviewCardSig = shallowRef<ReviewCard | null>(null);
 
 export const schedulerSettingsModalOpenSig = ref(false);
+/** The deck ID whose settings are being edited in the modal */
+export const settingsTargetDeckIdSig = ref<string | null>(null);
+
+/**
+ * Open the scheduler settings modal for a specific deck.
+ * Loads that deck's persisted settings into the form.
+ */
+export async function openDeckSettings(deckId: string) {
+  const settings = await reviewDB.getSettings(deckId);
+  schedulerSettingsSig.value = settings;
+  settingsTargetDeckIdSig.value = deckId;
+  schedulerSettingsModalOpenSig.value = true;
+}
+
+/**
+ * Resolve the deck ID used for settings/review-queue storage.
+ * For the currently-studying deck this is based on selected cards.
+ */
+export function getActiveDeckId(): string {
+  return `deck-${cardsSig.value.length}`;
+}
 
 function clearReviewQueueState() {
   reviewQueueSig.value = null;
@@ -364,6 +382,11 @@ export async function initializeReviewQueue() {
 
   const settings = await reviewDB.getSettings(deckId);
   schedulerSettingsSig.value = settings;
+
+  if (!settings.enabled) {
+    clearReviewQueueState();
+    return;
+  }
 
   const queue = new ReviewQueue(deckId, settings);
   await queue.init();
