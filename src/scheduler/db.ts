@@ -101,157 +101,83 @@ class ReviewDB {
     return this.db;
   }
 
-  /**
-   * Get review state for a card
-   */
+  /** Run a single IDBRequest-returning operation inside a transaction. */
+  private async run<T>(
+    storeNames: string | string[],
+    mode: IDBTransactionMode,
+    fn: (tx: IDBTransaction) => IDBRequest,
+    mapResult?: (result: unknown) => T,
+  ): Promise<T> {
+    const db = await this.ensureInit();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(storeNames, mode);
+      const request = fn(tx);
+      request.onsuccess = () => resolve(mapResult ? mapResult(request.result) : (request.result as T));
+      request.onerror = () => reject(request.error);
+    });
+  }
+
   async getCard(cardId: string): Promise<CardReviewState | null> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const transaction = db.transaction(["cards"], "readonly");
-      const store = transaction.objectStore("cards");
-      const request = store.get(cardId);
-
-      request.onsuccess = () => resolve(request.result || null);
-      request.onerror = () => reject(request.error);
-    });
+    return this.run(["cards"], "readonly", (tx) =>
+      tx.objectStore("cards").get(cardId),
+      (r) => r as CardReviewState | null ?? null,
+    );
   }
 
-  /**
-   * Save or update card review state
-   */
   async saveCard(card: CardReviewState): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const transaction = db.transaction(["cards"], "readwrite");
-      const store = transaction.objectStore("cards");
-      const request = store.put(card);
-
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
-    });
+    await this.run(["cards"], "readwrite", (tx) =>
+      tx.objectStore("cards").put(card),
+    );
   }
 
-  /**
-   * Get all cards for a deck
-   */
   async getCardsForDeck(deckId: string): Promise<CardReviewState[]> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const transaction = db.transaction(["cards"], "readonly");
-      const store = transaction.objectStore("cards");
-      const index = store.index("deckId");
-      const request = index.getAll(deckId);
-
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
+    return this.run(["cards"], "readonly", (tx) =>
+      tx.objectStore("cards").index("deckId").getAll(deckId),
+    );
   }
 
-  /**
-   * Get all card IDs for a deck (lightweight)
-   */
   async getCardIdsForDeck(deckId: string): Promise<string[]> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const transaction = db.transaction(["cards"], "readonly");
-      const store = transaction.objectStore("cards");
-      const index = store.index("deckId");
-      const request = index.getAllKeys(deckId);
-
-      request.onsuccess = () => resolve(request.result as string[]);
-      request.onerror = () => reject(request.error);
-    });
+    return this.run(["cards"], "readonly", (tx) =>
+      tx.objectStore("cards").index("deckId").getAllKeys(deckId),
+    ) as Promise<string[]>;
   }
 
-  /**
-   * Save a review log entry
-   */
   async saveReviewLog(log: StoredReviewLog): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const transaction = db.transaction(["reviewLogs"], "readwrite");
-      const store = transaction.objectStore("reviewLogs");
-      const request = store.put(log);
-
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
-    });
+    await this.run(["reviewLogs"], "readwrite", (tx) =>
+      tx.objectStore("reviewLogs").put(log),
+    );
   }
 
-  /**
-   * Get review logs for a card
-   */
   async getReviewLogsForCard(cardId: string): Promise<StoredReviewLog[]> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const transaction = db.transaction(["reviewLogs"], "readonly");
-      const store = transaction.objectStore("reviewLogs");
-      const index = store.index("cardId");
-      const request = index.getAll(cardId);
-
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
+    return this.run(["reviewLogs"], "readonly", (tx) =>
+      tx.objectStore("reviewLogs").index("cardId").getAll(cardId),
+    );
   }
 
-  /**
-   * Get daily statistics
-   */
   async getDailyStats(date: string): Promise<DailyStats | null> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const transaction = db.transaction(["dailyStats"], "readonly");
-      const store = transaction.objectStore("dailyStats");
-      const request = store.get(date);
-
-      request.onsuccess = () => resolve(request.result || null);
-      request.onerror = () => reject(request.error);
-    });
+    return this.run(["dailyStats"], "readonly", (tx) =>
+      tx.objectStore("dailyStats").get(date),
+      (r) => r as DailyStats | null ?? null,
+    );
   }
 
-  /**
-   * Save daily statistics
-   */
   async saveDailyStats(stats: DailyStats): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const transaction = db.transaction(["dailyStats"], "readwrite");
-      const store = transaction.objectStore("dailyStats");
-      const request = store.put(stats);
-
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
-    });
+    await this.run(["dailyStats"], "readwrite", (tx) =>
+      tx.objectStore("dailyStats").put(stats),
+    );
   }
 
-  /**
-   * Get scheduler settings for a deck
-   */
   async getSettings(deckId: string): Promise<SchedulerSettings> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const transaction = db.transaction(["settings"], "readonly");
-      const store = transaction.objectStore("settings");
-      const request = store.get(deckId);
-
-      request.onsuccess = () => resolve(request.result?.settings || DEFAULT_SCHEDULER_SETTINGS);
-      request.onerror = () => reject(request.error);
-    });
+    return this.run(["settings"], "readonly", (tx) =>
+      tx.objectStore("settings").get(deckId),
+      (r) => (r as { settings?: SchedulerSettings } | undefined)?.settings ?? DEFAULT_SCHEDULER_SETTINGS,
+    );
   }
 
-  /**
-   * Save scheduler settings for a deck
-   */
   async saveSettings(deckId: string, settings: SchedulerSettings): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const transaction = db.transaction(["settings"], "readwrite");
-      const store = transaction.objectStore("settings");
-      const request = store.put({ deckId, settings });
-
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
-    });
+    await this.run(["settings"], "readwrite", (tx) =>
+      tx.objectStore("settings").put({ deckId, settings }),
+    );
   }
 
   /**

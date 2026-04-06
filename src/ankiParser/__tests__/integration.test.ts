@@ -109,9 +109,9 @@ describe("Anki Parser Integration Tests", () => {
       const note2Card = result.cards.find((c) => c.values["Example Sentence"] === "Me gusta comer");
       expect(note2Card?.values.Audio).toBe("[sound:comer.mp3]");
 
-      // Find note 3's card — Audio should be null (empty field)
+      // Find note 3's card — Audio should be empty string (empty field preserved)
       const note3Card = result.cards.find((c) => c.values.Spanish === "casa");
-      expect(note3Card?.values.Audio).toBe(null);
+      expect(note3Card?.values.Audio).toBe("");
       expect(note3Card?.tags).toContain("nouns");
     });
 
@@ -424,8 +424,8 @@ describe("Anki Parser Integration Tests", () => {
       insertAnki2Data(db, models, notes);
       const result = getDataFromAnki2(db);
 
-      expect(result.cards[0]?.values.Field2).toBe(null);
-      expect(result.cards[0]?.values.Field3).toBe(null);
+      expect(result.cards[0]?.values.Field2).toBe("");
+      expect(result.cards[0]?.values.Field3).toBe("");
     });
 
     it("should handle Anki21b with RTL text fields", async () => {

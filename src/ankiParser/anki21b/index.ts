@@ -3,7 +3,8 @@ import { Database } from "sql.js";
 import { executeQuery, executeQueryAll } from "~/utils/sql";
 import { parseFieldConfigProto, parseTemplatesProto } from "./proto";
 import { assertTruthy } from "~/utils/assert";
-import { type CardScheduling, type RevlogEntry, parseFsrsData, getQueueName, getTypeName, getDueType, getRevlogTypeName } from "../anki2";
+import { type CardScheduling, type RevlogEntry } from "../anki2";
+import { buildScheduling, resolveCardDeckName, isBlankCard, parseRevlog } from "../shared";
 
 export type AnkiDB21bData = {
   cards: {
@@ -86,6 +87,20 @@ export function getDataFromAnki21b(db: Database): AnkiDB21bData {
     }));
   })();
 
+  // Pre-build fields-by-notetype map (sorted by ord) to avoid O(n²) lookups
+  const fieldsByNtid = new Map<string, typeof fields>();
+  for (const field of fields) {
+    let list = fieldsByNtid.get(field.ntid);
+    if (!list) {
+      list = [];
+      fieldsByNtid.set(field.ntid, list);
+    }
+    list.push(field);
+  }
+  for (const list of fieldsByNtid.values()) {
+    list.sort((a, b) => a.ord - b.ord);
+  }
+
   const templatesMap = (() => {
     const templates = executeQueryAll<{
       name: string;
@@ -163,10 +178,7 @@ export function getDataFromAnki21b(db: Database): AnkiDB21bData {
         const note = notesMap.get(cardRow.nid);
         if (!note) return null;
 
-        // Sort fields by ord to ensure correct mapping to \x1F-delimited values
-        const noteFields = fields
-          .filter((field) => note.mid === field.ntid)
-          .sort((a, b) => a.ord - b.ord);
+        const noteFields = fieldsByNtid.get(note.mid) ?? [];
         const fieldNames = noteFields.map((field) => field.name);
 
         const allTemplates = templatesMap.get(note.mid);
@@ -176,12 +188,7 @@ export function getDataFromAnki21b(db: Database): AnkiDB21bData {
         const matchingTemplate = allTemplates.find((t) => t.ord === cardRow.ord) ?? allTemplates[0];
         assertTruthy(matchingTemplate, `No template found for ord ${cardRow.ord}`);
 
-        // Resolve deck name, using odid for filtered decks
-        const effectiveDid = cardRow.odid !== 0 ? cardRow.odid : cardRow.did;
-        const cardDeckName = decks[effectiveDid.toString()]?.name ?? "Unknown";
-
-        // Parse FSRS state from card.data (JSON or protobuf)
-        const fsrs = parseFsrsData(cardRow.data);
+        const cardDeckName = resolveCardDeckName(cardRow, decks);
 
         // Get notetype info for this card
         const noteTypeInfo = notesTypeMap.get(note.mid);
@@ -200,22 +207,8 @@ export function getDataFromAnki21b(db: Database): AnkiDB21bData {
           return [i, mode, fieldOrds] as [number, string, number[]];
         });
 
-        const reqForOrd = req.find(([ord]) => ord === cardRow.ord);
-        if (reqForOrd) {
-          const [, mode, fieldIndices] = reqForOrd;
-          if (mode === "any") {
-            const anyFilled = fieldIndices.some((idx) => {
-              const fieldName = fieldNames[idx];
-              return fieldName && (values[fieldName]?.trim() ?? "") !== "";
-            });
-            if (!anyFilled) return null;
-          } else if (mode === "all") {
-            const allFilled = fieldIndices.every((idx) => {
-              const fieldName = fieldNames[idx];
-              return fieldName && (values[fieldName]?.trim() ?? "") !== "";
-            });
-            if (!allFilled) return null;
-          }
+        if (isBlankCard(req, cardRow.ord, fieldNames, values)) {
+          return null;
         }
 
         return {
@@ -236,42 +229,13 @@ export function getDataFromAnki21b(db: Database): AnkiDB21bData {
           latexPre: noteTypeInfo?.latexPre ?? "",
           latexPost: noteTypeInfo?.latexPost ?? "",
           req,
-          scheduling: {
-            type: cardRow.type,
-            typeName: getTypeName(cardRow.type),
-            queue: cardRow.queue,
-            queueName: getQueueName(cardRow.queue),
-            due: cardRow.due,
-            dueType: getDueType(cardRow.queue),
-            ivl: cardRow.ivl,
-            ivlUnit: cardRow.ivl < 0 ? "seconds" as const : "days" as const,
-            factor: cardRow.factor,
-            easeFactor: cardRow.factor === 0 ? null : cardRow.factor / 1000,
-            reps: cardRow.reps,
-            lapses: cardRow.lapses,
-            odue: cardRow.odue,
-            flags: cardRow.flags,
-            left: cardRow.left,
-            fsrs,
-          },
+          scheduling: buildScheduling(cardRow),
         };
       })
       .filter((c): c is NonNullable<typeof c> => c !== null);
   })();
 
-  // Parse revlog if the table exists
-  const revlog = (() => {
-    try {
-      const rows = executeQueryAll<Omit<RevlogEntry, "typeName">>(
-        db,
-        "SELECT id, cid, usn, ease, ivl, lastIvl, factor, time, type FROM revlog",
-      );
-      return rows.map((r) => ({ ...r, typeName: getRevlogTypeName(r.type) }));
-    } catch {
-      // revlog table may not exist in all databases
-      return [];
-    }
-  })();
+  const revlog = parseRevlog(db);
 
   // Parse tags table if it exists (anki21b has a dedicated tags table)
   const tagsTable = (() => {

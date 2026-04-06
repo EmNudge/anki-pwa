@@ -2,6 +2,7 @@
 import { ref, computed } from "vue";
 import { Button } from "../design-system";
 import AiDeckGenerator from "./AiDeckGenerator.vue";
+import { downloadBlob } from "../utils/downloadBlob";
 
 const mode = ref<"manual" | "ai">("manual");
 const rawInput = ref("");
@@ -24,13 +25,7 @@ function exportDeck() {
   if (parsedRows.value.length === 0) return;
 
   const tsv = parsedRows.value.map((r) => `${r.front}\t${r.back}`).join("\n");
-  const blob = new Blob([tsv], { type: "text/plain" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "deck.txt";
-  a.click();
-  URL.revokeObjectURL(url);
+  downloadBlob(new Blob([tsv], { type: "text/plain" }), "deck.txt");
 }
 </script>
 
