@@ -1,8 +1,8 @@
 import type { CardReviewState, Answer, SchedulerSettings, DailyStats } from "./types";
 import { reviewDB } from "./db";
 import type { SchedulingAlgorithm } from "./algorithm";
-import { SM2Algorithm } from "./sm2-algorithm";
 import { FSRSAlgorithm } from "./fsrs-algorithm";
+import { AnkiSM2Algorithm } from "./anki-sm2-algorithm";
 
 /**
  * Represents a card ready for review, combining deck data with review state
@@ -57,7 +57,7 @@ export class ReviewQueue {
     if (settings.algorithm === "fsrs") {
       this.algorithm = new FSRSAlgorithm(settings.fsrsParams);
     } else {
-      this.algorithm = new SM2Algorithm();
+      this.algorithm = new AnkiSM2Algorithm(settings.sm2Params);
     }
   }
 
@@ -127,15 +127,16 @@ export class ReviewQueue {
   }
 
   /**
-   * Filter and sort queue to get cards due for review
+   * Filter and sort queue to get cards due for review.
+   * Order matches Anki: learning cards first, then reviews, then new cards.
    */
   getDueCards(queue: ReviewCard[]): ReviewCard[] {
     const now = new Date();
     const nowMs = now.getTime();
 
-    // Single pass: classify cards and cache due dates
-    const newCards: ReviewCard[] = [];
+    const learningCards: ReviewCard[] = [];
     const dueReviews: ReviewCard[] = [];
+    const newCards: ReviewCard[] = [];
     const aheadCards: ReviewCard[] = [];
     const dueDateCache = new Map<string, number>();
 
@@ -147,6 +148,9 @@ export class ReviewQueue {
 
         if (card.isNew) {
           newCards.push(card);
+        } else if (this.algorithm.isInLearning?.(card.reviewState.cardState)) {
+          // Learning/relearning cards — always include (shown when due)
+          learningCards.push(card);
         } else if (dueMs <= nowMs) {
           dueReviews.push(card);
         } else {
@@ -161,24 +165,27 @@ export class ReviewQueue {
     const reviewLeft = Math.max(0, this.settings.dailyReviewLimit - this.todayStats.reviewCount);
 
     const selectedNew = newCards.slice(0, newLeft);
-    const extraNew = newCards.slice(newLeft);
-
     const selectedReviews = dueReviews.slice(0, reviewLeft);
-    const extraReviews = dueReviews.slice(reviewLeft);
 
     const includeAhead =
-      this.settings.showAheadOfSchedule && reviewLeft <= 0 ? aheadCards : [];
+      this.settings.showAheadOfSchedule &&
+      selectedReviews.length === 0 &&
+      selectedNew.length === 0
+        ? aheadCards
+        : [];
 
-    const coreDue = [...selectedNew, ...selectedReviews, ...includeAhead];
-    const extras = [...extraNew, ...extraReviews];
+    // Sort learning cards by due time (soonest first)
+    learningCards.sort(
+      (a, b) => (dueDateCache.get(a.cardId) ?? 0) - (dueDateCache.get(b.cardId) ?? 0),
+    );
 
-    const finalDue = coreDue.length > 0 && extras.length > 0 ? [...coreDue, ...extras] : coreDue;
+    // Sort reviews by due date
+    selectedReviews.sort(
+      (a, b) => (dueDateCache.get(a.cardId) ?? 0) - (dueDateCache.get(b.cardId) ?? 0),
+    );
 
-    return finalDue.sort((a, b) => {
-      if (a.isNew && !b.isNew) return -1;
-      if (!a.isNew && b.isNew) return 1;
-      return (dueDateCache.get(a.cardId) ?? 0) - (dueDateCache.get(b.cardId) ?? 0);
-    });
+    // Anki order: learning first, then reviews, then new cards
+    return [...learningCards, ...selectedReviews, ...includeAhead, ...selectedNew];
   }
 
   /**
@@ -227,6 +234,13 @@ export class ReviewQueue {
       // Return current state on error
       return reviewCard.reviewState;
     }
+  }
+
+  /**
+   * Check if a card is in a learning/relearning phase
+   */
+  isCardInLearning(reviewCard: ReviewCard): boolean {
+    return this.algorithm.isInLearning?.(reviewCard.reviewState.cardState) ?? false;
   }
 
   /**

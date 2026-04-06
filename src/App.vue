@@ -24,6 +24,7 @@ import {
   selectedDeckIdSig,
   selectedTemplateSig,
   templatesSig,
+  updateDueCardsAfterReview,
 } from "./stores";
 import StatusBar from "./components/StatusBar.vue";
 import FileLibrary from "./components/FileLibrary.vue";
@@ -160,7 +161,8 @@ async function handleChooseAnswer(answer: Answer) {
 
     if (reviewCard && queue) {
       const reviewTimeMs = Date.now() - reviewStartTime.value;
-      await queue.processReview(reviewCard, answer, reviewTimeMs);
+      const updatedState = await queue.processReview(reviewCard, answer, reviewTimeMs);
+      updateDueCardsAfterReview(reviewCard.cardId, updatedState);
       moveToNextReviewCard();
     }
   } else {

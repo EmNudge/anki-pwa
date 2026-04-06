@@ -405,7 +405,44 @@ export async function initializeReviewQueue() {
 }
 
 /**
- * Move to the next card in the review queue
+ * Update the due cards list after a review.
+ * - Learning/relearning cards: update their state in the list (re-shown when due)
+ * - Graduated/reviewed cards: remove from list (they'll appear in future sessions)
+ */
+export function updateDueCardsAfterReview(
+  reviewedCardId: string,
+  updatedState: import("./scheduler/types").CardReviewState,
+) {
+  const queue = reviewQueueSig.value;
+  if (!queue) return;
+
+  const cards = [...dueCardsSig.value];
+  const idx = cards.findIndex((c) => c.cardId === reviewedCardId);
+  if (idx === -1) return;
+
+  const card = cards[idx]!;
+  const updatedCard: ReviewCard = {
+    ...card,
+    reviewState: updatedState,
+    isNew: false,
+  };
+
+  const stillLearning = queue.isCardInLearning(updatedCard);
+
+  if (stillLearning) {
+    // Keep in list with updated state — will be re-shown when due
+    cards[idx] = updatedCard;
+  } else {
+    // Graduated or reviewed — remove from current session
+    cards.splice(idx, 1);
+  }
+
+  dueCardsSig.value = cards;
+}
+
+/**
+ * Move to the next card in the review queue.
+ * Prioritizes learning cards that are due NOW, then continues sequentially.
  */
 export function moveToNextReviewCard() {
   const dueCards = dueCardsSig.value;
@@ -414,15 +451,56 @@ export function moveToNextReviewCard() {
     return;
   }
 
-  const currentIndex = dueCards.findIndex(
-    (card) => card.cardId === currentReviewCardSig.value?.cardId,
-  );
+  const queue = reviewQueueSig.value;
+  const nowMs = Date.now();
+  const currentId = currentReviewCardSig.value?.cardId;
 
-  if (currentIndex < dueCards.length - 1) {
-    currentReviewCardSig.value = dueCards[currentIndex + 1] ?? null;
-  } else {
-    currentReviewCardSig.value = dueCards[0] ?? null;
+  // First priority: any learning card that is due now (but not the one we just reviewed)
+  if (queue) {
+    for (const card of dueCards) {
+      if (card.cardId === currentId) continue;
+      if (!queue.isCardInLearning(card)) continue;
+      try {
+        const dueMs = new Date(
+          (card.reviewState.cardState as { due: number }).due,
+        ).getTime();
+        if (dueMs <= nowMs) {
+          currentReviewCardSig.value = card;
+          return;
+        }
+      } catch {
+        // skip
+      }
+    }
   }
+
+  // Second priority: next non-learning card in list
+  const currentIndex = dueCards.findIndex((card) => card.cardId === currentId);
+  for (let i = 1; i < dueCards.length; i++) {
+    const nextIdx = (currentIndex + i) % dueCards.length;
+    const candidate = dueCards[nextIdx]!;
+    if (queue?.isCardInLearning(candidate)) continue;
+    currentReviewCardSig.value = candidate;
+    return;
+  }
+
+  // Third priority: soonest learning card (even if not yet due)
+  const learningCards = dueCards.filter(
+    (c) => c.cardId !== currentId && queue?.isCardInLearning(c),
+  );
+  if (learningCards.length > 0) {
+    // Pick the one due soonest
+    learningCards.sort((a, b) => {
+      const aDue = (a.reviewState.cardState as { due: number }).due;
+      const bDue = (b.reviewState.cardState as { due: number }).due;
+      return aDue - bDue;
+    });
+    currentReviewCardSig.value = learningCards[0] ?? null;
+    return;
+  }
+
+  // No cards left
+  currentReviewCardSig.value = dueCards[0] ?? null;
 }
 
 /**
