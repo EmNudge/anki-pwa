@@ -198,8 +198,8 @@ async function insertRevlogs(
       reviewTime?: number;
     } | null;
 
-    const ivl = Math.round((reviewLog?.interval ?? 0) * 1); // days
-    const lastIvl = Math.round((reviewLog?.previousInterval ?? 0) * 1);
+    const ivl = Math.round(reviewLog?.interval ?? 0);
+    const lastIvl = Math.round(reviewLog?.previousInterval ?? 0);
     const factor = Math.round((reviewLog?.ease ?? 2.5) * 1000);
     const time = reviewLog?.reviewTime ?? 0; // ms
 

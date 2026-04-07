@@ -24,28 +24,30 @@ export type CardScheduling = {
   fsrs: { stability: number; difficulty: number; desiredRetention: number | undefined } | null;
 };
 
+const QUEUE_NAMES: Record<number, string> = {
+  [-3]: "schedulerBuried",
+  [-2]: "userBuried",
+  [-1]: "suspended",
+  0: "new",
+  1: "learning",
+  2: "review",
+  3: "dayLearning",
+  4: "preview",
+};
+
+const TYPE_NAMES: Record<number, string> = {
+  0: "new",
+  1: "learning",
+  2: "review",
+  3: "relearning",
+};
+
 export function getQueueName(queue: number): string {
-  switch (queue) {
-    case -3: return "schedulerBuried";
-    case -2: return "userBuried";
-    case -1: return "suspended";
-    case 0: return "new";
-    case 1: return "learning";
-    case 2: return "review";
-    case 3: return "dayLearning";
-    case 4: return "preview";
-    default: return "unknown";
-  }
+  return QUEUE_NAMES[queue] ?? "unknown";
 }
 
 export function getTypeName(type: number): string {
-  switch (type) {
-    case 0: return "new";
-    case 1: return "learning";
-    case 2: return "review";
-    case 3: return "relearning";
-    default: return "unknown";
-  }
+  return TYPE_NAMES[type] ?? "unknown";
 }
 
 export type RevlogEntry = {
@@ -61,25 +63,27 @@ export type RevlogEntry = {
   typeName: string;
 };
 
+const REVLOG_TYPE_NAMES: Record<number, string> = {
+  0: "learning",
+  1: "review",
+  2: "relearning",
+  3: "filtered",
+  4: "manual",
+};
+
+const DUE_TYPES: Record<number, CardScheduling["dueType"]> = {
+  0: "position",
+  1: "timestamp",
+  2: "dayOffset",
+  3: "dayLearningOffset",
+};
+
 export function getRevlogTypeName(type: number): string {
-  switch (type) {
-    case 0: return "learning";
-    case 1: return "review";
-    case 2: return "relearning";
-    case 3: return "filtered";
-    case 4: return "manual";
-    default: return "unknown";
-  }
+  return REVLOG_TYPE_NAMES[type] ?? "unknown";
 }
 
 export function getDueType(queue: number): CardScheduling["dueType"] {
-  switch (queue) {
-    case 0: return "position";
-    case 1: return "timestamp";
-    case 2: return "dayOffset";
-    case 3: return "dayLearningOffset";
-    default: return "position";
-  }
+  return DUE_TYPES[queue] ?? "position";
 }
 
 export type AnkiDB2Data = {

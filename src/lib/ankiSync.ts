@@ -80,19 +80,11 @@ function buildSyncForm(
 }
 
 /**
- * Post to an unauthenticated sync endpoint (e.g. hostKey).
+ * Post to a sync endpoint, optionally authenticated with a host key.
  */
-async function syncPost(url: string, data: unknown = {}): Promise<Response> {
-  const form = buildSyncForm(data);
-  return fetch(url, { method: "POST", body: form });
-}
-
-/**
- * Post to an authenticated sync endpoint with the host key.
- */
-async function syncPostAuth(
+async function syncPost(
   url: string,
-  hkey: string,
+  hkey?: string,
   data: unknown = {},
 ): Promise<Response> {
   const form = buildSyncForm(data, hkey);
@@ -109,7 +101,7 @@ export async function login(
 ): Promise<string> {
   const base = normalizeUrl(serverUrl);
 
-  const response = await syncPost(`${base}/sync/hostKey`, {
+  const response = await syncPost(`${base}/sync/hostKey`, undefined, {
     u: username,
     p: password,
   });
@@ -136,7 +128,7 @@ export async function downloadCollection(
 ): Promise<Uint8Array> {
   const base = normalizeUrl(serverUrl);
 
-  const response = await syncPostAuth(`${base}/sync/download`, hkey);
+  const response = await syncPost(`${base}/sync/download`, hkey);
 
   if (response.status === 401 || response.status === 403) {
     throw new Error("Authentication expired. Please log in again.");
@@ -199,7 +191,7 @@ export async function downloadMedia(
   let lastUsn = 0;
 
   while (lastUsn < serverUsn) {
-    const changesResponse = await syncPostAuth(`${base}/msync/mediaChanges`, hkey, {
+    const changesResponse = await syncPost(`${base}/msync/mediaChanges`, hkey, {
       lastUsn,
     });
 
@@ -224,7 +216,7 @@ export async function downloadMedia(
     while (dlOffset < filesToDownload.length) {
       const batch = filesToDownload.slice(dlOffset, dlOffset + DOWNLOAD_BATCH_SIZE);
 
-      const dlResponse = await syncPostAuth(`${base}/msync/downloadFiles`, hkey, {
+      const dlResponse = await syncPost(`${base}/msync/downloadFiles`, hkey, {
         files: batch,
       });
 
