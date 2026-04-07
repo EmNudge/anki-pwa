@@ -118,7 +118,7 @@ export function getRenderedCardString({
     templateString: renderedString,
     renderField: (reference) =>
       processFieldReference(reference, enrichedVariables, cardOrd, isAnswer, isCloze),
-    shouldRenderConditional: (field) => fieldIsNotEmpty(enrichedVariables[field], isCloze, cardOrd),
+    shouldRenderConditional: (field) => fieldIsNotEmpty(enrichedVariables[field], isCloze),
   });
 
   renderedString = replaceTemplatingSyntax(renderedString);
@@ -305,32 +305,20 @@ function applyFilter(
   }
 }
 
-/**
- * Furigana filter: convert " 漢字[かんじ]" patterns to <ruby> markup.
- * Uses Anki's space-delimited format for multi-character bases.
- */
+/** Shared regex for furigana/kanji/kana filters: " 漢字[かんじ]" patterns */
+const RUBY_RE = / ?([^\s[]+)\[([^\]]+)\]/g;
+
 function applyFuriganaFilter(text: string): string {
-  return text.replace(/ ?([^\s[]+)\[([^\]]+)\]/g, (_match, base: string, reading: string) => {
-    return `<ruby>${base}<rt>${reading}</rt></ruby>`;
-  });
+  return text.replace(RUBY_RE, (_m, base: string, reading: string) =>
+    `<ruby>${base}<rt>${reading}</rt></ruby>`);
 }
 
-/**
- * Kanji filter: strip bracketed readings, keep base characters.
- */
 function applyKanjiFilter(text: string): string {
-  return text.replace(/ ?([^\s[]+)\[([^\]]+)\]/g, (_match, base: string) => {
-    return base;
-  });
+  return text.replace(RUBY_RE, (_m, base: string) => base);
 }
 
-/**
- * Kana filter: replace base+reading pairs with just the reading.
- */
 function applyKanaFilter(text: string): string {
-  return text.replace(/ ?([^\s[]+)\[([^\]]+)\]/g, (_match, _base: string, reading: string) => {
-    return reading;
-  });
+  return text.replace(RUBY_RE, (_m, _base: string, reading: string) => reading);
 }
 
 /**
@@ -377,6 +365,8 @@ function processClozeOnly(text: string, cardOrd: number): string {
  * Falls back to Anki's 120-byte filename truncation if no match
  */
 function replaceMediaFiles(renderedString: string, mediaFiles: Map<string, string>) {
+  if (mediaFiles.size === 0) return renderedString;
+
   // Build a normalized lookup map for case-insensitive + NFC matching
   const normalizedMap = new Map<string, string>();
   for (const [key, value] of mediaFiles) {
@@ -525,37 +515,20 @@ function replaceLatex(renderedString: string, macros: Record<string, string> = {
     return cleanLatex.trim();
   };
 
-  const replaceDisplayMathBlock = (_match: string, latex: string) => {
-    try {
-      let cleanLatex = cleanAndUnescapeLatex(latex);
-
-      // Skip empty blocks
-      if (!cleanLatex) {
-        return "";
-      }
-
-      if (hasMacros) cleanLatex = preExpandMacros(cleanLatex, macros);
-
-      // Render as display mode LaTeX
-      return katex.renderToString(cleanLatex, katexOptions(true));
-    } catch (error) {
-      console.error(new Error("could not parse latex for: " + latex, { cause: error }));
-      // Return cleaned content without the tags
-      return cleanAndUnescapeLatex(latex);
-    }
-  };
-
-  const replaceInlineMathBlock = (_match: string, latex: string) => {
+  const replaceMathBlock = (displayMode: boolean) => (_match: string, latex: string) => {
     try {
       let cleanLatex = cleanAndUnescapeLatex(latex);
       if (!cleanLatex) return "";
       if (hasMacros) cleanLatex = preExpandMacros(cleanLatex, macros);
-      return katex.renderToString(cleanLatex, katexOptions(false));
+      return katex.renderToString(cleanLatex, katexOptions(displayMode));
     } catch (error) {
       console.error(new Error("could not parse latex for: " + latex, { cause: error }));
       return cleanAndUnescapeLatex(latex);
     }
   };
+
+  const replaceDisplayMathBlock = replaceMathBlock(true);
+  const replaceInlineMathBlock = replaceMathBlock(false);
 
   const replaceLatexBlock = (_match: string, latex: string) => {
     try {
@@ -687,7 +660,6 @@ function replaceTemplatingSyntax(renderedString: string) {
 function fieldIsNotEmpty(
   value: string | null | undefined,
   isCloze?: boolean,
-  _cardOrd?: number,
 ): boolean {
   if (!value) return false;
   const processed = isCloze

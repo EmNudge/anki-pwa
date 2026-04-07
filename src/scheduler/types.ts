@@ -1,7 +1,7 @@
 /**
  * Supported scheduling algorithms
  */
-type AlgorithmType = "sm2" | "fsrs";
+export type AlgorithmType = "sm2" | "fsrs";
 
 /**
  * Answer types for review buttons
