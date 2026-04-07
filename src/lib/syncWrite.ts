@@ -1,7 +1,7 @@
-import initSqlJs from "sql.js";
-import wasm from "sql.js/dist/sql-wasm.wasm?url";
+import { createDatabase } from "~/utils/sql";
 import { reviewDB } from "../scheduler/db";
 import type { StoredReviewLog } from "../scheduler/types";
+import { MS_PER_DAY } from "../utils/constants";
 
 /**
  * SM-2 card state shape (from anki-sm2-algorithm.ts).
@@ -16,8 +16,6 @@ interface SM2CardState {
   lapses: number;
   reps: number;
 }
-
-const MS_PER_DAY = 86_400_000;
 
 /**
  * Map SM-2 phase to Anki card.type column.
@@ -87,8 +85,7 @@ export async function applyReviewStateToSqlite(
   sqliteBytes: Uint8Array,
   deckId: string,
 ): Promise<Uint8Array> {
-  const SQL = await initSqlJs({ locateFile: () => wasm });
-  const db = new SQL.Database(sqliteBytes);
+  const db = await createDatabase(sqliteBytes);
 
   try {
     // Get collection creation time for due-date conversion
@@ -150,7 +147,7 @@ export async function applyReviewStateToSqlite(
  * Insert IndexedDB review logs into the SQLite revlog table.
  */
 async function insertRevlogs(
-  db: InstanceType<Awaited<ReturnType<typeof initSqlJs>>["Database"]>,
+  db: import("sql.js").Database,
   deckId: string,
   _collectionCreationSecs: number,
 ): Promise<void> {

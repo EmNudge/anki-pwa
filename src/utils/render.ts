@@ -118,7 +118,7 @@ export function getRenderedCardString({
     templateString: renderedString,
     renderField: (reference) =>
       processFieldReference(reference, enrichedVariables, cardOrd, isAnswer, isCloze),
-    shouldRenderConditional: (field) => fieldIsNotEmpty(enrichedVariables[field], isCloze, cardOrd),
+    shouldRenderConditional: (field) => fieldIsNotEmpty(enrichedVariables[field], isCloze),
   });
 
   renderedString = replaceTemplatingSyntax(renderedString);
@@ -687,7 +687,6 @@ function replaceTemplatingSyntax(renderedString: string) {
 function fieldIsNotEmpty(
   value: string | null | undefined,
   isCloze?: boolean,
-  _cardOrd?: number,
 ): boolean {
   if (!value) return false;
   const processed = isCloze

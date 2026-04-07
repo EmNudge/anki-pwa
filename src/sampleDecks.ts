@@ -1,4 +1,5 @@
 import type { AnkiData } from "./ankiParser";
+import { ANKI_DEFAULT_CSS } from "./utils/constants";
 
 type SampleCard = {
   front: string;
@@ -19,14 +20,7 @@ const basicTemplate = {
   afmt: "{{FrontSide}}<hr id=\"answer\">{{Back}}",
 };
 
-const basicCss = `.card {
-  font-family: arial;
-  font-size: 20px;
-  text-align: center;
-  color: black;
-  background-color: white;
-}
-`;
+const basicCss = ANKI_DEFAULT_CSS;
 
 function createCard(card: SampleCard, index: number) {
   return {

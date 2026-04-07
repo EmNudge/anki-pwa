@@ -1,6 +1,7 @@
 import type { Answer } from "./types";
 import type { SchedulingAlgorithm, SchedulingResult } from "./algorithm";
 import { DEFAULT_SM2_PARAMS, type SM2Params } from "./types";
+import { MS_PER_DAY, MS_PER_MINUTE } from "~/utils/constants";
 
 type CardPhase = "new" | "learning" | "review" | "relearning";
 
@@ -20,8 +21,6 @@ interface AnkiSM2CardState {
   reps: number;
 }
 
-const MS_PER_MINUTE = 60_000;
-const MS_PER_DAY = 86_400_000;
 const MIN_EASE = 1.3;
 
 function resolveParams(partial?: Partial<SM2Params>): SM2Params {

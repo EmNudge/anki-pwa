@@ -1,5 +1,6 @@
 import { mediaMappingSchema } from "./anki2/jsonParsers";
 import { parseMediaProto } from "./parseMediaProto";
+import { isZstdCompressed } from "~/utils/constants";
 
 type ZstdDecompressor = (data: Uint8Array) => Promise<Uint8Array>;
 
@@ -7,16 +8,6 @@ type DecodedBytes = {
   bytes: Uint8Array;
   text: string;
 };
-
-function isZstdCompressed(bytes: Uint8Array): boolean {
-  return (
-    bytes.length >= 4 &&
-    bytes[0] === 0x28 &&
-    bytes[1] === 0xb5 &&
-    bytes[2] === 0x2f &&
-    bytes[3] === 0xfd
-  );
-}
 
 async function decodeMaybeZstd(
   bytes: Uint8Array,

@@ -44,11 +44,3 @@ export const fsrsJsonSchema = z.object({
 });
 
 export const mediaMappingSchema = z.record(z.string());
-
-export const cachedFileEntrySchema = z.array(
-  z.object({
-    name: z.string(),
-    size: z.number(),
-    addedAt: z.number(),
-  }),
-);

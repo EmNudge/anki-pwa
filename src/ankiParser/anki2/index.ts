@@ -4,6 +4,7 @@ import { modelSchema, deckSchema, fsrsJsonSchema } from "./jsonParsers";
 import { z } from "zod";
 import { assertTruthy } from "~/utils/assert";
 import { buildScheduling, resolveCardDeckName, isBlankCard, parseRevlog } from "../shared";
+import { stringHash } from "~/utils/constants";
 
 export type CardScheduling = {
   type: number;
@@ -276,15 +277,9 @@ export function getDataFromAnki2(db: Database): AnkiDB2Data {
     const fieldNames = model.flds.map((f) => f.name);
     const templateNames = model.tmpls.map((t) => t.name);
     const hashInput = [...fieldNames, ...templateNames].join("\x1f");
-    // Simple string hash for notetype matching
-    let hash = 0;
-    for (let i = 0; i < hashInput.length; i++) {
-      const char = hashInput.charCodeAt(i);
-      hash = ((hash << 5) - hash + char) | 0;
-    }
     return {
       id: model.id,
-      schemaHash: Math.abs(hash).toString(16),
+      schemaHash: stringHash(hashInput).toString(16),
       latexPre: model.latexPre ?? "",
       latexSvg: model.latexsvg ?? false,
     };

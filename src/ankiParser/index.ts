@@ -1,6 +1,5 @@
 import { getAnkiDataFromZip } from "./unzipAnki";
-import initSqlJs from "sql.js";
-import wasm from "sql.js/dist/sql-wasm.wasm?url";
+import { createDatabase } from "~/utils/sql";
 import { AnkiDB21bData, getDataFromAnki21b } from "./anki21b";
 import { AnkiDB2Data, getDataFromAnki2 } from "./anki2";
 
@@ -17,8 +16,7 @@ export type AnkiData = {
 export async function getAnkiDataFromBlob(file: Blob): Promise<AnkiData> {
   const { ankiDb, files } = await getAnkiDataFromZip(file);
 
-  const SQL = await initSqlJs({ locateFile: () => wasm });
-  const db = new SQL.Database(ankiDb.array);
+  const db = await createDatabase(ankiDb.array);
 
   if (ankiDb.type === "21b") {
     const { cards, deckName, decks, notesTypes, collectionCreationTime } = getDataFromAnki21b(db);
@@ -38,8 +36,7 @@ export async function getAnkiDataFromSqlite(
   sqliteBytes: Uint8Array,
   mediaFiles?: Map<string, string>,
 ): Promise<AnkiData> {
-  const SQL = await initSqlJs({ locateFile: () => wasm });
-  const db = new SQL.Database(sqliteBytes);
+  const db = await createDatabase(sqliteBytes);
   const files = mediaFiles ?? new Map<string, string>();
 
   try {

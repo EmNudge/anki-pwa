@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isZstdCompressed } from "~/utils/constants";
 
 const SYNC_CONFIG_KEY = "anki-sync-config";
 const SYNC_STATE_KEY = "anki-sync-state";
@@ -344,8 +345,7 @@ async function decompressIfNeeded(bytes: Uint8Array): Promise<Uint8Array> {
     return new Uint8Array(await decompressed.arrayBuffer());
   }
 
-  // Zstandard: 0x28 0xB5 0x2F 0xFD
-  if (bytes[0] === 0x28 && bytes[1] === 0xb5 && bytes[2] === 0x2f && bytes[3] === 0xfd) {
+  if (isZstdCompressed(bytes)) {
     const { decompressZstd } = await import("../utils/zstd");
     return decompressZstd(bytes);
   }

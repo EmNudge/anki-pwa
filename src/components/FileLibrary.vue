@@ -2,6 +2,7 @@
 import { ref, reactive, computed } from "vue";
 import { Button, Tooltip } from "../design-system";
 import { createCachedDeckLibraryItem, createSampleDeckLibraryItem } from "../deckLibrary";
+import { sampleDecks as sampleDeckData } from "../sampleDecks";
 import {
   cachedFilesSig,
   activeDeckSourceIdSig,
@@ -9,7 +10,6 @@ import {
   loadCachedFile,
   deleteCachedFile,
   loadSampleDeck,
-  sampleDecksSig,
   syncActiveSig,
   deckInfoSig,
   selectedDeckIdSig,
@@ -20,7 +20,7 @@ import type { DeckTreeNode } from "../types";
 
 const fileInput = ref<HTMLInputElement>();
 
-const sampleDecks = computed(() => sampleDecksSig.map(createSampleDeckLibraryItem));
+const sampleDecks = computed(() => sampleDeckData.map(createSampleDeckLibraryItem));
 const uploadedDecks = computed(() =>
   [...cachedFilesSig.value]
     .sort((a, b) => b.addedAt - a.addedAt)
