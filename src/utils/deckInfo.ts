@@ -2,12 +2,14 @@ import type { SubDeckInfo, DeckTreeNode } from "../types";
 import type { AnkiData } from "../ankiParser";
 
 export function computeDeckInfo(ankiData: AnkiData) {
-  const cardsWithDeckIds = ankiData.cards.map((card) => {
-    const deckEntry = Object.entries(ankiData.decks).find(
-      ([_, deck]) => deck.name === card.deckName,
-    );
-    return { card, deckId: deckEntry?.[0] };
-  });
+  const nameToDeckId = new Map(
+    Object.entries(ankiData.decks).map(([id, deck]) => [deck.name, id]),
+  );
+
+  const cardsWithDeckIds = ankiData.cards.map((card) => ({
+    card,
+    deckId: nameToDeckId.get(card.deckName),
+  }));
 
   const cardsByDeckId = Object.groupBy(cardsWithDeckIds, (item) => item.deckId ?? "unknown");
 

@@ -1,6 +1,13 @@
-import { cachedFileEntrySchema } from "./ankiParser/anki2/jsonParsers";
+import { z } from "zod";
 import type { AnkiData } from "./ankiParser";
-import type { z } from "zod";
+
+const cachedFileEntrySchema = z.array(
+  z.object({
+    name: z.string(),
+    size: z.number(),
+    addedAt: z.number(),
+  }),
+);
 
 export type CachedFileEntry = z.infer<typeof cachedFileEntrySchema>[number];
 

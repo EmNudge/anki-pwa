@@ -244,8 +244,6 @@ export async function clearSyncedCollection() {
   }
 }
 
-export const sampleDecksSig = sampleDecks;
-
 // Sync state: tracks whether user is logged in to a sync server
 export const syncActiveSig = ref(readSyncState().hkey !== null);
 

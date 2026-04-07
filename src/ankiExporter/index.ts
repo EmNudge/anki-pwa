@@ -1,22 +1,14 @@
-import initSqlJs from "sql.js";
-import wasm from "sql.js/dist/sql-wasm.wasm?url";
+import { createDatabase } from "~/utils/sql";
 import { BlobWriter, ZipWriter, BlobReader } from "@zip-js/zip-js";
 import type { AnkiDeckSpec } from "../lib/ollama";
+import { stringHash, ANKI_DEFAULT_CSS } from "../utils/constants";
 
 function generateId(): number {
-  // Anki uses millisecond timestamps as IDs, with some randomness
   return Date.now() + Math.floor(Math.random() * 1000);
 }
 
 function fieldChecksum(field: string): number {
-  // Simple checksum of the first field (Anki uses SHA1 truncated to 32-bit)
-  let hash = 0;
-  const stripped = field.replace(/<[^>]*>/g, "").trim();
-  for (let i = 0; i < stripped.length; i++) {
-    const char = stripped.charCodeAt(i);
-    hash = ((hash << 5) - hash + char) | 0;
-  }
-  return Math.abs(hash);
+  return stringHash(field.replace(/<[^>]*>/g, "").trim());
 }
 
 function guidFromId(id: number): string {
@@ -102,13 +94,7 @@ CREATE TABLE IF NOT EXISTS graves (
 );
 `;
 
-const DEFAULT_CSS = `.card {
-  font-family: arial;
-  font-size: 20px;
-  text-align: center;
-  color: black;
-  background-color: white;
-}`;
+const DEFAULT_CSS = ANKI_DEFAULT_CSS;
 
 const DEFAULT_CONF = JSON.stringify({
   activeDecks: [1],
@@ -143,8 +129,7 @@ const DEFAULT_DCONF = JSON.stringify({
 });
 
 export async function createApkg(spec: AnkiDeckSpec): Promise<Blob> {
-  const SQL = await initSqlJs({ locateFile: () => wasm });
-  const db = new SQL.Database();
+  const db = await createDatabase();
 
   // Create schema
   db.run(ANKI2_SCHEMA);
