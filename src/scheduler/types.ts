@@ -43,6 +43,16 @@ export interface CardReviewState {
    * Timestamp when this card was last reviewed
    */
   lastReviewed: number | null;
+
+  /**
+   * Queue override: -2 = userBuried, -1 = suspended. undefined = normal scheduling.
+   */
+  queueOverride?: number;
+
+  /**
+   * Card flags (low 3 bits = flag 0–7, matching Anki desktop).
+   */
+  flags?: number;
 }
 
 /**

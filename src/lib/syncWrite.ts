@@ -105,28 +105,31 @@ export async function applyReviewStateToSqlite(
 
     // Update each reviewed card in the SQLite database
     const updateStmt = db.prepare(
-      "UPDATE cards SET type=?, queue=?, due=?, ivl=?, factor=?, reps=?, lapses=?, left=?, mod=? WHERE id=?",
+      "UPDATE cards SET type=?, queue=?, due=?, ivl=?, factor=?, reps=?, lapses=?, left=?, flags=?, mod=? WHERE id=?",
     );
 
     const nowSecs = Math.floor(Date.now() / 1000);
 
     for (const card of reviewedCards) {
-      if (!card.lastReviewed) continue; // never reviewed, skip
-
-      const state = card.cardState as SM2CardState;
       const ankiCardId = Number(card.cardId);
       if (isNaN(ankiCardId)) continue; // legacy positional ID, skip
 
+      // Apply queueOverride (bury/suspend) even for unreviewed cards
+      const hasOverride = card.queueOverride === -1 || card.queueOverride === -2;
+      if (!card.lastReviewed && !hasOverride && card.flags === undefined) continue;
+
+      const state = card.cardState as SM2CardState;
       const type = phaseToType(state.phase);
-      const queue = phaseToQueue(state.phase);
+      const queue = hasOverride ? card.queueOverride! : phaseToQueue(state.phase);
       const due = convertDue(state, collectionCreationSecs);
       const ivl = Math.max(0, Math.round(state.interval));
       const factor = Math.round(state.ease * 1000);
       const totalSteps =
         state.phase === "relearning" ? defaultRelearnSteps : defaultLearnSteps;
       const left = encodeLeft(state, totalSteps);
+      const flags = card.flags ?? 0;
 
-      updateStmt.run([type, queue, due, ivl, factor, state.reps, state.lapses, left, nowSecs, ankiCardId]);
+      updateStmt.run([type, queue, due, ivl, factor, state.reps, state.lapses, left, flags, nowSecs, ankiCardId]);
     }
     updateStmt.free();
 

@@ -55,6 +55,54 @@ describe("ReviewDB", () => {
     });
   });
 
+  describe("patchCard", () => {
+    it("should partially update an existing card", async () => {
+      await db.saveCard({
+        cardId: "card-1",
+        deckId: "deck-1",
+        algorithm: "sm2",
+        cardState: { phase: "new" },
+        createdAt: Date.now(),
+        lastReviewed: null,
+      });
+
+      const patched = await db.patchCard("card-1", { flags: 3 });
+      expect(patched).not.toBeNull();
+      expect(patched!.flags).toBe(3);
+      expect(patched!.cardId).toBe("card-1");
+      expect(patched!.algorithm).toBe("sm2");
+
+      // Verify persistence
+      const fetched = await db.getCard("card-1");
+      expect(fetched!.flags).toBe(3);
+    });
+
+    it("should set queueOverride for bury/suspend", async () => {
+      await db.saveCard({
+        cardId: "card-2",
+        deckId: "deck-1",
+        algorithm: "sm2",
+        cardState: { phase: "review" },
+        createdAt: Date.now(),
+        lastReviewed: Date.now(),
+      });
+
+      const buried = await db.patchCard("card-2", { queueOverride: -2 });
+      expect(buried!.queueOverride).toBe(-2);
+
+      const suspended = await db.patchCard("card-2", { queueOverride: -1 });
+      expect(suspended!.queueOverride).toBe(-1);
+
+      const restored = await db.patchCard("card-2", { queueOverride: undefined });
+      expect(restored!.queueOverride).toBeUndefined();
+    });
+
+    it("should return null for nonexistent card", async () => {
+      const result = await db.patchCard("nonexistent", { flags: 1 });
+      expect(result).toBeNull();
+    });
+  });
+
   describe("Vue reactive proxy handling", () => {
     it("should fail to save a Vue ref value directly (demonstrates the bug)", async () => {
       const settingsRef = ref<SchedulerSettings>({

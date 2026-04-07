@@ -517,6 +517,68 @@ export async function resetScheduler() {
   }
 }
 
+/**
+ * Remove the current card from the due queue and advance to next card.
+ */
+function removeCurrentCardAndAdvance() {
+  const current = currentReviewCardSig.value;
+  if (!current) return;
+  dueCardsSig.value = dueCardsSig.value.filter((c) => c.cardId !== current.cardId);
+  moveToNextReviewCard();
+}
+
+/**
+ * Bury the current review card (hide until next day).
+ */
+export async function buryCurrentCard() {
+  const card = currentReviewCardSig.value;
+  if (!card) return;
+  await reviewDB.patchCard(card.cardId, { queueOverride: -2 });
+  card.reviewState.queueOverride = -2;
+  removeCurrentCardAndAdvance();
+}
+
+/**
+ * Suspend the current review card (hide permanently until unsuspended).
+ */
+export async function suspendCurrentCard() {
+  const card = currentReviewCardSig.value;
+  if (!card) return;
+  await reviewDB.patchCard(card.cardId, { queueOverride: -1 });
+  card.reviewState.queueOverride = -1;
+  removeCurrentCardAndAdvance();
+}
+
+/**
+ * Set a flag (0–7) on the current review card.
+ */
+export async function flagCurrentCard(flag: number) {
+  const card = currentReviewCardSig.value;
+  if (!card) return;
+  const clamped = flag & 0b111;
+  await reviewDB.patchCard(card.cardId, { flags: clamped });
+  card.reviewState.flags = clamped;
+}
+
+/**
+ * Toggle the "marked" tag on the current card's note.
+ */
+export function markCurrentNote() {
+  const card = currentReviewCardSig.value;
+  const ankiData = ankiDataSig.value;
+  if (!card || !ankiData) return;
+
+  const noteCard = ankiData.cards[card.cardIndex];
+  if (!noteCard) return;
+
+  const hasMarked = noteCard.tags.some((t) => t.toLowerCase() === "marked");
+  if (hasMarked) {
+    noteCard.tags = noteCard.tags.filter((t) => t.toLowerCase() !== "marked");
+  } else {
+    noteCard.tags.push("marked");
+  }
+}
+
 export function moveToNextCard() {
   selectedCardSig.value = selectedCardSig.value + 1;
 }
