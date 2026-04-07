@@ -4,6 +4,7 @@ import {
   login,
   downloadCollection,
   downloadMedia,
+  uploadCollection,
   readSyncConfig,
   writeSyncConfig,
   readSyncState,
@@ -11,7 +12,8 @@ import {
   clearSyncState,
   type SyncConfig,
 } from "../lib/ankiSync";
-import { loadSyncedCollection, clearSyncedCollection, syncActiveSig } from "../stores";
+import { loadSyncedCollection, clearSyncedCollection, syncActiveSig, getActiveDeckId } from "../stores";
+import { applyReviewStateToSqlite } from "../lib/syncWrite";
 import mime from "mime";
 
 const serverUrl = ref("");
@@ -22,6 +24,7 @@ const isSyncing = ref(false);
 const syncStatus = ref("");
 const syncError = ref("");
 const lastSyncTime = ref<number | null>(null);
+const showPushConfirm = ref(false);
 
 onMounted(() => {
   const config = readSyncConfig();
@@ -116,6 +119,60 @@ async function handlePull() {
   }
 }
 
+async function handlePush() {
+  const state = readSyncState();
+  if (!state.hkey) {
+    syncError.value = "Not logged in. Please log in first.";
+    return;
+  }
+
+  showPushConfirm.value = false;
+  syncError.value = "";
+  isSyncing.value = true;
+  syncStatus.value = "Preparing collection for upload...";
+
+  try {
+    // Read cached SQLite from Cache API
+    const cache = await caches.open("anki-cache");
+    const sqliteResp = await cache.match("/sync/collection.sqlite");
+    if (!sqliteResp) {
+      throw new Error("No local collection found. Pull first before pushing.");
+    }
+    const sqliteBytes = new Uint8Array(await sqliteResp.arrayBuffer());
+
+    // Merge review state from IndexedDB into the SQLite
+    syncStatus.value = "Writing review state into collection...";
+    const deckId = getActiveDeckId();
+    const modifiedSqlite = await applyReviewStateToSqlite(sqliteBytes, deckId);
+
+    // Upload to server
+    syncStatus.value = "Uploading collection to server...";
+    await uploadCollection(serverUrl.value, state.hkey, modifiedSqlite);
+
+    // Update local cache with the modified version
+    await cache.put(
+      "/sync/collection.sqlite",
+      new Response(new Blob([modifiedSqlite.buffer as ArrayBuffer])),
+    );
+
+    const now = Date.now();
+    writeSyncState({ hkey: state.hkey, lastSync: now });
+    lastSyncTime.value = now;
+
+    syncStatus.value = "Collection pushed successfully.";
+  } catch (err) {
+    if (err instanceof Error && err.message.includes("Authentication expired")) {
+      isLoggedIn.value = false;
+      syncActiveSig.value = false;
+      clearSyncState();
+    }
+    syncError.value = err instanceof Error ? err.message : "Push failed";
+    syncStatus.value = "";
+  } finally {
+    isSyncing.value = false;
+  }
+}
+
 async function handleDisconnect() {
   writeSyncConfig(null);
   clearSyncState();
@@ -198,6 +255,9 @@ function formatLastSync(timestamp: number | null): string {
           <button class="sync-btn sync-btn--primary" :disabled="isSyncing" @click="handlePull">
             {{ isSyncing ? "Syncing..." : "Pull Collection" }}
           </button>
+          <button class="sync-btn sync-btn--push" :disabled="isSyncing" @click="showPushConfirm = true">
+            Push Collection
+          </button>
           <button class="sync-btn sync-btn--secondary" :disabled="isSyncing" @click="handleLogout">
             Log Out
           </button>
@@ -208,6 +268,23 @@ function formatLastSync(timestamp: number | null): string {
           >
             Disconnect
           </button>
+        </div>
+
+        <!-- Push confirmation dialog -->
+        <div v-if="showPushConfirm" class="sync-confirm">
+          <p class="sync-confirm-text">
+            <strong>Push will overwrite the server collection</strong> with your local copy
+            including any reviews done here. If you reviewed on another device without pulling
+            first, those reviews will be lost.
+          </p>
+          <div class="sync-confirm-actions">
+            <button class="sync-btn sync-btn--danger" @click="handlePush">
+              Push &amp; Overwrite
+            </button>
+            <button class="sync-btn sync-btn--secondary" @click="showPushConfirm = false">
+              Cancel
+            </button>
+          </div>
         </div>
       </template>
     </div>
@@ -240,8 +317,13 @@ function formatLastSync(timestamp: number | null): string {
 
         <h3>What gets synced</h3>
         <p>
-          Pull downloads your entire card collection (decks, notes, templates, scheduling data)
-          along with all media files (images, audio).
+          <strong>Pull</strong> downloads your entire card collection (decks, notes, templates,
+          scheduling data) along with all media files (images, audio).
+        </p>
+        <p>
+          <strong>Push</strong> uploads your local collection back to the server, including any
+          reviews you've done. This overwrites the server's copy entirely (like Anki's
+          "force one-way sync: upload").
         </p>
       </div>
     </details>
@@ -374,6 +456,16 @@ function formatLastSync(timestamp: number | null): string {
   background: var(--color-surface-hover);
 }
 
+.sync-btn--push {
+  color: white;
+  background: #f59e0b;
+  border-color: #f59e0b;
+}
+
+.sync-btn--push:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
 .sync-btn--danger {
   color: #ef4444;
   background: var(--color-surface);
@@ -382,6 +474,26 @@ function formatLastSync(timestamp: number | null): string {
 
 .sync-btn--danger:hover:not(:disabled) {
   background: color-mix(in srgb, #ef4444 10%, var(--color-surface));
+}
+
+.sync-confirm {
+  margin-top: var(--spacing-3);
+  padding: var(--spacing-3);
+  background: color-mix(in srgb, #f59e0b 8%, var(--color-surface));
+  border: 1px solid color-mix(in srgb, #f59e0b 30%, var(--color-border));
+  border-radius: var(--radius-md);
+}
+
+.sync-confirm-text {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+  margin: 0 0 var(--spacing-3) 0;
+  line-height: 1.5;
+}
+
+.sync-confirm-actions {
+  display: flex;
+  gap: var(--spacing-2);
 }
 
 .sync-status {

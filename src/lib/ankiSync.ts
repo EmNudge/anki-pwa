@@ -287,6 +287,41 @@ export async function downloadMedia(
   return mediaFiles;
 }
 
+/**
+ * Upload a full collection database to the sync server, replacing the server's copy.
+ * This is equivalent to Anki's "Upload to AnkiWeb" (force one-way push).
+ */
+export async function uploadCollection(
+  serverUrl: string,
+  hkey: string,
+  sqliteBytes: Uint8Array,
+): Promise<void> {
+  const base = normalizeUrl(serverUrl);
+
+  const form = new FormData();
+  form.append("k", hkey);
+  form.append("data", new Blob([sqliteBytes.buffer as ArrayBuffer]), "collection.anki2");
+  form.append("c", "0");
+
+  const response = await fetch(`${base}/sync/upload`, {
+    method: "POST",
+    body: form,
+  });
+
+  if (response.status === 401 || response.status === 403) {
+    throw new Error("Authentication expired. Please log in again.");
+  }
+
+  if (!response.ok) {
+    throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
+  }
+
+  const body = await response.text();
+  if (body.trim() !== "OK") {
+    throw new Error(`Upload rejected by server: ${body}`);
+  }
+}
+
 async function readResponseJson(response: Response): Promise<unknown> {
   const bytes = new Uint8Array(await response.arrayBuffer());
   const decompressed = await decompressIfNeeded(bytes);

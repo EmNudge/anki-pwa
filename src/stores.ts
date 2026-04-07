@@ -391,7 +391,10 @@ export async function initializeReviewQueue() {
   const queue = new ReviewQueue(deckId, settings);
   await queue.init();
 
-  const fullQueue = await queue.buildQueue(cards.length, templates.length);
+  const ankiCardIds = cards.every((c) => c.ankiCardId != null)
+    ? cards.map((c) => c.ankiCardId!)
+    : undefined;
+  const fullQueue = await queue.buildQueue(cards.length, templates.length, ankiCardIds);
   const dueCards = queue.getDueCards(fullQueue);
 
   reviewQueueSig.value = queue;
