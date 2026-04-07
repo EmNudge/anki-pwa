@@ -84,6 +84,7 @@ export function getDueType(queue: number): CardScheduling["dueType"] {
 
 export type AnkiDB2Data = {
   cards: {
+    ankiCardId?: number;
     values: {
       [k: string]: string | null;
     };
@@ -216,6 +217,7 @@ export function getDataFromAnki2(db: Database): AnkiDB2Data {
         }
 
         return {
+          ankiCardId: cardRow.id,
           values: valuesMap,
           tags: note.tags.trim().split(/\s+/).filter(Boolean),
           templates: [matchingTemplate],

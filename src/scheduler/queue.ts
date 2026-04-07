@@ -90,8 +90,9 @@ export class ReviewQueue {
    * Build the review queue from the deck's cards
    * @param totalCards Total number of cards in the deck
    * @param templatesPerCard Number of templates for each card (assumes all cards have same templates)
+   * @param ankiCardIds Optional array of native Anki card IDs (from SQLite) — when provided, used as card IDs instead of positional indices
    */
-  async buildQueue(totalCards: number, templatesPerCard: number): Promise<ReviewCard[]> {
+  async buildQueue(totalCards: number, templatesPerCard: number, ankiCardIds?: number[]): Promise<ReviewCard[]> {
     // Get existing review states
     const existingStates = await reviewDB.getCardsForDeck(this.deckId);
     const stateMap = new Map<string, CardReviewState>(
@@ -103,7 +104,9 @@ export class ReviewQueue {
     // Generate cards for all card/template combinations immutably
     return Array.from({ length: totalCards }, (_, cardIndex) =>
       Array.from({ length: templatesPerCard }, (_, templateIndex) => {
-        const cardId = this.generateCardId(cardIndex, templateIndex);
+        const cardId = ankiCardIds
+          ? String(ankiCardIds[cardIndex])
+          : this.generateCardId(cardIndex, templateIndex);
         const existing = stateMap.get(cardId);
         const isNew = !existing;
         const reviewState: CardReviewState = existing ?? {

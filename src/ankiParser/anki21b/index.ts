@@ -8,6 +8,7 @@ import { buildScheduling, resolveCardDeckName, isBlankCard, parseRevlog } from "
 
 export type AnkiDB21bData = {
   cards: {
+    ankiCardId?: number;
     values: {
       [k: string]: string;
     };
@@ -212,6 +213,7 @@ export function getDataFromAnki21b(db: Database): AnkiDB21bData {
         }
 
         return {
+          ankiCardId: cardRow.id,
           values,
           templates: [
             {
