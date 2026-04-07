@@ -70,12 +70,29 @@ export class ReviewQueue {
   }
 
   /**
-   * Initialize the queue by loading today's stats
+   * Initialize the queue by loading today's stats and unbury cards on day rollover
    */
   async init(): Promise<void> {
-    const stats = await reviewDB.getDailyStats(this.getTodayString());
+    const today = this.getTodayString();
+    const stats = await reviewDB.getDailyStats(today);
     if (stats) {
       this.todayStats = stats;
+    }
+
+    // Unbury cards when a new day starts (matches Anki desktop behavior)
+    await this.unburyCards();
+  }
+
+  /**
+   * Clear userBuried status on all cards for this deck.
+   * Called on queue init so buried cards from previous days are restored.
+   */
+  private async unburyCards(): Promise<void> {
+    const cards = await reviewDB.getCardsForDeck(this.deckId);
+    for (const card of cards) {
+      if (card.queueOverride === -2) {
+        await reviewDB.patchCard(card.cardId, { queueOverride: undefined });
+      }
     }
   }
 
@@ -145,6 +162,11 @@ export class ReviewQueue {
 
     for (const card of queue) {
       try {
+        // Skip suspended cards entirely
+        if (card.reviewState.queueOverride === -1) continue;
+        // Skip buried cards (they'll be unburied on day rollover)
+        if (card.reviewState.queueOverride === -2) continue;
+
         const dueDate = this.algorithm.getDueDate(card.reviewState.cardState);
         const dueMs = dueDate.getTime();
         dueDateCache.set(card.cardId, dueMs);

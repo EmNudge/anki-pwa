@@ -130,6 +130,27 @@ class ReviewDB {
     );
   }
 
+  /**
+   * Partially update a card's fields without replacing the whole record.
+   */
+  async patchCard(cardId: string, patch: Partial<CardReviewState>): Promise<CardReviewState | null> {
+    const db = await this.ensureInit();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction("cards", "readwrite");
+      const store = tx.objectStore("cards");
+      const getReq = store.get(cardId);
+      getReq.onsuccess = () => {
+        const existing = getReq.result as CardReviewState | undefined;
+        if (!existing) { resolve(null); return; }
+        const updated = { ...existing, ...patch };
+        const putReq = store.put(updated);
+        putReq.onsuccess = () => resolve(updated);
+        putReq.onerror = () => reject(putReq.error);
+      };
+      getReq.onerror = () => reject(getReq.error);
+    });
+  }
+
   async getCardsForDeck(deckId: string): Promise<CardReviewState[]> {
     return this.run(["cards"], "readonly", (tx) =>
       tx.objectStore("cards").index("deckId").getAll(deckId),

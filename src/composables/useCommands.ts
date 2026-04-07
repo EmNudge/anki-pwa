@@ -14,6 +14,12 @@ import {
   cardsSig,
   addCachedFile,
   moveToNextCard,
+  currentReviewCardSig,
+  reviewQueueSig,
+  buryCurrentCard,
+  suspendCurrentCard,
+  flagCurrentCard,
+  markCurrentNote,
 } from "../stores";
 import type { Command } from "../commandPaletteStore";
 import {
@@ -29,6 +35,11 @@ import {
   FileText,
   Grid3x3,
   Hash,
+  EyeOff,
+  Ban,
+  Flag,
+  Info,
+  Star,
 } from "lucide-vue-next";
 import { useTheme } from "../design-system/hooks/useTheme";
 import { getRenderedCardString } from "../utils/render";
@@ -353,8 +364,129 @@ export function useCommands() {
             buildBrowseTemplatesCommand(ankiData, currentDeckName),
           ]
         : []),
+      ...buildCardActionCommands(ankiData),
     ];
 
     return commands;
   });
+}
+
+const FLAG_COLORS: { flag: number; label: string; color: string }[] = [
+  { flag: 1, label: "Red", color: "#ff6b6b" },
+  { flag: 2, label: "Orange", color: "#ffa94d" },
+  { flag: 3, label: "Green", color: "#69db7c" },
+  { flag: 4, label: "Blue", color: "#74c0fc" },
+  { flag: 5, label: "Pink", color: "#f783ac" },
+  { flag: 6, label: "Turquoise", color: "#63e6be" },
+  { flag: 7, label: "Purple", color: "#b197fc" },
+];
+
+function buildCardActionCommands(ankiData: AnkiData | null): Command[] {
+  const reviewCard = currentReviewCardSig.value;
+  if (!reviewCard) return [];
+
+  const queue = reviewQueueSig.value;
+  const noteCard = ankiData?.cards[reviewCard.cardIndex];
+  const currentFlag = reviewCard.reviewState.flags ?? 0;
+  const isMarked = noteCard?.tags.some((t) => t.toLowerCase() === "marked") ?? false;
+
+  const commands: Command[] = [
+    {
+      id: "bury-card",
+      title: "Bury Card",
+      icon: icon(EyeOff),
+      hotkey: "-",
+      handler: () => { buryCurrentCard(); },
+    },
+    {
+      id: "suspend-card",
+      title: "Suspend Card",
+      icon: icon(Ban),
+      hotkey: "@",
+      handler: () => { suspendCurrentCard(); },
+    },
+    {
+      id: "flag-card",
+      title: "Flag Card",
+      icon: icon(Flag),
+      label: currentFlag > 0 ? `Flag ${currentFlag}` : undefined,
+      children: [
+        {
+          id: "flag-none",
+          title: "No Flag",
+          icon: icon(Flag),
+          label: currentFlag === 0 ? "Current" : undefined,
+          handler: () => { flagCurrentCard(0); },
+        },
+        ...FLAG_COLORS.map(({ flag, label, color }) => ({
+          id: `flag-${flag}`,
+          title: `${label} Flag`,
+          icon: icon(Flag),
+          label: currentFlag === flag ? "Current" : undefined,
+          metadata: [{ label: "Color", value: color }],
+          handler: () => { flagCurrentCard(flag); },
+        })),
+      ],
+    },
+    {
+      id: "card-info",
+      title: "Card Info",
+      icon: icon(Info),
+      hotkey: "I",
+      metadata: buildCardInfoMetadata(reviewCard, queue),
+      handler: () => ({ keepOpen: true }),
+    },
+  ];
+
+  if (noteCard) {
+    commands.push({
+      id: "mark-note",
+      title: isMarked ? "Unmark Note" : "Mark Note",
+      icon: icon(Star),
+      hotkey: "*",
+      label: isMarked ? "Marked" : undefined,
+      handler: () => { markCurrentNote(); },
+    });
+  }
+
+  return commands;
+}
+
+function buildCardInfoMetadata(
+  reviewCard: import("../scheduler/queue").ReviewCard,
+  queue: import("../scheduler/queue").ReviewQueue | null,
+): Command["metadata"] {
+  const displayInfo = queue?.getCardDisplayInfo(reviewCard) ?? {};
+  const entries: { label: string; value: string }[] = [
+    { label: "Card ID", value: reviewCard.cardId },
+    { label: "New", value: reviewCard.isNew ? "Yes" : "No" },
+  ];
+
+  if (displayInfo.ease !== undefined) {
+    entries.push({ label: "Ease Factor", value: String(Math.round((displayInfo.ease as number) * 100)) + "%" });
+  }
+  if (displayInfo.interval !== undefined) {
+    entries.push({ label: "Interval", value: displayInfo.interval + " days" });
+  }
+  if (displayInfo.repetitions !== undefined) {
+    entries.push({ label: "Repetitions", value: String(displayInfo.repetitions) });
+  }
+  if (displayInfo.stability !== undefined) {
+    entries.push({ label: "Stability", value: String(displayInfo.stability) });
+  }
+  if (displayInfo.difficulty !== undefined) {
+    entries.push({ label: "Difficulty", value: String(displayInfo.difficulty) });
+  }
+
+  const flags = reviewCard.reviewState.flags ?? 0;
+  if (flags > 0) {
+    const flagInfo = FLAG_COLORS.find((f) => f.flag === flags);
+    entries.push({ label: "Flag", value: flagInfo ? flagInfo.label : String(flags) });
+  }
+
+  if (reviewCard.reviewState.lastReviewed) {
+    entries.push({ label: "Last Reviewed", value: new Date(reviewCard.reviewState.lastReviewed).toLocaleDateString() });
+  }
+
+  return entries;
 }
