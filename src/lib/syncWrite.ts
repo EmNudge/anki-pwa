@@ -104,6 +104,7 @@ export function encodeLeft(
  */
 export function phaseToRevlogType(phase: string): number {
   switch (phase) {
+    case "new": return 0;
     case "learning": return 0;
     case "review": return 1;
     case "relearning": return 2;
@@ -114,7 +115,8 @@ export function phaseToRevlogType(phase: string): number {
 /**
  * Encode factor for the revlog/card factor column.
  * SM-2: ease * 1000 (e.g. 2.5 → 2500)
- * FSRS: difficulty * 100 + 100 (e.g. 5.0 → 600)
+ * FSRS: difficulty_shifted * 1000, where difficulty_shifted = (difficulty - 1) / 9 + 0.1
+ *   Maps 1.0-10.0 difficulty to 100-1100 range matching Anki desktop.
  */
 export function encodeFactor(
   ease: number,
@@ -122,7 +124,7 @@ export function encodeFactor(
   difficulty?: number,
 ): number {
   if (algorithm === "fsrs" && difficulty !== undefined) {
-    return Math.round(difficulty * 100) + 100;
+    return Math.round(((difficulty - 1) / 9 + 0.1) * 1000);
   }
   return Math.round(ease * 1000);
 }
@@ -211,18 +213,40 @@ export async function applyReviewStateToSqlite(
 }
 
 /**
- * Serialize card data (FSRS state, etc.) for the cards.data column.
+ * Round a float to the specified number of decimal places.
+ * Matches Anki's round_to_places (storage/card/data.rs).
  */
-function serializeCardData(card: CardReviewState): string {
+function roundToPlaces(value: number, decimalPlaces: number): number {
+  const factor = Math.pow(10, decimalPlaces);
+  return Math.round(value * factor) / factor;
+}
+
+/**
+ * Serialize card data (FSRS state, etc.) for the cards.data column.
+ * Matches Anki's CardData format: { pos, s, d, dr, decay, lrt, cd }
+ * with field-specific precision rounding.
+ */
+export function serializeCardData(card: CardReviewState): string {
   if (card.algorithm === "fsrs") {
-    const fsrsState = card.cardState as { stability?: number; difficulty?: number; desiredRetention?: number };
+    const fsrsState = card.cardState as {
+      stability?: number;
+      difficulty?: number;
+      desiredRetention?: number;
+      decay?: number;
+    };
     if (fsrsState.stability !== undefined && fsrsState.difficulty !== undefined) {
       const data: Record<string, number> = {
-        s: fsrsState.stability,
-        d: fsrsState.difficulty,
+        s: roundToPlaces(fsrsState.stability, 4),
+        d: roundToPlaces(fsrsState.difficulty, 3),
       };
       if (fsrsState.desiredRetention !== undefined) {
-        data.dr = fsrsState.desiredRetention;
+        data.dr = roundToPlaces(fsrsState.desiredRetention, 2);
+      }
+      if (fsrsState.decay !== undefined) {
+        data.decay = roundToPlaces(fsrsState.decay, 3);
+      }
+      if (card.lastReviewed) {
+        data.lrt = Math.floor(card.lastReviewed / 1000);
       }
       return JSON.stringify(data);
     }
