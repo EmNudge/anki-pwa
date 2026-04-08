@@ -65,6 +65,7 @@ function phaseToQueue(phase: SM2CardState["phase"], interval?: number): number {
 export function convertDue(
   state: { phase: string; due: number; interval?: number },
   collectionCreationSecs: number,
+  position?: number,
 ): number {
   if (state.phase === "review") {
     return Math.floor((state.due - collectionCreationSecs * 1000) / MS_PER_DAY);
@@ -76,8 +77,8 @@ export function convertDue(
     }
     return Math.floor(state.due / 1000);
   }
-  // New cards — return 0 (position doesn't matter, will be reassigned on next desktop sync)
-  return 0;
+  // New cards — return position (will be reassigned on next desktop sync)
+  return position ?? 0;
 }
 
 /**
@@ -102,11 +103,11 @@ export function encodeLeft(
  * Map SM-2 phase to Anki revlog type.
  * 0=learning, 1=review, 2=relearning, 3=filtered, 4=manual
  */
-export function phaseToRevlogType(phase: string): number {
+export function phaseToRevlogType(phase: string, daysLate?: number): number {
   switch (phase) {
     case "new": return 0;
     case "learning": return 0;
-    case "review": return 1;
+    case "review": return (daysLate !== undefined && daysLate < 0) ? 3 : 1;
     case "relearning": return 2;
     default: return 1;
   }
@@ -188,7 +189,8 @@ export async function applyReviewStateToSqlite(
       const factor = encodeFactor(state.ease, card.algorithm);
       const totalSteps =
         state.phase === "relearning" ? defaultRelearnSteps : defaultLearnSteps;
-      const left = encodeLeft(state, totalSteps);
+      const stepsRemaining = Math.max(0, totalSteps - state.step);
+      const left = encodeLeft(state, totalSteps, stepsRemaining);
       const flags = card.flags ?? 0;
       const data = serializeCardData(card);
 
@@ -245,7 +247,7 @@ export function serializeCardData(card: CardReviewState): string {
       if (fsrsState.decay !== undefined) {
         data.decay = roundToPlaces(fsrsState.decay, 3);
       }
-      if (card.lastReviewed) {
+      if (card.lastReviewed != null) {
         data.lrt = Math.floor(card.lastReviewed / 1000);
       }
       return JSON.stringify(data);

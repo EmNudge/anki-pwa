@@ -11,16 +11,14 @@ function fieldChecksum(field: string): number {
   return stringHash(field.replace(/<[^>]*>/g, "").trim());
 }
 
-function guidFromId(id: number): string {
-  // Generate a base91-like GUID from an ID
+function guidFromId(_id: number): string {
+  // Generate a random base91-like GUID (random source, not derived from ID)
   const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!#$%&()*+,-./:;<=>?@[]^_`{|}~";
   let result = "";
-  let n = id;
-  while (n > 0) {
-    result += chars[n % chars.length];
-    n = Math.floor(n / chars.length);
+  for (let i = 0; i < 10; i++) {
+    result += chars[Math.floor(Math.random() * chars.length)];
   }
-  return result.padEnd(10, chars[0]!);
+  return result;
 }
 
 const ANKI2_SCHEMA = `
@@ -92,6 +90,14 @@ CREATE TABLE IF NOT EXISTS graves (
   oid integer not null,
   type integer not null
 );
+
+CREATE INDEX IF NOT EXISTS ix_notes_usn ON notes (usn);
+CREATE INDEX IF NOT EXISTS ix_cards_usn ON cards (usn);
+CREATE INDEX IF NOT EXISTS ix_revlog_usn ON revlog (usn);
+CREATE INDEX IF NOT EXISTS ix_cards_nid ON cards (nid);
+CREATE INDEX IF NOT EXISTS ix_cards_sched ON cards (did, queue, due);
+CREATE INDEX IF NOT EXISTS ix_revlog_cid ON revlog (cid);
+CREATE INDEX IF NOT EXISTS ix_notes_csum ON notes (csum);
 `;
 
 const DEFAULT_CSS = ANKI_DEFAULT_CSS;
@@ -121,7 +127,7 @@ const DEFAULT_DCONF = JSON.stringify({
     autoplay: true,
     timer: 0,
     replayq: true,
-    new: { delays: [1, 10], ints: [1, 4, 7], initialFactor: 2500, order: 1, perDay: 20 },
+    new: { delays: [1, 10], ints: [1, 4, 7], initialFactor: 2500, order: 0, perDay: 20 },
     rev: { perDay: 200, ease4: 1.3, ivlFct: 1, maxIvl: 36500, fuzz: 0.05 },
     lapse: { delays: [10], mult: 0, minInt: 1, leechFails: 8, leechAction: 0 },
     dyn: false,
@@ -134,7 +140,8 @@ export async function createApkg(spec: AnkiDeckSpec): Promise<Blob> {
   // Create schema
   db.run(ANKI2_SCHEMA);
 
-  const now = Math.floor(Date.now() / 1000);
+  const nowMs = Date.now();
+  const nowSecs = Math.floor(nowMs / 1000);
   const deckId = generateId();
   const modelId = generateId() + 1;
 
@@ -144,7 +151,7 @@ export async function createApkg(spec: AnkiDeckSpec): Promise<Blob> {
       id: modelId,
       name: "Basic",
       type: 0,
-      mod: now,
+      mod: nowSecs,
       usn: -1,
       sortf: 0,
       did: deckId,
@@ -179,7 +186,7 @@ export async function createApkg(spec: AnkiDeckSpec): Promise<Blob> {
   const decks = JSON.stringify({
     "1": {
       id: 1,
-      mod: now,
+      mod: nowSecs,
       name: "Default",
       usn: -1,
       lrnToday: [0, 0],
@@ -195,7 +202,7 @@ export async function createApkg(spec: AnkiDeckSpec): Promise<Blob> {
     },
     [deckId]: {
       id: deckId,
-      mod: now,
+      mod: nowSecs,
       name: spec.deckName,
       usn: -1,
       lrnToday: [0, 0],
@@ -214,29 +221,33 @@ export async function createApkg(spec: AnkiDeckSpec): Promise<Blob> {
   // Insert collection row
   db.run(
     "INSERT INTO col VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-    [1, now, now, now * 1000, 11, 0, -1, 0, DEFAULT_CONF, models, decks, DEFAULT_DCONF, "{}"],
+    [1, nowSecs, nowMs, nowMs, 11, 0, -1, 0, DEFAULT_CONF, models, decks, DEFAULT_DCONF, "{}"],
   );
 
-  // Insert notes and cards — use a counter from a base timestamp to avoid ID collisions
-  let nextId = Date.now();
+  // Insert notes and cards — use separate counters to avoid ID collisions
+  // Collision handling: IDs are offset from base timestamp; in a full implementation
+  // we would SELECT max(id) FROM notes / max(id) FROM cards to resolve collisions.
+  let noteIdBase = nowMs;
+  let cardIdBase = nowMs + spec.cards.length;
 
   for (let i = 0; i < spec.cards.length; i++) {
     const card = spec.cards[i]!;
-    const noteId = nextId++;
-    const cardId = nextId++;
+    const noteId = noteIdBase++;
+    const cardId = cardIdBase++;
     const guid = guidFromId(noteId);
     const flds = `${card.front}\x1f${card.back}`;
     const csum = fieldChecksum(card.front);
     const tags = (card.tags ?? []).join(" ");
+    const sfld = card.front.replace(/<[^>]*>/g, "").trim();
 
     db.run(
       "INSERT INTO notes VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-      [noteId, guid, modelId, now, -1, tags ? ` ${tags} ` : "", flds, card.front, csum, 0, ""],
+      [noteId, guid, modelId, nowSecs, -1, tags ? ` ${tags} ` : "", flds, sfld, csum, 0, ""],
     );
 
     db.run(
       "INSERT INTO cards VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-      [cardId, noteId, deckId, 0, now, -1, 0, 0, i, 0, 0, 0, 0, 0, 0, 0, 0, ""],
+      [cardId, noteId, deckId, 0, nowSecs, -1, 0, 0, i, 0, 0, 0, 0, 0, 0, 0, 0, ""],
     );
   }
 
