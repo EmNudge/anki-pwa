@@ -90,7 +90,7 @@ export class ReviewQueue {
   private async unburyCards(): Promise<void> {
     const cards = await reviewDB.getCardsForDeck(this.deckId);
     for (const card of cards) {
-      if (card.queueOverride === -2) {
+      if (card.queueOverride === -3) {
         await reviewDB.patchCard(card.cardId, { queueOverride: undefined });
       }
     }
@@ -165,7 +165,7 @@ export class ReviewQueue {
         // Skip suspended cards entirely
         if (card.reviewState.queueOverride === -1) continue;
         // Skip buried cards (they'll be unburied on day rollover)
-        if (card.reviewState.queueOverride === -2) continue;
+        if (card.reviewState.queueOverride === -3 || card.reviewState.queueOverride === -2) continue;
 
         const dueDate = this.algorithm.getDueDate(card.reviewState.cardState);
         const dueMs = dueDate.getTime();

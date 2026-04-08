@@ -54,9 +54,9 @@ describe("ReviewQueue.getDueCards", () => {
     expect(due).toHaveLength(0);
   });
 
-  it("should exclude buried cards (queueOverride = -2)", () => {
+  it("should exclude buried cards (queueOverride = -3)", () => {
     const card = makeReviewCard({ cardId: "c1" });
-    card.reviewState.queueOverride = -2;
+    card.reviewState.queueOverride = -3;
 
     const due = queue.getDueCards([card]);
     expect(due).toHaveLength(0);
@@ -65,7 +65,7 @@ describe("ReviewQueue.getDueCards", () => {
   it("should include cards without queueOverride alongside filtered ones", () => {
     const normal = makeReviewCard({ cardId: "c1" });
     const buried = makeReviewCard({ cardId: "c2" });
-    buried.reviewState.queueOverride = -2;
+    buried.reviewState.queueOverride = -3;
     const suspended = makeReviewCard({ cardId: "c3" });
     suspended.reviewState.queueOverride = -1;
     const alsoNormal = makeReviewCard({ cardId: "c4" });

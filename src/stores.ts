@@ -533,8 +533,8 @@ function removeCurrentCardAndAdvance() {
 export async function buryCurrentCard() {
   const card = currentReviewCardSig.value;
   if (!card) return;
-  await reviewDB.patchCard(card.cardId, { queueOverride: -2 });
-  card.reviewState.queueOverride = -2;
+  await reviewDB.patchCard(card.cardId, { queueOverride: -3 });
+  card.reviewState.queueOverride = -3;
   removeCurrentCardAndAdvance();
 }
 

@@ -26,8 +26,8 @@ export type CardScheduling = {
 };
 
 const QUEUE_NAMES: Record<number, string> = {
-  [-3]: "schedulerBuried",
-  [-2]: "userBuried",
+  [-3]: "userBuried",
+  [-2]: "schedulerBuried",
   [-1]: "suspended",
   0: "new",
   1: "learning",
@@ -70,6 +70,7 @@ const REVLOG_TYPE_NAMES: Record<number, string> = {
   2: "relearning",
   3: "filtered",
   4: "manual",
+  5: "rescheduled",
 };
 
 const DUE_TYPES: Record<number, CardScheduling["dueType"]> = {

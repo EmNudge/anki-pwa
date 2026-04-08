@@ -87,8 +87,8 @@ describe("ReviewDB", () => {
         lastReviewed: Date.now(),
       });
 
-      const buried = await db.patchCard("card-2", { queueOverride: -2 });
-      expect(buried!.queueOverride).toBe(-2);
+      const buried = await db.patchCard("card-2", { queueOverride: -3 });
+      expect(buried!.queueOverride).toBe(-3);
 
       const suspended = await db.patchCard("card-2", { queueOverride: -1 });
       expect(suspended!.queueOverride).toBe(-1);

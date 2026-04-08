@@ -45,7 +45,7 @@ export interface CardReviewState {
   lastReviewed: number | null;
 
   /**
-   * Queue override: -2 = userBuried, -1 = suspended. undefined = normal scheduling.
+   * Queue override: -3 = userBuried, -2 = schedulerBuried, -1 = suspended. undefined = normal scheduling.
    */
   queueOverride?: number;
 
