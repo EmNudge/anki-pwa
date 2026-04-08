@@ -45,14 +45,24 @@ function seededRandom(seed: number): number {
 
 /**
  * Apply deterministic fuzz to a review interval.
- * Matches Anki: fuzzes intervals >= 2 days with deterministic seeded RNG.
+ * Matches Anki's cumulative delta formula: fuzzes intervals >= 2.5 days.
  * The result is clamped to [minimum, maximum].
  */
 function addFuzz(interval: number, seed: number, minimum = 1, maximum = 36500): number {
-  if (interval < 2) return Math.max(minimum, interval);
-  const fuzzRange = interval < 7 ? 1 : interval < 30 ? Math.max(2, Math.round(interval * 0.15)) : Math.max(4, Math.round(interval * 0.05));
-  const delta = Math.floor(seededRandom(seed) * (fuzzRange * 2 + 1)) - fuzzRange;
-  return Math.min(maximum, Math.max(minimum, interval + delta));
+  if (interval < 2.5) return Math.max(minimum, Math.round(interval));
+  const delta = 1.0
+    + 0.15 * Math.max(0, Math.min(interval, 7) - 2.5)
+    + 0.1  * Math.max(0, Math.min(interval, 20) - 7)
+    + 0.05 * Math.max(0, interval - 20);
+  let lower = Math.round(interval - delta);
+  let upper = Math.round(interval + delta);
+  lower = Math.max(minimum, Math.min(lower, maximum));
+  upper = Math.max(minimum, Math.min(upper, maximum));
+  if (upper === lower && upper > 2 && upper < maximum) {
+    upper = lower + 1;
+  }
+  if (lower >= upper) return lower;
+  return lower + Math.floor(seededRandom(seed) * (upper - lower + 1));
 }
 
 /**
@@ -80,7 +90,7 @@ function daysLate(card: AnkiSM2CardState): number {
  * - Negative = seconds (learning/relearning cards with sub-day intervals)
  * Uses the due timestamp to compute the actual scheduled delay for learning cards.
  */
-function encodeIntervalForRevlog(state: AnkiSM2CardState, now?: number): number {
+function encodeIntervalForRevlog(state: AnkiSM2CardState, now?: number, _secsUntilRollover?: number): number {
   if (state.phase === "learning" || state.phase === "relearning" || state.phase === "new") {
     // For learning/relearning, compute delay from due timestamp
     const refTime = now ?? Date.now();
@@ -102,6 +112,7 @@ function reviewCardForAnswer(
   card: AnkiSM2CardState,
   answer: Answer,
   params: SM2Params,
+  callSeed = 0,
 ): AnkiSM2CardState {
   const now = Date.now();
   const late = daysLate(card);
@@ -123,7 +134,7 @@ function reviewCardForAnswer(
       const rawLapseIvl = Math.max(1, Math.round(interval * params.lapseNewInterval));
       const newIvl = Math.max(
         params.minLapseInterval,
-        addFuzz(rawLapseIvl, reps),
+        addFuzz(rawLapseIvl, reps ^ callSeed),
       );
       const steps = params.relearningSteps;
       if (steps.length === 0) {
@@ -138,7 +149,7 @@ function reviewCardForAnswer(
         };
       }
       const delaySecs = (steps[0] ?? 1) * 60;
-      const fuzzedSecs = addLearningFuzz(delaySecs, reps);
+      const fuzzedSecs = addLearningFuzz(delaySecs, reps ^ callSeed);
       return {
         phase: "relearning",
         step: 0,
@@ -155,7 +166,7 @@ function reviewCardForAnswer(
       const hardRawIvl = interval * params.hardMultiplier * params.intervalModifier;
       const hardMinimum = params.hardMultiplier > 1 ? interval + 1 : 1;
       const hardCandiate = Math.max(hardMinimum, Math.round(hardRawIvl));
-      const newIvl = clampInterval(addFuzz(hardCandiate, reps, hardMinimum, params.maximumInterval), params);
+      const newIvl = clampInterval(addFuzz(hardCandiate, reps ^ callSeed, hardMinimum, params.maximumInterval), params);
       return {
         phase: "review",
         step: 0,
@@ -171,11 +182,11 @@ function reviewCardForAnswer(
       const hardRawIvl = interval * params.hardMultiplier * params.intervalModifier;
       const hardMinimum = params.hardMultiplier > 1 ? interval + 1 : 1;
       const hardCandidate = Math.max(hardMinimum, Math.round(hardRawIvl));
-      const hardIvl = clampInterval(addFuzz(hardCandidate, reps, hardMinimum, params.maximumInterval), params);
+      const hardIvl = clampInterval(addFuzz(hardCandidate, reps ^ callSeed, hardMinimum, params.maximumInterval), params);
 
       const goodMinimum = params.hardMultiplier <= 1 ? interval + 1 : hardIvl + 1;
       const goodCandidate = Math.max(goodMinimum, Math.round((interval + daysLatePositive / 2) * ease * params.intervalModifier));
-      const newIvl = clampInterval(addFuzz(goodCandidate, reps + 1, goodMinimum, params.maximumInterval), params);
+      const newIvl = clampInterval(addFuzz(goodCandidate, (reps + 1) ^ callSeed, goodMinimum, params.maximumInterval), params);
       return {
         phase: "review",
         step: 0,
@@ -193,14 +204,14 @@ function reviewCardForAnswer(
       const hardRawIvl = interval * params.hardMultiplier * params.intervalModifier;
       const hardMinimum = params.hardMultiplier > 1 ? interval + 1 : 1;
       const hardCandidate = Math.max(hardMinimum, Math.round(hardRawIvl));
-      const hardIvl = clampInterval(addFuzz(hardCandidate, reps, hardMinimum, params.maximumInterval), params);
+      const hardIvl = clampInterval(addFuzz(hardCandidate, reps ^ callSeed, hardMinimum, params.maximumInterval), params);
 
       const goodMinimum = params.hardMultiplier <= 1 ? interval + 1 : hardIvl + 1;
       const goodCandidate = Math.max(goodMinimum, Math.round((interval + daysLatePositive / 2) * (ease - 0.15) * params.intervalModifier));
-      const goodIvl = clampInterval(addFuzz(goodCandidate, reps + 1, goodMinimum, params.maximumInterval), params);
+      const goodIvl = clampInterval(addFuzz(goodCandidate, (reps + 1) ^ callSeed, goodMinimum, params.maximumInterval), params);
 
       const easyCandidate = Math.max(goodIvl + 1, Math.round((interval + daysLatePositive) * ease * params.easyBonus * params.intervalModifier));
-      const newIvl = clampInterval(addFuzz(easyCandidate, reps + 2, goodIvl + 1, params.maximumInterval), params);
+      const newIvl = clampInterval(addFuzz(easyCandidate, (reps + 2) ^ callSeed, goodIvl + 1, params.maximumInterval), params);
       return {
         phase: "review",
         step: 0,
@@ -287,6 +298,7 @@ function learningCardForAnswer(
   graduatingInterval: number,
   easyInterval: number,
   params: SM2Params,
+  callSeed = 0,
 ): AnkiSM2CardState {
   const now = Date.now();
   const reps = card.reps + 1;
@@ -294,7 +306,7 @@ function learningCardForAnswer(
   switch (answer) {
     case "again": {
       const delaySecs = (steps[0] ?? 1) * 60;
-      const fuzzedSecs = addLearningFuzz(delaySecs, reps);
+      const fuzzedSecs = addLearningFuzz(delaySecs, reps ^ callSeed);
       return {
         ...card,
         step: 0,
@@ -343,7 +355,7 @@ function learningCardForAnswer(
         };
       }
       const delaySecs = steps[nextStep]! * 60;
-      const fuzzedSecs = addLearningFuzz(delaySecs, reps);
+      const fuzzedSecs = addLearningFuzz(delaySecs, reps ^ callSeed);
       return {
         ...card,
         step: nextStep,
@@ -399,9 +411,10 @@ export class AnkiSM2Algorithm implements SchedulingAlgorithm {
     };
   }
 
-  reviewCard(cardState: unknown, answer: Answer): SchedulingResult {
+  reviewCard(cardState: unknown, answer: Answer, cardId?: number): SchedulingResult {
     const card = cardState as AnkiSM2CardState;
     const params = this.params;
+    const callSeed = cardId ?? 0;
     let newState: AnkiSM2CardState;
 
     switch (card.phase) {
@@ -435,6 +448,7 @@ export class AnkiSM2Algorithm implements SchedulingAlgorithm {
             params.graduatingInterval,
             params.easyInterval,
             params,
+            callSeed,
           );
         }
         break;
@@ -447,6 +461,7 @@ export class AnkiSM2Algorithm implements SchedulingAlgorithm {
           params.graduatingInterval,
           params.easyInterval,
           params,
+          callSeed,
         );
         break;
       case "relearning":
@@ -457,14 +472,19 @@ export class AnkiSM2Algorithm implements SchedulingAlgorithm {
           params.graduatingInterval,
           params.easyInterval,
           params,
+          callSeed,
         );
         break;
       case "review":
-        newState = reviewCardForAnswer(card, answer, params);
+        newState = reviewCardForAnswer(card, answer, params, callSeed);
         break;
     }
 
     const reviewNow = Date.now();
+    const newCardState = newState as AnkiSM2CardState;
+    const leeched = card.phase === "review" && answer === "again"
+      && newCardState.lapses >= params.leechThreshold
+      && ((newCardState.lapses - params.leechThreshold) % Math.ceil(params.leechThreshold / 2) === 0);
     return {
       cardState: newState,
       reviewLog: {
@@ -476,6 +496,8 @@ export class AnkiSM2Algorithm implements SchedulingAlgorithm {
         previousInterval: encodeIntervalForRevlog(card, reviewNow),
         lapses: newState.lapses,
         timestamp: reviewNow,
+        leeched,
+        burySiblings: params.buryNew || params.buryReviews,
       },
     };
   }

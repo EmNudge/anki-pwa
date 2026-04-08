@@ -81,6 +81,12 @@ export interface SM2Params {
   minLapseInterval: number;
   /** Maximum review interval in days (default: 36500) */
   maximumInterval: number;
+  /** Leech threshold — number of lapses to trigger leech (default: 8) */
+  leechThreshold: number;
+  /** Whether to bury new siblings after answering (default: true) */
+  buryNew: boolean;
+  /** Whether to bury review siblings after answering (default: true) */
+  buryReviews: boolean;
 }
 
 export const DEFAULT_SM2_PARAMS: SM2Params = {
@@ -95,6 +101,9 @@ export const DEFAULT_SM2_PARAMS: SM2Params = {
   lapseNewInterval: 0,
   minLapseInterval: 1,
   maximumInterval: 36500,
+  leechThreshold: 8,
+  buryNew: true,
+  buryReviews: true,
 };
 
 /**

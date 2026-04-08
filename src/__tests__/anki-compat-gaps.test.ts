@@ -889,19 +889,13 @@ describe("GAP 18: Review fuzz should be deterministic (seeded by card ID + reps)
 //   if interval < 30: fuzzRange = max(2, round(interval*0.15))
 //   else: fuzzRange = max(4, round(interval*0.05))
 //   These ranges don't match Anki's precise fuzz tables.
-// Official Anki applies fuzz to intervals >= 2 days using a precise fuzz table.
-// PWA (anki-sm2-algorithm.ts:34-38) doesn't fuzz intervals < 2.5 days.
-// For interval = 2: Anki fuzzes to {2, 3}, PWA doesn't fuzz at all.
-describe("GAP 19: Fuzz ranges don't match Anki's fuzz table", () => {
-  it("addFuzz should fuzz interval of exactly 2 days (Anki does, PWA doesn't)", () => {
-    // We test addFuzz directly by constructing a scenario where the
-    // raw interval before fuzz is exactly 2.
-    // Since addFuzz is not exported, we test through the algorithm.
-
-    // Use a card where good produces exactly interval=2 before fuzz
-    // good = max(interval+1, round((interval + late/2) * ease * modifier))
-    // With interval=1, ease=1.3, late=0: round(1 * 1.3) = 1, max(2, 1) = 2
-    // Then addFuzz(2): since 2 < 2.5, PWA returns 2 unchanged.
+// Official Anki applies fuzz to intervals >= 2.5 days using cumulative delta formula.
+// For interval >= 2.5: delta >= 1.0, producing a range of at least 2 values.
+describe("GAP 19: Fuzz ranges match Anki's cumulative delta formula", () => {
+  it("addFuzz should fuzz interval of 3 days (Anki delta >= 1.0)", () => {
+    // Use a card where hard produces interval ~3 before fuzz
+    // hard = interval * hardMultiplier = 2 * 1.2 = 2.4, min = 3
+    // addFuzz(3): delta = 1.0 + 0.15*(3-2.5) = 1.075 → bounds [2, 4]
     const algo = new AnkiSM2Algorithm({
       learningSteps: [1, 10],
       relearningSteps: [10],
@@ -920,22 +914,21 @@ describe("GAP 19: Fuzz ranges don't match Anki's fuzz table", () => {
       phase: "review" as const,
       step: 0,
       ease: 1.3,
-      interval: 1,
+      interval: 2,
       due: Date.now(), // exactly on time
       lapses: 0,
       reps: 5,
     };
 
-    // With deterministic fuzz, different reps values should produce different results
+    // With deterministic fuzz seeded by cardId, different cardIds produce variation
     const results = new Set<number>();
-    for (let reps = 1; reps < 50; reps++) {
-      const cardWithReps = { ...card, reps };
-      const r = algo.reviewCard(cardWithReps, "hard");
+    for (let cardId = 1; cardId < 50; cardId++) {
+      const r = algo.reviewCard(card, "hard", cardId);
       results.add((r.cardState as { interval: number }).interval);
     }
 
-    // Anki: interval 2 should get fuzz (varying between 2 and 3)
-    // Different seeds should produce variation
+    // Anki: interval ~3 gets fuzz delta ~1.075, producing {2, 3, 4}
+    // Different cardId seeds should produce variation
     expect(results.size).toBeGreaterThan(1);
   });
 });
