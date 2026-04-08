@@ -230,6 +230,38 @@ export async function loadSyncedCollection(
   reviewModeSig.value = "studying";
 }
 
+/**
+ * Retrieve the cached SQLite collection bytes, or null if none exists.
+ */
+export async function getCachedSqlite(): Promise<Uint8Array | null> {
+  const cache = await ankiCachePromise;
+  const resp = await cache.match("/sync/collection.sqlite");
+  if (!resp) return null;
+  return new Uint8Array(await resp.arrayBuffer());
+}
+
+/**
+ * Store SQLite bytes in the cache and update the UI without touching media.
+ * Used after normal (incremental) sync where media hasn't changed.
+ */
+export async function refreshSyncedCollection(bytes: Uint8Array) {
+  const cache = await ankiCachePromise;
+  await cache.put(
+    "/sync/collection.sqlite",
+    new Response(new Blob([bytes.buffer as ArrayBuffer])),
+  );
+
+  // Recover existing media object URLs from the current activeDeckInputSig
+  const currentInput = activeDeckInputSig.value;
+  const existingMedia =
+    currentInput?.kind === "sqlite" ? currentInput.mediaFiles : undefined;
+
+  persistActiveDeckSourceId(SYNC_COLLECTION_ID);
+  activeDeckInputSig.value = { kind: "sqlite", bytes, mediaFiles: existingMedia };
+  activeViewSig.value = "review";
+  reviewModeSig.value = "studying";
+}
+
 export async function clearSyncedCollection() {
   const cache = await ankiCachePromise;
   await cache.delete("/sync/collection.sqlite");
