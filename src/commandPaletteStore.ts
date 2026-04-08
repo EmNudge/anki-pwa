@@ -4,6 +4,7 @@ import type { Component, VNode } from "vue";
 export interface Command {
   id: string;
   title: string;
+  description?: string;
   icon?: Component;
   hotkey?: string;
   label?: string;

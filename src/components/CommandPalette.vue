@@ -254,9 +254,14 @@ onUnmounted(() => window.removeEventListener("keydown", onGlobalKeydown));
         </div>
 
         <div class="command-palette-footer">
-          <div class="footer-hint"><kbd>&uarr;&darr;</kbd> Navigate</div>
-          <div class="footer-hint"><kbd>Enter</kbd> Select</div>
-          <div class="footer-hint"><kbd>Esc</kbd> Close</div>
+          <div class="footer-hints">
+            <div class="footer-hint"><kbd>&uarr;&darr;</kbd> Navigate</div>
+            <div class="footer-hint"><kbd>Enter</kbd> Select</div>
+            <div class="footer-hint"><kbd>Esc</kbd> Close</div>
+          </div>
+          <div v-if="selectedCommand?.description" class="footer-description">
+            {{ selectedCommand.description }}
+          </div>
         </div>
       </div>
 
@@ -588,12 +593,14 @@ onUnmounted(() => window.removeEventListener("keydown", onGlobalKeydown));
 }
 
 .command-palette-footer {
-  padding: var(--spacing-2) var(--spacing-4);
   border-top: 1px solid var(--color-border);
-  display: flex;
-  gap: var(--spacing-4);
   font-size: var(--font-size-xs);
   color: var(--color-text-tertiary);
+}
+.footer-hints {
+  display: flex;
+  gap: var(--spacing-4);
+  padding: var(--spacing-2) var(--spacing-4);
 }
 .footer-hint {
   display: flex;
@@ -607,5 +614,12 @@ onUnmounted(() => window.removeEventListener("keydown", onGlobalKeydown));
   border-radius: var(--radius-sm);
   font-family: var(--font-family-mono);
   font-size: var(--font-size-xs);
+}
+.footer-description {
+  padding: var(--spacing-2) var(--spacing-4);
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: var(--leading-relaxed, 1.5);
 }
 </style>
