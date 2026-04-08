@@ -1,5 +1,4 @@
 export const MS_PER_DAY = 86_400_000;
-export const MS_PER_MINUTE = 60_000;
 
 const ZSTD_MAGIC = [0x28, 0xb5, 0x2f, 0xfd] as const;
 

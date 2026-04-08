@@ -89,10 +89,11 @@ describe("Issue 5: Missing revlog type 5 (Rescheduled)", () => {
 // 6. FSRS factor encoding in revlog differs from SM-2
 // ─────────────────────────────────────────────────────────────────────────────
 describe("Issue 6: FSRS difficulty encoding in revlog factor", () => {
-  it("FSRS reviews should encode factor as difficulty*100+100, not ease*1000", () => {
+  it("FSRS reviews should encode factor as difficulty_shifted*1000", () => {
     const difficulty = 5.0;
-    // Official Anki FSRS: factor = Math.round(difficulty * 100) + 100 = 600
-    const correctFsrsFactor = Math.round(difficulty * 100) + 100;
+    // Official Anki FSRS: difficulty_shifted = (difficulty - 1) / 9 + 0.1
+    // factor = round(difficulty_shifted * 1000)
+    const correctFsrsFactor = Math.round(((difficulty - 1) / 9 + 0.1) * 1000);
     const actualFactor = encodeFactor(0, "fsrs", difficulty);
     expect(actualFactor).toBe(correctFsrsFactor);
   });
