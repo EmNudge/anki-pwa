@@ -48,7 +48,7 @@ CREATE TABLE IF NOT EXISTS notes (
   usn integer not null,
   tags text not null,
   flds text not null,
-  sfld text not null,
+  sfld integer not null,
   csum integer not null,
   flags integer not null,
   data text not null
