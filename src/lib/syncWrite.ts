@@ -138,6 +138,73 @@ const ANSWER_TO_EASE: Record<string, number> = {
 };
 
 /**
+ * Merge all local review state from IndexedDB into an already-open SQLite database.
+ * Sets usn=-1 on all modified rows to mark them as pending sync.
+ * This is the core logic shared by both full-push and normal sync flows.
+ */
+export async function mergeIndexedDBToSqlite(
+  db: import("sql.js").Database,
+  deckId: string,
+): Promise<void> {
+  // Get collection creation time for due-date conversion
+  const crtResult = db.exec("SELECT crt FROM col");
+  const collectionCreationSecs =
+    (crtResult[0]?.values[0]?.[0] as number | undefined) ?? 0;
+
+  // Read all reviewed cards from IndexedDB
+  const { reviewDB } = await import("../scheduler/db");
+  const reviewedCards = await reviewDB.getCardsForDeck(deckId);
+  if (reviewedCards.length === 0) return;
+
+  // Determine learning step counts from deck config (default steps)
+  const defaultLearnSteps = 2; // [1, 10]
+  const defaultRelearnSteps = 1; // [10]
+
+  // Update each reviewed card in the SQLite database
+  const updateStmt = db.prepare(CARD_UPDATE_SQL);
+
+  const nowMs = Date.now();
+  const nowSecs = Math.floor(nowMs / 1000);
+
+  for (const card of reviewedCards) {
+    const ankiCardId = Number(card.cardId);
+    if (isNaN(ankiCardId)) continue; // legacy positional ID, skip
+
+    // Apply queueOverride (bury/suspend) even for unreviewed cards
+    const hasOverride =
+      card.queueOverride === QUEUE_SUSPENDED ||
+      card.queueOverride === QUEUE_SCHED_BURIED ||
+      card.queueOverride === QUEUE_USER_BURIED;
+    if (!card.lastReviewed && !hasOverride && card.flags === undefined) continue;
+
+    const state = card.cardState as SM2CardState;
+    const type = phaseToType(state.phase);
+    const queue = hasOverride ? card.queueOverride! : phaseToQueue(state.phase, state.interval);
+    const due = convertDue(state, collectionCreationSecs);
+    const ivl = Math.max(0, Math.round(state.interval));
+    const factor = encodeFactor(state.ease, card.algorithm);
+    const totalSteps =
+      state.phase === "relearning" ? defaultRelearnSteps : defaultLearnSteps;
+    const stepsRemaining = Math.max(0, totalSteps - state.step);
+    const left = encodeLeft(state, totalSteps, stepsRemaining);
+    const flags = card.flags ?? 0;
+    const data = serializeCardData(card);
+
+    updateStmt.run([type, queue, due, ivl, factor, state.reps, state.lapses, left, flags, nowSecs, data, 0, 0, -1, ankiCardId]);
+  }
+  updateStmt.free();
+
+  // Insert review logs into revlog table
+  await insertRevlogs(db, deckId, reviewedCards);
+
+  // Insert graves for deleted cards
+  await insertGraves(db, deckId);
+
+  // Update collection modification timestamp (milliseconds, matching official Anki)
+  db.run("UPDATE col SET mod=?", [nowMs]);
+}
+
+/**
  * Apply all local review state from IndexedDB back into a SQLite collection.
  * Returns the modified SQLite as a Uint8Array ready for upload.
  */
@@ -148,65 +215,7 @@ export async function applyReviewStateToSqlite(
   const db = await createDatabase(sqliteBytes);
 
   try {
-    // Get collection creation time for due-date conversion
-    const crtResult = db.exec("SELECT crt FROM col");
-    const collectionCreationSecs =
-      (crtResult[0]?.values[0]?.[0] as number | undefined) ?? 0;
-
-    // Read all reviewed cards from IndexedDB
-    const { reviewDB } = await import("../scheduler/db");
-    const reviewedCards = await reviewDB.getCardsForDeck(deckId);
-    if (reviewedCards.length === 0) {
-      return new Uint8Array(db.export());
-    }
-
-    // Determine learning step counts from deck config (default steps)
-    const defaultLearnSteps = 2; // [1, 10]
-    const defaultRelearnSteps = 1; // [10]
-
-    // Update each reviewed card in the SQLite database
-    const updateStmt = db.prepare(CARD_UPDATE_SQL);
-
-    const nowMs = Date.now();
-    const nowSecs = Math.floor(nowMs / 1000);
-
-    for (const card of reviewedCards) {
-      const ankiCardId = Number(card.cardId);
-      if (isNaN(ankiCardId)) continue; // legacy positional ID, skip
-
-      // Apply queueOverride (bury/suspend) even for unreviewed cards
-      const hasOverride =
-        card.queueOverride === QUEUE_SUSPENDED ||
-        card.queueOverride === QUEUE_SCHED_BURIED ||
-        card.queueOverride === QUEUE_USER_BURIED;
-      if (!card.lastReviewed && !hasOverride && card.flags === undefined) continue;
-
-      const state = card.cardState as SM2CardState;
-      const type = phaseToType(state.phase);
-      const queue = hasOverride ? card.queueOverride! : phaseToQueue(state.phase, state.interval);
-      const due = convertDue(state, collectionCreationSecs);
-      const ivl = Math.max(0, Math.round(state.interval));
-      const factor = encodeFactor(state.ease, card.algorithm);
-      const totalSteps =
-        state.phase === "relearning" ? defaultRelearnSteps : defaultLearnSteps;
-      const stepsRemaining = Math.max(0, totalSteps - state.step);
-      const left = encodeLeft(state, totalSteps, stepsRemaining);
-      const flags = card.flags ?? 0;
-      const data = serializeCardData(card);
-
-      updateStmt.run([type, queue, due, ivl, factor, state.reps, state.lapses, left, flags, nowSecs, data, 0, 0, -1, ankiCardId]);
-    }
-    updateStmt.free();
-
-    // Insert review logs into revlog table
-    await insertRevlogs(db, deckId, reviewedCards);
-
-    // Insert graves for deleted cards
-    await insertGraves(db, deckId);
-
-    // Update collection modification timestamp (milliseconds, matching official Anki)
-    db.run("UPDATE col SET mod=?", [nowMs]);
-
+    await mergeIndexedDBToSqlite(db, deckId);
     const result = new Uint8Array(db.export());
     return result;
   } finally {

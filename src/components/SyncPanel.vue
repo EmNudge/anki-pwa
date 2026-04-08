@@ -12,8 +12,17 @@ import {
   clearSyncState,
   type SyncConfig,
 } from "../lib/ankiSync";
-import { loadSyncedCollection, clearSyncedCollection, syncActiveSig, getActiveDeckId } from "../stores";
+import {
+  loadSyncedCollection,
+  clearSyncedCollection,
+  syncActiveSig,
+  getActiveDeckId,
+  getCachedSqlite,
+  refreshSyncedCollection,
+  initializeReviewQueue,
+} from "../stores";
 import { applyReviewStateToSqlite } from "../lib/syncWrite";
+import { normalSync, FullSyncRequiredError, SyncAbortedError } from "../lib/normalSync";
 import mime from "mime";
 
 const serverUrl = ref("");
@@ -25,6 +34,8 @@ const syncStatus = ref("");
 const syncError = ref("");
 const lastSyncTime = ref<number | null>(null);
 const showPushConfirm = ref(false);
+const showFullSyncDialog = ref(false);
+const showAdvancedSync = ref(false);
 
 onMounted(() => {
   const config = readSyncConfig();
@@ -48,7 +59,8 @@ async function handleLogin() {
     const hkey = await login(serverUrl.value, username.value, password.value);
 
     writeSyncConfig({ serverUrl: serverUrl.value, username: username.value });
-    writeSyncState({ hkey, lastSync: readSyncState().lastSync });
+    const prevState = readSyncState();
+    writeSyncState({ ...prevState, hkey });
 
     isLoggedIn.value = true;
     syncActiveSig.value = true;
@@ -70,7 +82,8 @@ async function handleLogout() {
   lastSyncTime.value = null;
 }
 
-async function handlePull() {
+/** Primary sync action — uses incremental sync, falls back to full sync. */
+async function handleSync() {
   const state = readSyncState();
   if (!state.hkey) {
     syncError.value = "Not logged in. Please log in first.";
@@ -79,33 +92,106 @@ async function handlePull() {
 
   syncError.value = "";
   isSyncing.value = true;
-  syncStatus.value = "Downloading collection...";
 
   try {
-    const sqliteBytes = await downloadCollection(serverUrl.value, state.hkey);
-
-    syncStatus.value = "Downloading media files...";
-    const mediaBlobs = await downloadMedia(serverUrl.value, state.hkey);
-    let typedMediaBlobs: Map<string, Blob> | undefined;
-    if (mediaBlobs.size > 0) {
-      typedMediaBlobs = new Map<string, Blob>();
-      for (const [filename, blob] of mediaBlobs) {
-        typedMediaBlobs.set(
-          filename,
-          new Blob([blob], { type: mime.getType(filename) ?? "application/octet-stream" }),
-        );
-      }
-      syncStatus.value = `Downloaded ${mediaBlobs.size} media files. Loading...`;
+    // Check if we have a local collection — if not, do a full pull first
+    const cachedBytes = await getCachedSqlite();
+    if (!cachedBytes) {
+      syncStatus.value = "No local collection. Performing full download...";
+      await doFullPull(state.hkey);
+      return;
     }
 
-    syncStatus.value = "Parsing collection...";
-    await loadSyncedCollection(sqliteBytes, typedMediaBlobs);
+    // Attempt normal (incremental) sync
+    const deckId = getActiveDeckId();
+    const result = await normalSync(
+      serverUrl.value,
+      state.hkey,
+      deckId,
+      cachedBytes,
+      (status) => { syncStatus.value = status; },
+    );
 
-    const now = Date.now();
-    writeSyncState({ hkey: state.hkey, lastSync: now });
-    lastSyncTime.value = now;
+    if (result.action === "noChanges") {
+      syncStatus.value = "Already up to date.";
+      const now = Date.now();
+      writeSyncState({ ...state, lastSync: now });
+      lastSyncTime.value = now;
+      return;
+    }
 
-    syncStatus.value = "Collection synced successfully.";
+    if (result.sqliteBytes) {
+      syncStatus.value = "Updating local collection...";
+      await refreshSyncedCollection(result.sqliteBytes);
+      await initializeReviewQueue();
+    }
+
+    const newState = { ...state, ...result.newState };
+    writeSyncState(newState);
+    lastSyncTime.value = newState.lastSync ?? Date.now();
+
+    syncStatus.value = "Sync completed successfully.";
+  } catch (err) {
+    if (err instanceof FullSyncRequiredError) {
+      showFullSyncDialog.value = true;
+      syncStatus.value = "Full sync required — schema has changed.";
+      return;
+    }
+    if (err instanceof Error && err.message.includes("Authentication expired")) {
+      isLoggedIn.value = false;
+      syncActiveSig.value = false;
+      clearSyncState();
+    }
+    syncError.value = err instanceof Error ? err.message : "Sync failed";
+    syncStatus.value = "";
+  } finally {
+    isSyncing.value = false;
+  }
+}
+
+/** Full download (pull) — replaces local collection entirely. */
+async function doFullPull(hkey: string) {
+  syncStatus.value = "Downloading collection...";
+  const sqliteBytes = await downloadCollection(serverUrl.value, hkey);
+
+  syncStatus.value = "Downloading media files...";
+  const mediaBlobs = await downloadMedia(serverUrl.value, hkey);
+  let typedMediaBlobs: Map<string, Blob> | undefined;
+  if (mediaBlobs.size > 0) {
+    typedMediaBlobs = new Map<string, Blob>();
+    for (const [filename, blob] of mediaBlobs) {
+      typedMediaBlobs.set(
+        filename,
+        new Blob([blob], { type: mime.getType(filename) ?? "application/octet-stream" }),
+      );
+    }
+    syncStatus.value = `Downloaded ${mediaBlobs.size} media files. Loading...`;
+  }
+
+  syncStatus.value = "Parsing collection...";
+  await loadSyncedCollection(sqliteBytes, typedMediaBlobs);
+
+  const now = Date.now();
+  const prevState = readSyncState();
+  writeSyncState({ ...prevState, lastSync: now });
+  lastSyncTime.value = now;
+
+  syncStatus.value = "Collection synced successfully.";
+}
+
+async function handlePull() {
+  const state = readSyncState();
+  if (!state.hkey) {
+    syncError.value = "Not logged in. Please log in first.";
+    return;
+  }
+
+  showFullSyncDialog.value = false;
+  syncError.value = "";
+  isSyncing.value = true;
+
+  try {
+    await doFullPull(state.hkey);
   } catch (err) {
     if (err instanceof Error && err.message.includes("Authentication expired")) {
       isLoggedIn.value = false;
@@ -127,18 +213,16 @@ async function handlePush() {
   }
 
   showPushConfirm.value = false;
+  showFullSyncDialog.value = false;
   syncError.value = "";
   isSyncing.value = true;
   syncStatus.value = "Preparing collection for upload...";
 
   try {
-    // Read cached SQLite from Cache API
-    const cache = await caches.open("anki-cache");
-    const sqliteResp = await cache.match("/sync/collection.sqlite");
-    if (!sqliteResp) {
+    const sqliteBytes = await getCachedSqlite();
+    if (!sqliteBytes) {
       throw new Error("No local collection found. Pull first before pushing.");
     }
-    const sqliteBytes = new Uint8Array(await sqliteResp.arrayBuffer());
 
     // Merge review state from IndexedDB into the SQLite
     syncStatus.value = "Writing review state into collection...";
@@ -150,13 +234,10 @@ async function handlePush() {
     await uploadCollection(serverUrl.value, state.hkey, modifiedSqlite);
 
     // Update local cache with the modified version
-    await cache.put(
-      "/sync/collection.sqlite",
-      new Response(new Blob([modifiedSqlite.buffer as ArrayBuffer])),
-    );
+    await refreshSyncedCollection(modifiedSqlite);
 
     const now = Date.now();
-    writeSyncState({ hkey: state.hkey, lastSync: now });
+    writeSyncState({ ...state, lastSync: now });
     lastSyncTime.value = now;
 
     syncStatus.value = "Collection pushed successfully.";
@@ -252,11 +333,8 @@ function formatLastSync(timestamp: number | null): string {
         <div class="sync-last-sync">Last sync: {{ formatLastSync(lastSyncTime) }}</div>
 
         <div class="sync-actions">
-          <button class="sync-btn sync-btn--primary" :disabled="isSyncing" @click="handlePull">
-            {{ isSyncing ? "Syncing..." : "Pull Collection" }}
-          </button>
-          <button class="sync-btn sync-btn--push" :disabled="isSyncing" @click="showPushConfirm = true">
-            Push Collection
+          <button class="sync-btn sync-btn--primary" :disabled="isSyncing" @click="handleSync">
+            {{ isSyncing ? "Syncing..." : "Sync" }}
           </button>
           <button class="sync-btn sync-btn--secondary" :disabled="isSyncing" @click="handleLogout">
             Log Out
@@ -268,6 +346,25 @@ function formatLastSync(timestamp: number | null): string {
           >
             Disconnect
           </button>
+        </div>
+
+        <!-- Full sync required dialog -->
+        <div v-if="showFullSyncDialog" class="sync-confirm">
+          <p class="sync-confirm-text">
+            <strong>Full sync required.</strong> The collection schema has changed
+            (e.g. notetypes were modified on another device). Choose a direction:
+          </p>
+          <div class="sync-confirm-actions">
+            <button class="sync-btn sync-btn--primary" @click="handlePull">
+              Download from Server
+            </button>
+            <button class="sync-btn sync-btn--push" @click="showPushConfirm = true">
+              Upload to Server
+            </button>
+            <button class="sync-btn sync-btn--secondary" @click="showFullSyncDialog = false">
+              Cancel
+            </button>
+          </div>
         </div>
 
         <!-- Push confirmation dialog -->
@@ -286,6 +383,24 @@ function formatLastSync(timestamp: number | null): string {
             </button>
           </div>
         </div>
+
+        <!-- Advanced: Force full sync -->
+        <details class="sync-advanced" @toggle="showAdvancedSync = !showAdvancedSync">
+          <summary>Force full sync</summary>
+          <div class="sync-advanced-content">
+            <p class="sync-advanced-desc">
+              Bypass incremental sync and transfer the entire collection.
+            </p>
+            <div class="sync-actions">
+              <button class="sync-btn sync-btn--secondary" :disabled="isSyncing" @click="handlePull">
+                Full Download
+              </button>
+              <button class="sync-btn sync-btn--push" :disabled="isSyncing" @click="showPushConfirm = true">
+                Full Upload
+              </button>
+            </div>
+          </div>
+        </details>
       </template>
     </div>
 
@@ -317,13 +432,16 @@ function formatLastSync(timestamp: number | null): string {
 
         <h3>What gets synced</h3>
         <p>
-          <strong>Pull</strong> downloads your entire card collection (decks, notes, templates,
-          scheduling data) along with all media files (images, audio).
+          <strong>Sync</strong> performs an incremental two-way sync, sending only changes since
+          the last sync. Reviews done on desktop and here are merged automatically (newer wins).
         </p>
         <p>
-          <strong>Push</strong> uploads your local collection back to the server, including any
-          reviews you've done. This overwrites the server's copy entirely (like Anki's
-          "force one-way sync: upload").
+          If the collection schema changed (e.g. notetypes were edited), a full sync is required
+          and you'll be asked to choose a direction.
+        </p>
+        <p>
+          <strong>Force full sync</strong> options bypass incremental sync and transfer the
+          entire collection in one direction (download or upload).
         </p>
       </div>
     </details>
@@ -512,6 +630,28 @@ function formatLastSync(timestamp: number | null): string {
   color: #ef4444;
   background: color-mix(in srgb, #ef4444 8%, var(--color-surface));
   border-radius: var(--radius-md);
+}
+
+.sync-advanced {
+  margin-top: var(--spacing-4);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.sync-advanced summary {
+  cursor: pointer;
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+}
+
+.sync-advanced-content {
+  padding-top: var(--spacing-3);
+}
+
+.sync-advanced-desc {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  margin: 0 0 var(--spacing-2) 0;
 }
 
 .sync-help {

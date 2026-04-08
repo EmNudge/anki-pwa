@@ -9,9 +9,11 @@ export interface SyncConfig {
   username: string;
 }
 
-interface SyncState {
+export interface SyncState {
   hkey: string | null;
   lastSync: number | null;
+  usn: number | null;
+  scm: number | null;
 }
 
 export function readSyncConfig(): SyncConfig | null {
@@ -34,11 +36,12 @@ export function writeSyncConfig(config: SyncConfig | null) {
 
 export function readSyncState(): SyncState {
   const stored = localStorage.getItem(SYNC_STATE_KEY);
-  if (!stored) return { hkey: null, lastSync: null };
+  if (!stored) return { hkey: null, lastSync: null, usn: null, scm: null };
   try {
-    return JSON.parse(stored);
+    const parsed = JSON.parse(stored);
+    return { hkey: null, lastSync: null, usn: null, scm: null, ...parsed };
   } catch {
-    return { hkey: null, lastSync: null };
+    return { hkey: null, lastSync: null, usn: null, scm: null };
   }
 }
 
@@ -50,7 +53,7 @@ export function clearSyncState() {
   localStorage.removeItem(SYNC_STATE_KEY);
 }
 
-function normalizeUrl(serverUrl: string): string {
+export function normalizeUrl(serverUrl: string): string {
   return serverUrl.replace(/\/+$/, "");
 }
 
@@ -83,7 +86,7 @@ function buildSyncForm(
 /**
  * Post to a sync endpoint, optionally authenticated with a host key.
  */
-async function syncPost(
+export async function syncPost(
   url: string,
   hkey?: string,
   data: unknown = {},
@@ -315,7 +318,7 @@ export async function uploadCollection(
   }
 }
 
-async function readResponseJson(response: Response): Promise<unknown> {
+export async function readResponseJson(response: Response): Promise<unknown> {
   const bytes = new Uint8Array(await response.arrayBuffer());
   const decompressed = await decompressIfNeeded(bytes);
   const text = new TextDecoder().decode(decompressed);

@@ -2,7 +2,7 @@ import type { CardReviewState, DailyStats, SchedulerSettings, StoredReviewLog } 
 import { DEFAULT_SCHEDULER_SETTINGS } from "./types";
 
 const DB_NAME = "anki-review-db";
-const DB_VERSION = 2; // Updated for FSRS support
+const DB_VERSION = 3; // 3: added deletedCards store for sync graves
 
 /**
  * IndexedDB wrapper for persisting review state
@@ -85,6 +85,12 @@ class ReviewDB {
         // Store for settings
         if (!db.objectStoreNames.contains("settings")) {
           db.createObjectStore("settings", { keyPath: "deckId" });
+        }
+
+        // Store for deleted cards (sync graves)
+        if (!db.objectStoreNames.contains("deletedCards")) {
+          const delStore = db.createObjectStore("deletedCards", { keyPath: "cardId" });
+          delStore.createIndex("deckId", "deckId", { unique: false });
         }
       };
     });
@@ -202,20 +208,91 @@ class ReviewDB {
   }
 
   /**
+   * Delete a card from the cards store (e.g. when applying remote graves).
+   */
+  async deleteCard(cardId: string): Promise<void> {
+    await this.run(["cards"], "readwrite", (tx) =>
+      tx.objectStore("cards").delete(cardId),
+    );
+  }
+
+  /**
+   * Delete all review logs for a specific card.
+   */
+  async deleteReviewLogsForCard(cardId: string): Promise<void> {
+    const db = await this.ensureInit();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction("reviewLogs", "readwrite");
+      const store = tx.objectStore("reviewLogs");
+      const index = store.index("cardId");
+      const request = index.openCursor(cardId);
+      request.onsuccess = () => {
+        const cursor = request.result;
+        if (cursor) {
+          cursor.delete();
+          cursor.continue();
+        }
+      };
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
+  /**
+   * Mark a card as deleted (for sync graves tracking).
+   */
+  async markCardDeleted(cardId: string, deckId: string): Promise<void> {
+    await this.run(["deletedCards"], "readwrite", (tx) =>
+      tx.objectStore("deletedCards").put({ cardId, deckId, deletedAt: Date.now() }),
+    );
+  }
+
+  /**
+   * Get all deleted card IDs for a deck.
+   */
+  async getDeletedCardsForDeck(deckId: string): Promise<{ cardId: string }[]> {
+    return this.run(["deletedCards"], "readonly", (tx) =>
+      tx.objectStore("deletedCards").index("deckId").getAll(deckId),
+    );
+  }
+
+  /**
+   * Clear deleted cards tracking for a deck (after successful sync).
+   */
+  async clearDeletedCards(deckId: string): Promise<void> {
+    const db = await this.ensureInit();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction("deletedCards", "readwrite");
+      const store = tx.objectStore("deletedCards");
+      const index = store.index("deckId");
+      const request = index.openCursor(deckId);
+      request.onsuccess = () => {
+        const cursor = request.result;
+        if (cursor) {
+          cursor.delete();
+          cursor.continue();
+        }
+      };
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
+  /**
    * Clear all review data (for testing or reset)
    */
   async clearAll(): Promise<void> {
     const db = await this.ensureInit();
     return new Promise((resolve, reject) => {
       const transaction = db.transaction(
-        ["cards", "reviewLogs", "dailyStats", "settings"],
+        ["cards", "reviewLogs", "dailyStats", "settings", "deletedCards"],
         "readwrite",
       );
 
       transaction.oncomplete = () => resolve();
       transaction.onerror = () => reject(transaction.error);
 
-      const stores = ["cards", "reviewLogs", "dailyStats", "settings"];
+      const stores = ["cards", "reviewLogs", "dailyStats", "settings", "deletedCards"];
       for (const storeName of stores) {
         transaction.objectStore(storeName).clear();
       }
