@@ -14,7 +14,7 @@ export async function compressZstd(data: Uint8Array, level = 1): Promise<Uint8Ar
   return compress(data, level);
 }
 
-export async function decompressZstd(data: Uint8Array) {
+export async function decompressZstd(data: Uint8Array): Promise<Uint8Array> {
   await wasmInit;
   return decompress(data);
 }

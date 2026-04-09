@@ -16,6 +16,7 @@ import {
   serializeCardData,
 } from "../lib/syncWrite";
 import type { CardReviewState } from "../scheduler/types";
+import type { CardState } from "../scheduler/algorithm";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GAP 1: SM-2 review "good" does NOT include late days in interval calculation
@@ -297,7 +298,7 @@ describe("GAP 7: Card data JSON missing decay, lrt, pos fields", () => {
         difficulty: 5.0,
         desiredRetention: 0.9,
         decay: 0.5,
-      },
+      } as unknown as CardState,
       createdAt: Date.now(),
       lastReviewed: Date.now(),
     };
@@ -317,7 +318,7 @@ describe("GAP 7: Card data JSON missing decay, lrt, pos fields", () => {
         stability: 45.2,
         difficulty: 5.0,
         desiredRetention: 0.9,
-      },
+      } as unknown as CardState,
       createdAt: Date.now(),
       lastReviewed: 1700000000000,
     };
@@ -348,7 +349,7 @@ describe("GAP 8: Card data FSRS floats not rounded to Anki precision", () => {
       cardState: {
         stability: 123.45678901,
         difficulty: 5.0,
-      },
+      } as CardState,
       createdAt: Date.now(),
       lastReviewed: null,
     };
@@ -369,7 +370,7 @@ describe("GAP 8: Card data FSRS floats not rounded to Anki precision", () => {
       cardState: {
         stability: 10.0,
         difficulty: 1.234567,
-      },
+      } as CardState,
       createdAt: Date.now(),
       lastReviewed: null,
     };
@@ -391,7 +392,7 @@ describe("GAP 8: Card data FSRS floats not rounded to Anki precision", () => {
         stability: 10.0,
         difficulty: 5.0,
         desiredRetention: 0.987654,
-      },
+      } as unknown as CardState,
       createdAt: Date.now(),
       lastReviewed: null,
     };

@@ -3,7 +3,7 @@ import { isTruthy } from "./assert";
 
 type Sound = "click_01.mp3" | "click_02.mp3";
 
-function playAudioSource(src: string, volume = 1) {
+function playAudioSource(src: string, volume = 1): void {
   try {
     const audio = new Audio(src);
     audio.volume = volume;
@@ -13,7 +13,7 @@ function playAudioSource(src: string, volume = 1) {
   }
 }
 
-function playSound(filename: Sound) {
+function playSound(filename: Sound): void {
   if (!soundEffectsEnabledSig.value) return;
   playAudioSource(`/${filename}`, 0.5);
 }
@@ -27,14 +27,14 @@ export function getAutoplayAudioSources(html: string): string[] {
     .filter(isTruthy);
 }
 
-export function playAudio(src: string) {
+export function playAudio(src: string): void {
   playAudioSource(src);
 }
 
-export function playClickSoundMelodic() {
+export function playClickSoundMelodic(): void {
   playSound("click_01.mp3");
 }
 
-export function playClickSoundBasic() {
+export function playClickSoundBasic(): void {
   playSound("click_02.mp3");
 }

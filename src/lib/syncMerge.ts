@@ -15,18 +15,73 @@ export interface Graves {
   decks: number[];
 }
 
+/**
+ * A revlog row: [id, cid, usn, ease, ivl, lastIvl, factor, time, type]
+ */
+export type RevlogRow = [
+  id: number, cid: number, usn: number, ease: number,
+  ivl: number, lastIvl: number, factor: number, time: number, type: number,
+];
+
+/**
+ * A note row: [id, guid, mid, mod, usn, tags, flds, sfld, csum, flags, data]
+ */
+export type NoteRow = [
+  id: number, guid: string, mid: number, mod: number, usn: number,
+  tags: string, flds: string, sfld: string, csum: number, flags: number, data: string,
+];
+
+/**
+ * A card row: [id, nid, did, ord, mod, usn, type, queue, due, ivl, factor, reps, lapses, left, odue, odid, flags, data]
+ */
+export type CardRow = [
+  id: number, nid: number, did: number, ord: number, mod: number, usn: number,
+  type: number, queue: number, due: number, ivl: number, factor: number,
+  reps: number, lapses: number, left: number, odue: number, odid: number,
+  flags: number, data: string,
+];
+
 export interface Chunk {
   done: boolean;
-  revlog: unknown[][];
-  cards: unknown[][];
-  notes: unknown[][];
+  revlog: RevlogRow[];
+  cards: CardRow[];
+  notes: NoteRow[];
+}
+
+/** Model/notetype object from sync (anki2 format). */
+export interface SyncModel {
+  id: number;
+  mod?: number;
+  name?: string;
+  usn?: number;
+  [key: string]: unknown;
+}
+
+/** Deck object from sync. */
+export interface SyncDeck {
+  id: number;
+  mod?: number;
+  mtime?: number;
+  name?: string;
+  usn?: number;
+  [key: string]: unknown;
+}
+
+/** Deck config object from sync. */
+export interface SyncDeckConfig {
+  id: number;
+  mod?: number;
+  mtime?: number;
+  name?: string;
+  usn?: number;
+  [key: string]: unknown;
 }
 
 export interface UnchunkedChanges {
-  models: unknown[];
-  decks: [unknown[], unknown[]];
+  models: SyncModel[];
+  decks: [SyncDeck[], SyncDeckConfig[]];
   tags: string[];
-  conf?: unknown;
+  conf?: Record<string, unknown>;
   crt?: number;
 }
 
@@ -111,46 +166,43 @@ export async function applyRemoteChunk(
   chunk: Chunk,
 ): Promise<void> {
   // Apply revlog entries (always merge, no conflict)
-  for (const entry of chunk.revlog) {
-    const [id, cid, usn, ease, ivl, lastIvl, factor, time, type] = entry;
+  for (const [id, cid, usn, ease, ivl, lastIvl, factor, time, type] of chunk.revlog) {
     db.run(
       "INSERT OR REPLACE INTO revlog (id, cid, usn, ease, ivl, lastIvl, factor, time, type) VALUES (?,?,?,?,?,?,?,?,?)",
-      [id as number, cid as number, usn as number, ease as number, ivl as number, lastIvl as number, factor as number, time as number, type as number],
+      [id, cid, usn, ease, ivl, lastIvl, factor, time, type],
     );
   }
 
   // Apply notes
-  for (const entry of chunk.notes) {
-    const [id, guid, mid, mod, usn, tags, flds, sfld, csum, flags, data] = entry;
+  for (const [id, guid, mid, mod, usn, tags, flds, sfld, csum, flags, data] of chunk.notes) {
     // Check if we have a local version
-    const existing = db.exec("SELECT mod, usn FROM notes WHERE id=?", [id as number]);
+    const existing = db.exec("SELECT mod, usn FROM notes WHERE id=?", [id]);
     if (existing[0]?.values[0]) {
       const localMod = existing[0].values[0][0] as number;
       const localUsn = existing[0].values[0][1] as number;
       // If local has pending changes (usn=-1) and local is newer, skip
-      if (localUsn === -1 && localMod >= (mod as number)) continue;
+      if (localUsn === -1 && localMod >= mod) continue;
     }
     db.run(
       "INSERT OR REPLACE INTO notes (id, guid, mid, mod, usn, tags, flds, sfld, csum, flags, data) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-      [id as number, guid as string, mid as number, mod as number, usn as number, tags as string, flds as string, sfld as string, csum as number, flags as number, data as string],
+      [id, guid, mid, mod, usn, tags, flds, sfld, csum, flags, data],
     );
   }
 
   // Apply cards
   const { reviewDB } = await import("../scheduler/db");
-  for (const entry of chunk.cards) {
-    const [id, nid, did, ord, mod, usn, ctype, queue, due, ivl, factor, reps, lapses, left, odue, odid, flags, data] = entry;
+  for (const [id, nid, did, ord, mod, usn, ctype, queue, due, ivl, factor, reps, lapses, left, odue, odid, flags, data] of chunk.cards) {
     // Check if we have a local version
-    const existing = db.exec("SELECT mod, usn FROM cards WHERE id=?", [id as number]);
+    const existing = db.exec("SELECT mod, usn FROM cards WHERE id=?", [id]);
     if (existing[0]?.values[0]) {
       const localMod = existing[0].values[0][0] as number;
       const localUsn = existing[0].values[0][1] as number;
       // If local has pending changes (usn=-1) and local is newer, skip
-      if (localUsn === -1 && localMod >= (mod as number)) continue;
+      if (localUsn === -1 && localMod >= mod) continue;
     }
     db.run(
       "INSERT OR REPLACE INTO cards (id, nid, did, ord, mod, usn, type, queue, due, ivl, factor, reps, lapses, left, odue, odid, flags, data) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-      [id as number, nid as number, did as number, ord as number, mod as number, usn as number, ctype as number, queue as number, due as number, ivl as number, factor as number, reps as number, lapses as number, left as number, odue as number, odid as number, flags as number, data as string],
+      [id, nid, did, ord, mod, usn, ctype, queue, due, ivl, factor, reps, lapses, left, odue, odid, flags, data],
     );
     // Also update IndexedDB if this card exists there — remote is newer
     await reviewDB.deleteCard(String(id));
@@ -180,8 +232,7 @@ function applyRemoteUnchunkedAnki2(
     const localModels = result[0]?.values[0]?.[0]
       ? JSON.parse(result[0].values[0][0] as string)
       : {};
-    for (const model of changes.models) {
-      const m = model as { id: number; mod?: number };
+    for (const m of changes.models) {
       const local = localModels[String(m.id)];
       if (!local || (m.mod ?? 0) >= (local.mod ?? 0)) {
         localModels[String(m.id)] = m;
@@ -197,8 +248,7 @@ function applyRemoteUnchunkedAnki2(
     const localDecks = result[0]?.values[0]?.[0]
       ? JSON.parse(result[0].values[0][0] as string)
       : {};
-    for (const deck of remoteDecks) {
-      const d = deck as { id: number; mod?: number };
+    for (const d of remoteDecks) {
       const local = localDecks[String(d.id)];
       if (!local || (d.mod ?? 0) >= (local.mod ?? 0)) {
         localDecks[String(d.id)] = d;
@@ -213,8 +263,7 @@ function applyRemoteUnchunkedAnki2(
     const localDconf = result[0]?.values[0]?.[0]
       ? JSON.parse(result[0].values[0][0] as string)
       : {};
-    for (const conf of remoteDconf) {
-      const c = conf as { id: number; mod?: number };
+    for (const c of remoteDconf) {
       const local = localDconf[String(c.id)];
       if (!local || (c.mod ?? 0) >= (local.mod ?? 0)) {
         localDconf[String(c.id)] = c;
@@ -253,24 +302,22 @@ function applyRemoteUnchunkedAnki21b(
   changes: UnchunkedChanges,
 ): void {
   // Models (notetypes) — stored in notetypes table
-  for (const model of changes.models) {
-    const m = model as { id: number; mtime_secs?: number };
+  for (const m of changes.models) {
+    const mtimeSecs = (m as SyncModel & { mtime_secs?: number }).mtime_secs;
     const existing = db.exec("SELECT mtime_secs FROM notetypes WHERE id=?", [m.id]);
     if (existing[0]?.values[0]) {
       const localMtime = existing[0].values[0][0] as number;
-      if ((m.mtime_secs ?? 0) < localMtime) continue;
+      if ((mtimeSecs ?? 0) < localMtime) continue;
     }
-    // Store the full model as a config blob
     db.run(
       "INSERT OR REPLACE INTO notetypes (id, name, mtime_secs, usn, config) VALUES (?,?,?,?,?)",
-      [m.id, (model as { name?: string }).name ?? "", m.mtime_secs ?? 0, (model as { usn?: number }).usn ?? 0, JSON.stringify(model)],
+      [m.id, m.name ?? "", mtimeSecs ?? 0, m.usn ?? 0, JSON.stringify(m)],
     );
   }
 
   // Decks
   const [remoteDecks, remoteDconf] = changes.decks;
-  for (const deck of remoteDecks) {
-    const d = deck as { id: number; mtime?: number; name?: string; usn?: number };
+  for (const d of remoteDecks) {
     const existing = db.exec("SELECT mtime FROM decks WHERE id=?", [d.id]);
     if (existing[0]?.values[0]) {
       const localMtime = existing[0].values[0][0] as number;
@@ -278,13 +325,12 @@ function applyRemoteUnchunkedAnki21b(
     }
     db.run(
       "INSERT OR REPLACE INTO decks (id, name, mtime, usn, common) VALUES (?,?,?,?,?)",
-      [d.id, d.name ?? "", d.mtime ?? 0, d.usn ?? 0, JSON.stringify(deck)],
+      [d.id, d.name ?? "", d.mtime ?? 0, d.usn ?? 0, JSON.stringify(d)],
     );
   }
 
   // Deck configs
-  for (const conf of remoteDconf) {
-    const c = conf as { id: number; mtime?: number; name?: string; usn?: number };
+  for (const c of remoteDconf) {
     const existing = db.exec("SELECT mtime FROM deck_config WHERE id=?", [c.id]);
     if (existing[0]?.values[0]) {
       const localMtime = existing[0].values[0][0] as number;
@@ -292,7 +338,7 @@ function applyRemoteUnchunkedAnki21b(
     }
     db.run(
       "INSERT OR REPLACE INTO deck_config (id, name, mtime, usn, config) VALUES (?,?,?,?,?)",
-      [c.id, c.name ?? "", c.mtime ?? 0, c.usn ?? 0, JSON.stringify(conf)],
+      [c.id, c.name ?? "", c.mtime ?? 0, c.usn ?? 0, JSON.stringify(c)],
     );
   }
 
@@ -390,33 +436,33 @@ function buildLocalUnchunkedAnki21b(
 /** Yield local chunks of cards/notes/revlog with usn=-1. */
 export function* buildLocalChunks(db: Database): Generator<Chunk> {
   // Gather all pending items
-  const pendingCards: unknown[][] = [];
+  const pendingCards: CardRow[] = [];
   const cardsResult = db.exec(
     "SELECT id, nid, did, ord, mod, usn, type, queue, due, ivl, factor, reps, lapses, left, odue, odid, flags, data FROM cards WHERE usn=-1",
   );
   if (cardsResult[0]) {
     for (const row of cardsResult[0].values) {
-      pendingCards.push(row as unknown[]);
+      pendingCards.push(row as unknown as CardRow);
     }
   }
 
-  const pendingNotes: unknown[][] = [];
+  const pendingNotes: NoteRow[] = [];
   const notesResult = db.exec(
     "SELECT id, guid, mid, mod, usn, tags, flds, sfld, csum, flags, data FROM notes WHERE usn=-1",
   );
   if (notesResult[0]) {
     for (const row of notesResult[0].values) {
-      pendingNotes.push(row as unknown[]);
+      pendingNotes.push(row as unknown as NoteRow);
     }
   }
 
-  const pendingRevlog: unknown[][] = [];
+  const pendingRevlog: RevlogRow[] = [];
   const revlogResult = db.exec(
     "SELECT id, cid, usn, ease, ivl, lastIvl, factor, time, type FROM revlog WHERE usn=-1",
   );
   if (revlogResult[0]) {
     for (const row of revlogResult[0].values) {
-      pendingRevlog.push(row as unknown[]);
+      pendingRevlog.push(row as unknown as RevlogRow);
     }
   }
 

@@ -2,6 +2,7 @@ import "fake-indexeddb/auto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { ref, reactive } from "vue";
 import type { SchedulerSettings } from "../types";
+import type { CardState } from "../algorithm";
 import { DEFAULT_SCHEDULER_SETTINGS } from "../types";
 
 async function createReviewDB() {
@@ -61,7 +62,7 @@ describe("ReviewDB", () => {
         cardId: "card-1",
         deckId: "deck-1",
         algorithm: "sm2",
-        cardState: { phase: "new" },
+        cardState: { phase: "new" } as CardState,
         createdAt: Date.now(),
         lastReviewed: null,
       });
@@ -82,7 +83,7 @@ describe("ReviewDB", () => {
         cardId: "card-2",
         deckId: "deck-1",
         algorithm: "sm2",
-        cardState: { phase: "review" },
+        cardState: { phase: "review" } as CardState,
         createdAt: Date.now(),
         lastReviewed: Date.now(),
       });

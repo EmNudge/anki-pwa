@@ -26,7 +26,7 @@ export function readSyncConfig(): SyncConfig | null {
   }
 }
 
-export function writeSyncConfig(config: SyncConfig | null) {
+export function writeSyncConfig(config: SyncConfig | null): void {
   if (config) {
     localStorage.setItem(SYNC_CONFIG_KEY, JSON.stringify(config));
   } else {
@@ -45,11 +45,11 @@ export function readSyncState(): SyncState {
   }
 }
 
-export function writeSyncState(state: SyncState) {
+export function writeSyncState(state: SyncState): void {
   localStorage.setItem(SYNC_STATE_KEY, JSON.stringify(state));
 }
 
-export function clearSyncState() {
+export function clearSyncState(): void {
   localStorage.removeItem(SYNC_STATE_KEY);
 }
 
@@ -440,8 +440,7 @@ export async function uploadMedia(
       throw new Error(`msync/uploadChanges failed: ${uploadResponse.status} ${uploadResponse.statusText} — ${body}`);
     }
 
-    const uploadResult = await readResponseJson(uploadResponse);
-    const r = uploadResult as { processed?: number; current_usn?: number };
+    const r = await readResponseJson(uploadResponse) as { processed?: number; current_usn?: number };
     uploaded += r.processed ?? batch.length;
   }
 
@@ -451,8 +450,7 @@ export async function uploadMedia(
     local: localCount,
   });
   if (sanityResponse.ok) {
-    const sanityResult = await readResponseJson(sanityResponse);
-    const s = sanityResult as { status?: string };
+    const s = await readResponseJson(sanityResponse) as { status?: string };
     if (s.status === "bad") {
       console.warn("Media sanity check failed: local and server media counts differ");
     }
