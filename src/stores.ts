@@ -1,6 +1,8 @@
-import { ref, computed, watch, shallowRef } from "vue";
+import { ref, computed, watch, shallowRef, triggerRef } from "vue";
 import { getAnkiDataFromBlob, getAnkiDataFromSqlite } from "./ankiParser";
 import type { AnkiData } from "./ankiParser";
+import { createDatabase } from "./utils/sql";
+import { stringHash } from "./utils/constants";
 import { ReviewQueue, type ReviewCard } from "./scheduler/queue";
 import { DEFAULT_SCHEDULER_SETTINGS, type SchedulerSettings } from "./scheduler/types";
 import { reviewDB } from "./scheduler/db";
@@ -624,4 +626,73 @@ export function markCurrentNote() {
 
 export function moveToNextCard() {
   selectedCardSig.value = selectedCardSig.value + 1;
+}
+
+/**
+ * Update a note's fields and tags across all cards sharing the same guid.
+ * Persists to SQLite cache for synced collections (marks usn=-1 for sync).
+ */
+export async function updateNote(
+  guid: string,
+  newFields: Record<string, string | null>,
+  newTags: string[],
+): Promise<void> {
+  const data = ankiDataSig.value;
+  if (!data) return;
+
+  // Update all in-memory cards sharing this note guid
+  for (const card of data.cards) {
+    if (card.guid !== guid) continue;
+    for (const [key, val] of Object.entries(newFields)) {
+      card.values[key] = val;
+    }
+    card.tags = [...newTags];
+  }
+  triggerRef(ankiDataSig);
+
+  // Persist to SQLite for synced collections
+  const input = activeDeckInputSig.value;
+  if (input?.kind !== "sqlite") return;
+
+  const db = await createDatabase(input.bytes);
+  try {
+    // Look up the note by guid
+    const result = db.exec("SELECT id FROM notes WHERE guid=?", [guid]);
+    const noteId = result[0]?.values[0]?.[0] as number | undefined;
+    if (noteId === undefined) return;
+
+    // Build flds (field values joined by \x1F in field order)
+    const fieldValues = Object.values(newFields);
+    const flds = fieldValues.map((v) => v ?? "").join("\x1f");
+
+    // Compute sfld (sort field = first field, HTML stripped)
+    const firstField = fieldValues[0] ?? "";
+    const sfld = firstField.replace(/<[^>]*>/g, "").trim();
+
+    // Compute csum (checksum of sort field)
+    const csum = stringHash(sfld);
+
+    // Compute mod and tags string
+    const mod = Math.floor(Date.now() / 1000);
+    const tagsStr = newTags.length > 0 ? ` ${newTags.join(" ")} ` : "";
+
+    db.run(
+      "UPDATE notes SET flds=?, sfld=?, csum=?, mod=?, usn=-1, tags=? WHERE id=?",
+      [flds, sfld, csum, mod, tagsStr, noteId],
+    );
+
+    const newBytes = new Uint8Array(db.export());
+
+    // Write to cache for sync
+    const cache = await caches.open("anki-cache");
+    await cache.put(
+      "/sync/collection.sqlite",
+      new Response(new Blob([newBytes.buffer as ArrayBuffer])),
+    );
+
+    // Update in-place without triggering re-parse
+    (input as { bytes: Uint8Array }).bytes = newBytes;
+  } finally {
+    db.close();
+  }
 }

@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from "vue";
-import { ankiDataSig, mediaFilesSig } from "../stores";
+import { ankiDataSig, mediaFilesSig, activeDeckSourceIdSig, updateNote } from "../stores";
 import { getRenderedCardString } from "../utils/render";
 import { sanitizeHtmlForPreview } from "../utils/sanitize";
 import { playAudio } from "../utils/sound";
+import Button from "../design-system/components/primitives/Button.vue";
+import NoteEditModal from "./NoteEditModal.vue";
 
 type ViewMode = "cards" | "notes";
 const viewMode = ref<ViewMode>("notes");
@@ -652,6 +654,18 @@ function handleDetailClick(event: Event) {
   const src = btn.dataset.soundFile;
   if (src) playAudio(src);
 }
+
+// ── Edit modal ──
+
+const editModalOpen = ref(false);
+const isSynced = computed(() => activeDeckSourceIdSig.value === "sync-collection");
+
+async function handleNoteSave(payload: { fields: Record<string, string | null>; tags: string[] }) {
+  const card = selectedCard.value;
+  if (!card) return;
+  await updateNote(card.guid, payload.fields, payload.tags);
+  editModalOpen.value = false;
+}
 </script>
 
 <template>
@@ -749,8 +763,11 @@ function handleDetailClick(event: Event) {
       <div class="detail-pane" @click="handleDetailClick">
         <template v-if="selectedCard">
           <div class="detail-header">
-            <h3 class="detail-title">{{ selectedCard.deckName }}</h3>
-            <span class="detail-meta">{{ selectedCard.templates.map(t => t.name).join(", ") }}</span>
+            <div class="detail-header-text">
+              <h3 class="detail-title">{{ selectedCard.deckName }}</h3>
+              <span class="detail-meta">{{ selectedCard.templates.map(t => t.name).join(", ") }}</span>
+            </div>
+            <Button variant="secondary" size="sm" @click="editModalOpen = true">Edit</Button>
           </div>
           <div v-if="selectedPreview" class="detail-preview" v-html="selectedPreview" />
           <div class="detail-fields">
@@ -766,6 +783,13 @@ function handleDetailClick(event: Event) {
         <p v-else class="detail-empty">No card selected</p>
       </div>
     </div>
+
+    <NoteEditModal
+      :is-open="editModalOpen"
+      :card="selectedCard"
+      @close="editModalOpen = false"
+      @save="handleNoteSave"
+    />
   </div>
 </template>
 
@@ -1027,9 +1051,17 @@ function handleDetailClick(event: Event) {
 
 .detail-header {
   display: flex;
-  align-items: baseline;
+  align-items: center;
+  justify-content: space-between;
   gap: var(--spacing-2);
   margin-bottom: var(--spacing-2);
+}
+
+.detail-header-text {
+  display: flex;
+  align-items: baseline;
+  gap: var(--spacing-2);
+  min-width: 0;
 }
 
 .detail-title {
