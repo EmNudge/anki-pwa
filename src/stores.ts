@@ -18,6 +18,21 @@ import {
   writeCachedFiles,
 } from "./deckLibrary";
 import { readSyncState } from "./lib/ankiSync";
+import {
+  loadMediaObjectUrls,
+  revokeMediaObjectUrls,
+  mediaCachePath,
+  clearMediaCache,
+  filterMediaKeys,
+} from "./utils/mediaCache";
+
+/** Revoke object URLs from the previous media map to prevent memory leaks. */
+function revokeOldMediaUrls() {
+  const current = activeDeckInputSig.value;
+  if (current?.kind === "sqlite" && current.mediaFiles) {
+    revokeMediaObjectUrls(current.mediaFiles);
+  }
+}
 
 // View state
 export type AppView = "review" | "browse" | "create" | "sync";
@@ -85,19 +100,10 @@ ankiCachePromise.then(async (cache) => {
 
       // Restore cached media blobs as object URLs
       const allKeys = await cache.keys();
-      const mediaKeys = allKeys.filter((req) =>
-        new URL(req.url).pathname.startsWith("/sync/media/"),
-      );
+      const hasMedia = filterMediaKeys(allKeys).length > 0;
       let mediaFiles: Map<string, string> | undefined;
-      if (mediaKeys.length > 0) {
-        mediaFiles = new Map<string, string>();
-        for (const req of mediaKeys) {
-          const mediaResp = await cache.match(req);
-          if (mediaResp) {
-            const filename = new URL(req.url).pathname.replace("/sync/media/", "");
-            mediaFiles.set(filename, URL.createObjectURL(await mediaResp.blob()));
-          }
-        }
+      if (hasMedia) {
+        mediaFiles = await loadMediaObjectUrls(cache);
       }
 
       activeDeckInputSig.value = { kind: "sqlite", bytes, mediaFiles };
@@ -205,13 +211,11 @@ export async function loadSyncedCollection(
     new Response(new Blob([bytes.buffer as ArrayBuffer])),
   );
 
+  // Revoke old object URLs before clearing
+  revokeOldMediaUrls();
+
   // Clear old media entries and store new ones
-  const existingKeys = await cache.keys();
-  await Promise.all(
-    existingKeys
-      .filter((req) => new URL(req.url).pathname.startsWith("/sync/media/"))
-      .map((req) => cache.delete(req)),
-  );
+  await clearMediaCache(cache);
 
   let mediaFiles: Map<string, string> | undefined;
   if (mediaBlobs && mediaBlobs.size > 0) {
@@ -219,7 +223,7 @@ export async function loadSyncedCollection(
     const puts: Promise<void>[] = [];
     for (const [filename, blob] of mediaBlobs) {
       mediaFiles.set(filename, URL.createObjectURL(blob));
-      puts.push(cache.put(`/sync/media/${filename}`, new Response(blob)));
+      puts.push(cache.put(mediaCachePath(filename), new Response(blob)));
     }
     await Promise.all(puts);
   }
@@ -265,12 +269,8 @@ export async function refreshSyncedCollection(bytes: Uint8Array) {
 export async function clearSyncedCollection() {
   const cache = await ankiCachePromise;
   await cache.delete("/sync/collection.sqlite");
-  const allKeys = await cache.keys();
-  await Promise.all(
-    allKeys
-      .filter((req) => new URL(req.url).pathname.startsWith("/sync/media/"))
-      .map((req) => cache.delete(req)),
-  );
+  revokeOldMediaUrls();
+  await clearMediaCache(cache);
   if (activeDeckSourceIdSig.value === SYNC_COLLECTION_ID) {
     clearLoadedDeck();
   }
@@ -284,7 +284,17 @@ export const ankiDataSig = shallowRef<AnkiData | null>(null);
 
 let activeDeckLoadVersion = 0;
 
-watch(activeDeckInputSig, async (newInput) => {
+watch(activeDeckInputSig, async (newInput, oldInput) => {
+  // Revoke object URLs from previous deck to prevent memory leaks
+  if (oldInput?.kind === "sqlite" && oldInput.mediaFiles) {
+    revokeMediaObjectUrls(oldInput.mediaFiles);
+  }
+  // Revoke media object URLs from previous AnkiData (from .apkg parsing)
+  const oldData = ankiDataSig.value;
+  if (oldData?.files && oldData.files.size > 0) {
+    revokeMediaObjectUrls(oldData.files);
+  }
+
   const loadVersion = activeDeckLoadVersion + 1;
   activeDeckLoadVersion = loadVersion;
 
@@ -518,17 +528,18 @@ export function moveToNextReviewCard() {
   }
 
   // Third priority: soonest learning card (even if not yet due)
-  const learningCards = dueCards.filter(
-    (c) => c.cardId !== currentId && queue?.isCardInLearning(c),
-  );
-  if (learningCards.length > 0) {
-    // Pick the one due soonest
-    learningCards.sort((a, b) => {
-      const aDue = (a.reviewState.cardState as { due: number }).due;
-      const bDue = (b.reviewState.cardState as { due: number }).due;
-      return aDue - bDue;
-    });
-    currentReviewCardSig.value = learningCards[0] ?? null;
+  let soonest: ReviewCard | null = null;
+  let soonestDue = Infinity;
+  for (const c of dueCards) {
+    if (c.cardId === currentId || !queue?.isCardInLearning(c)) continue;
+    const due = (c.reviewState.cardState as { due: number }).due;
+    if (due < soonestDue) {
+      soonest = c;
+      soonestDue = due;
+    }
+  }
+  if (soonest) {
+    currentReviewCardSig.value = soonest;
     return;
   }
 

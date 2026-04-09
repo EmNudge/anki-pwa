@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { isZstdCompressed } from "~/utils/constants";
+import { getLocalMediaEntries } from "~/utils/mediaCache";
 
 const SYNC_CONFIG_KEY = "anki-sync-config";
 const SYNC_STATE_KEY = "anki-sync-state";
@@ -333,27 +334,6 @@ export async function downloadMedia(
 }
 
 const UPLOAD_BATCH_SIZE = 25;
-
-/**
- * Retrieve all locally-cached media filenames from the Cache API.
- */
-async function getLocalMediaEntries(
-  cache: Cache,
-): Promise<Map<string, Blob>> {
-  const allKeys = await cache.keys();
-  const mediaKeys = allKeys.filter((req) =>
-    new URL(req.url).pathname.startsWith("/sync/media/"),
-  );
-  const entries = new Map<string, Blob>();
-  for (const req of mediaKeys) {
-    const resp = await cache.match(req);
-    if (resp) {
-      const filename = new URL(req.url).pathname.replace("/sync/media/", "");
-      entries.set(filename, await resp.blob());
-    }
-  }
-  return entries;
-}
 
 /**
  * Upload locally-cached media files to the sync server.
