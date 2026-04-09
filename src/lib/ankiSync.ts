@@ -84,7 +84,7 @@ function buildSyncForm(
 }
 
 /**
- * Post to a sync endpoint, optionally authenticated with a host key.
+ * Post to a sync endpoint using legacy multipart transport (v8–v10).
  */
 export async function syncPost(
   url: string,
@@ -93,6 +93,32 @@ export async function syncPost(
 ): Promise<Response> {
   const form = buildSyncForm(data, hkey);
   return fetch(url, { method: "POST", body: form });
+}
+
+/**
+ * Post to a sync endpoint using v11 transport:
+ * - Auth via Authorization header
+ * - Body is zstd-compressed JSON
+ * - Content-Type: application/octet-stream
+ */
+export async function syncPostV11(
+  url: string,
+  hkey: string,
+  data: unknown = {},
+): Promise<Response> {
+  const { compressZstd } = await import("../utils/zstd");
+  const json = new TextEncoder().encode(JSON.stringify(data));
+  const compressed = await compressZstd(json);
+
+  return fetch(url, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${hkey}`,
+      "Content-Type": "application/octet-stream",
+      "Content-Encoding": "zstd",
+    },
+    body: compressed.buffer as ArrayBuffer,
+  });
 }
 
 /**
@@ -281,6 +307,158 @@ export async function downloadMedia(
   }
 
   return mediaFiles;
+}
+
+const UPLOAD_BATCH_SIZE = 25;
+
+/**
+ * Retrieve all locally-cached media filenames from the Cache API.
+ */
+async function getLocalMediaEntries(
+  cache: Cache,
+): Promise<Map<string, Blob>> {
+  const allKeys = await cache.keys();
+  const mediaKeys = allKeys.filter((req) =>
+    new URL(req.url).pathname.startsWith("/sync/media/"),
+  );
+  const entries = new Map<string, Blob>();
+  for (const req of mediaKeys) {
+    const resp = await cache.match(req);
+    if (resp) {
+      const filename = new URL(req.url).pathname.replace("/sync/media/", "");
+      entries.set(filename, await resp.blob());
+    }
+  }
+  return entries;
+}
+
+/**
+ * Upload locally-cached media files to the sync server.
+ *
+ * Follows Anki's media sync protocol:
+ * 1. begin — start a media sync session, get server USN
+ * 2. mediaChanges — discover what the server already has
+ * 3. uploadChanges — send files the server is missing, in ZIP batches
+ * 4. mediaSanity — verify local/remote counts match
+ */
+export async function uploadMedia(
+  serverUrl: string,
+  hkey: string,
+): Promise<number> {
+  const base = normalizeUrl(serverUrl);
+
+  // Open the media cache
+  const cache = await caches.open("anki-cache");
+  const localMedia = await getLocalMediaEntries(cache);
+  if (localMedia.size === 0) return 0;
+
+  // Step 1: Begin media sync
+  const beginForm = buildSyncForm({}, hkey, { v: "anki-pwa,0.1,web" });
+  const beginResponse = await fetch(`${base}/msync/begin`, {
+    method: "POST",
+    body: beginForm,
+  });
+  if (!beginResponse.ok) {
+    const body = await beginResponse.text().catch(() => "(unreadable)");
+    throw new Error(`msync/begin failed: ${beginResponse.status} ${beginResponse.statusText} — ${body}`);
+  }
+  const beginJson = await readResponseJson(beginResponse);
+  const { usn: serverUsn } = mediaSyncBeginSchema.parse(beginJson);
+
+  // Step 2: Collect server's known files to find what needs uploading
+  const serverFiles = new Set<string>();
+  let lastUsn = 0;
+  const scanLimit = Math.max(serverUsn, 1);
+
+  while (lastUsn < scanLimit) {
+    const changesResponse = await syncPost(`${base}/msync/mediaChanges`, hkey, {
+      lastUsn,
+    });
+    if (!changesResponse.ok) break;
+    const changesJson = await readResponseJson(changesResponse);
+    const changes = mediaChangesSchema.parse(changesJson);
+    if (changes.length === 0) break;
+    for (const [filename, , sha1] of changes) {
+      if (sha1 !== null) {
+        serverFiles.add(filename);
+      }
+      // sha1 === null means deleted on server — we should upload if we have it
+    }
+    const lastChange = changes[changes.length - 1];
+    if (lastChange) {
+      lastUsn = lastChange[1];
+    } else {
+      break;
+    }
+  }
+
+  // Determine files to upload (local files not on server)
+  const filesToUpload: Array<[string, Blob]> = [];
+  for (const [filename, blob] of localMedia) {
+    if (!serverFiles.has(filename)) {
+      filesToUpload.push([filename, blob]);
+    }
+  }
+
+  if (filesToUpload.length === 0) return 0;
+
+  // Step 3: Upload in batches as ZIP files
+  let uploaded = 0;
+  const { ZipWriter, BlobWriter, BlobReader } = await import("@zip-js/zip-js");
+
+  for (let i = 0; i < filesToUpload.length; i += UPLOAD_BATCH_SIZE) {
+    const batch = filesToUpload.slice(i, i + UPLOAD_BATCH_SIZE);
+
+    // Build ZIP with numeric keys and a _meta mapping
+    const zipBlobWriter = new BlobWriter("application/zip");
+    const zipWriter = new ZipWriter(zipBlobWriter);
+    const meta: Record<string, string> = {};
+
+    for (let j = 0; j < batch.length; j++) {
+      const entry = batch[j]!;
+      meta[String(j)] = entry[0];
+      await zipWriter.add(String(j), new BlobReader(entry[1]));
+    }
+
+    // Add _meta entry
+    const metaBlob = new Blob([JSON.stringify(meta)], { type: "application/json" });
+    await zipWriter.add("_meta", new BlobReader(metaBlob));
+    const zipBlob = await zipWriter.close();
+
+    // POST the ZIP to /msync/uploadChanges
+    const form = new FormData();
+    form.append("k", hkey);
+    form.append("data", zipBlob, "media.zip");
+
+    const uploadResponse = await fetch(`${base}/msync/uploadChanges`, {
+      method: "POST",
+      body: form,
+    });
+
+    if (!uploadResponse.ok) {
+      const body = await uploadResponse.text().catch(() => "(unreadable)");
+      throw new Error(`msync/uploadChanges failed: ${uploadResponse.status} ${uploadResponse.statusText} — ${body}`);
+    }
+
+    const uploadResult = await readResponseJson(uploadResponse);
+    const r = uploadResult as { processed?: number; current_usn?: number };
+    uploaded += r.processed ?? batch.length;
+  }
+
+  // Step 4: Media sanity check
+  const localCount = localMedia.size;
+  const sanityResponse = await syncPost(`${base}/msync/mediaSanity`, hkey, {
+    local: localCount,
+  });
+  if (sanityResponse.ok) {
+    const sanityResult = await readResponseJson(sanityResponse);
+    const s = sanityResult as { status?: string };
+    if (s.status === "bad") {
+      console.warn("Media sanity check failed: local and server media counts differ");
+    }
+  }
+
+  return uploaded;
 }
 
 /**

@@ -5,6 +5,7 @@ import {
   downloadCollection,
   downloadMedia,
   uploadCollection,
+  uploadMedia,
   readSyncConfig,
   writeSyncConfig,
   readSyncState,
@@ -126,6 +127,17 @@ async function handleSync() {
       await initializeReviewQueue();
     }
 
+    // Upload any local media files the server doesn't have
+    syncStatus.value = "Checking for media to upload...";
+    try {
+      const mediaUploaded = await uploadMedia(serverUrl.value, state.hkey);
+      if (mediaUploaded > 0) {
+        syncStatus.value = `Uploaded ${mediaUploaded} media file${mediaUploaded === 1 ? "" : "s"}.`;
+      }
+    } catch (mediaErr) {
+      console.warn("Media upload failed (non-fatal):", mediaErr);
+    }
+
     const newState = { ...state, ...result.newState };
     writeSyncState(newState);
     lastSyncTime.value = newState.lastSync ?? Date.now();
@@ -232,6 +244,17 @@ async function handlePush() {
     // Upload to server
     syncStatus.value = "Uploading collection to server...";
     await uploadCollection(serverUrl.value, state.hkey, modifiedSqlite);
+
+    // Upload media files
+    syncStatus.value = "Uploading media files...";
+    try {
+      const mediaUploaded = await uploadMedia(serverUrl.value, state.hkey);
+      if (mediaUploaded > 0) {
+        syncStatus.value = `Uploaded ${mediaUploaded} media file${mediaUploaded === 1 ? "" : "s"}.`;
+      }
+    } catch (mediaErr) {
+      console.warn("Media upload failed (non-fatal):", mediaErr);
+    }
 
     // Update local cache with the modified version
     await refreshSyncedCollection(modifiedSqlite);
