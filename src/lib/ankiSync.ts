@@ -173,6 +173,7 @@ export async function login(
 export async function downloadCollection(
   serverUrl: string,
   hkey: string,
+  onProgress?: (status: string) => void,
 ): Promise<Uint8Array> {
   const base = normalizeUrl(serverUrl);
 
@@ -186,8 +187,10 @@ export async function downloadCollection(
     throw new Error(`Download failed: ${response.status} ${response.statusText}`);
   }
 
-  const blob = await response.blob();
-  const bytes = new Uint8Array(await blob.arrayBuffer());
+  const bytes = await readResponseBytes(response, onProgress ? (received) => {
+    const mb = (received / (1024 * 1024)).toFixed(1);
+    onProgress(`Downloading collection... (${mb} MB)`);
+  } : undefined);
 
   return decompressIfNeeded(bytes);
 }
@@ -215,6 +218,7 @@ const mediaMetaSchema = z.record(z.string(), z.string());
 export async function downloadMedia(
   serverUrl: string,
   hkey: string,
+  onProgress?: (status: string) => void,
 ): Promise<Map<string, Blob>> {
   const base = normalizeUrl(serverUrl);
   const mediaFiles = new Map<string, Blob>();
@@ -306,6 +310,7 @@ export async function downloadMedia(
       }
 
       await zipReader.close();
+      onProgress?.(`Downloading media files... (${mediaFiles.size} downloaded)`);
 
       if (received === 0) {
         // Server returned no files — skip this batch to avoid infinite loop
@@ -362,6 +367,7 @@ async function getLocalMediaEntries(
 export async function uploadMedia(
   serverUrl: string,
   hkey: string,
+  onProgress?: (status: string) => void,
 ): Promise<number> {
   const base = normalizeUrl(serverUrl);
 
@@ -468,6 +474,7 @@ export async function uploadMedia(
       const obj = r as { processed?: number; current_usn?: number };
       uploaded += obj.processed ?? batch.length;
     }
+    onProgress?.(`Uploading media files... (${uploaded} of ${filesToUpload.length})`);
   }
 
   // Step 4: Media sanity check
@@ -540,6 +547,39 @@ export async function readResponseJson(response: Response): Promise<unknown> {
     return parsed.data;
   }
   return parsed;
+}
+
+/**
+ * Read a response body into a Uint8Array, optionally reporting bytes received.
+ */
+async function readResponseBytes(
+  response: Response,
+  onBytesReceived?: (received: number) => void,
+): Promise<Uint8Array> {
+  if (!onBytesReceived || !response.body) {
+    const blob = await response.blob();
+    return new Uint8Array(await blob.arrayBuffer());
+  }
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    received += value.byteLength;
+    onBytesReceived(received);
+  }
+
+  const result = new Uint8Array(received);
+  let offset = 0;
+  for (const chunk of chunks) {
+    result.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return result;
 }
 
 async function decompressIfNeeded(bytes: Uint8Array): Promise<Uint8Array> {

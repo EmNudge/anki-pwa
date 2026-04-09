@@ -130,7 +130,7 @@ async function handleSync() {
     // Upload any local media files the server doesn't have
     syncStatus.value = "Checking for media to upload...";
     try {
-      const mediaUploaded = await uploadMedia(serverUrl.value, state.hkey);
+      const mediaUploaded = await uploadMedia(serverUrl.value, state.hkey, (s) => { syncStatus.value = s; });
       if (mediaUploaded > 0) {
         syncStatus.value = `Uploaded ${mediaUploaded} media file${mediaUploaded === 1 ? "" : "s"}.`;
       }
@@ -164,10 +164,11 @@ async function handleSync() {
 /** Full download (pull) — replaces local collection entirely. */
 async function doFullPull(hkey: string) {
   syncStatus.value = "Downloading collection...";
-  const sqliteBytes = await downloadCollection(serverUrl.value, hkey);
+  const setStatus = (s: string) => { syncStatus.value = s; };
+  const sqliteBytes = await downloadCollection(serverUrl.value, hkey, setStatus);
 
   syncStatus.value = "Downloading media files...";
-  const mediaBlobs = await downloadMedia(serverUrl.value, hkey);
+  const mediaBlobs = await downloadMedia(serverUrl.value, hkey, setStatus);
   let typedMediaBlobs: Map<string, Blob> | undefined;
   if (mediaBlobs.size > 0) {
     typedMediaBlobs = new Map<string, Blob>();
@@ -248,7 +249,7 @@ async function handlePush() {
     // Upload media files
     syncStatus.value = "Uploading media files...";
     try {
-      const mediaUploaded = await uploadMedia(serverUrl.value, state.hkey);
+      const mediaUploaded = await uploadMedia(serverUrl.value, state.hkey, (s) => { syncStatus.value = s; });
       if (mediaUploaded > 0) {
         syncStatus.value = `Uploaded ${mediaUploaded} media file${mediaUploaded === 1 ? "" : "s"}.`;
       }
