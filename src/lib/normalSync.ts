@@ -9,6 +9,7 @@ import { createDatabase } from "~/utils/sql";
 import {
   normalizeUrl,
   syncPost,
+  syncPostV11,
   readResponseJson,
   type SyncState,
 } from "./ankiSync";
@@ -41,6 +42,8 @@ interface SyncMeta {
   hostNum: number;
   empty: boolean;
   mediaUsn: number;
+  /** Server's maximum supported protocol version (undefined = legacy v10) */
+  serverVersion: number | undefined;
 }
 
 interface LocalMeta {
@@ -76,6 +79,9 @@ interface NormalSyncResult {
 
 const CHUNK_SIZE = 250;
 
+/** Use v11 zstd transport when server supports it, otherwise legacy multipart. */
+type ProtoVersion = 10 | 11;
+
 // ── Protocol helpers ───────────────────────────────────────────────
 
 async function syncEndpoint(
@@ -83,9 +89,14 @@ async function syncEndpoint(
   endpoint: string,
   hkey: string,
   data: unknown = {},
+  proto: ProtoVersion = 10,
 ): Promise<unknown> {
   const base = normalizeUrl(serverUrl);
-  const response = await syncPost(`${base}/sync/${endpoint}`, hkey, data);
+  const url = `${base}/sync/${endpoint}`;
+
+  const response = proto >= 11
+    ? await syncPostV11(url, hkey, data)
+    : await syncPost(url, hkey, data);
 
   if (response.status === 401 || response.status === 403) {
     throw new Error("Authentication expired. Please log in again.");
@@ -104,11 +115,18 @@ async function fetchMeta(
   serverUrl: string,
   hkey: string,
 ): Promise<SyncMeta> {
+  // Request v11 — server will respond with its max supported version
   const result = await syncEndpoint(serverUrl, "meta", hkey, {
-    v: 10,
+    v: 11,
     cv: "anki-pwa,0.1,web",
   });
   const r = result as Record<string, unknown>;
+
+  // Detect server version from response.
+  // v11 servers include a "v" or "server_version" field.
+  // Legacy servers omit it (implicitly v10 or below).
+  const serverVersion = (r.v ?? r.server_version) as number | undefined;
+
   return {
     mod: (r.mod ?? r.modified ?? 0) as number,
     scm: (r.scm ?? r.schema ?? 0) as number,
@@ -119,6 +137,7 @@ async function fetchMeta(
     hostNum: (r.hostNum ?? r.host_number ?? 0) as number,
     empty: (r.empty ?? false) as boolean,
     mediaUsn: (r.mediaUsn ?? r.media_usn ?? 0) as number,
+    serverVersion,
   };
 }
 
@@ -142,11 +161,12 @@ async function startSync(
   hkey: string,
   clientUsn: number,
   localIsNewer: boolean,
+  proto: ProtoVersion = 10,
 ): Promise<Graves> {
   const result = await syncEndpoint(serverUrl, "start", hkey, {
     minUsn: clientUsn,
     lnewer: localIsNewer,
-  });
+  }, proto);
   const r = result as Record<string, unknown>;
   return {
     cards: (r.cards ?? []) as number[],
@@ -159,6 +179,7 @@ async function sendGraves(
   serverUrl: string,
   hkey: string,
   graves: Graves,
+  proto: ProtoVersion = 10,
 ): Promise<void> {
   // Chunk graves in batches of CHUNK_SIZE
   const allIds: Array<[number, "cards" | "notes" | "decks"]> = [
@@ -173,14 +194,14 @@ async function sendGraves(
     for (const [id, type] of batch) {
       chunk[type].push(id);
     }
-    await syncEndpoint(serverUrl, "applyGraves", hkey, { chunk });
+    await syncEndpoint(serverUrl, "applyGraves", hkey, { chunk }, proto);
   }
 
   // If no graves at all, still send an empty one
   if (allIds.length === 0) {
     await syncEndpoint(serverUrl, "applyGraves", hkey, {
       chunk: { cards: [], notes: [], decks: [] },
-    });
+    }, proto);
   }
 }
 
@@ -188,10 +209,11 @@ async function exchangeChanges(
   serverUrl: string,
   hkey: string,
   localChanges: UnchunkedChanges,
+  proto: ProtoVersion = 10,
 ): Promise<UnchunkedChanges> {
   const result = await syncEndpoint(serverUrl, "applyChanges", hkey, {
     changes: localChanges,
-  });
+  }, proto);
   const r = result as Record<string, unknown>;
   return {
     models: (r.models ?? []) as unknown[],
@@ -207,12 +229,13 @@ async function receiveChunks(
   hkey: string,
   db: import("sql.js").Database,
   onProgress: ProgressCallback,
+  proto: ProtoVersion = 10,
 ): Promise<void> {
   let chunkNum = 0;
   while (true) {
     chunkNum++;
     onProgress(`Receiving server changes (chunk ${chunkNum})...`);
-    const result = await syncEndpoint(serverUrl, "chunk", hkey);
+    const result = await syncEndpoint(serverUrl, "chunk", hkey, {}, proto);
     const chunk = result as Chunk;
     await applyRemoteChunk(db, chunk);
     if (chunk.done) break;
@@ -224,12 +247,13 @@ async function sendChunks(
   hkey: string,
   db: import("sql.js").Database,
   onProgress: ProgressCallback,
+  proto: ProtoVersion = 10,
 ): Promise<void> {
   let chunkNum = 0;
   for (const chunk of buildLocalChunks(db)) {
     chunkNum++;
     onProgress(`Sending local changes (chunk ${chunkNum})...`);
-    await syncEndpoint(serverUrl, "applyChunk", hkey, { chunk });
+    await syncEndpoint(serverUrl, "applyChunk", hkey, { chunk }, proto);
   }
 }
 
@@ -237,10 +261,11 @@ async function sanityCheck(
   serverUrl: string,
   hkey: string,
   counts: SanityCheckCounts,
+  proto: ProtoVersion = 10,
 ): Promise<void> {
   const result = await syncEndpoint(serverUrl, "sanityCheck2", hkey, {
     client: counts,
-  });
+  }, proto);
   const r = result as { status?: string };
   if (r.status === "bad") {
     throw new Error(
@@ -252,8 +277,9 @@ async function sanityCheck(
 async function finishSync(
   serverUrl: string,
   hkey: string,
+  proto: ProtoVersion = 10,
 ): Promise<number> {
-  const result = await syncEndpoint(serverUrl, "finish", hkey);
+  const result = await syncEndpoint(serverUrl, "finish", hkey, {}, proto);
   // Server returns the new mod time (number)
   if (typeof result === "number") return result;
   // Some servers wrap in an object
@@ -314,6 +340,18 @@ export async function normalSync(
       throw new SyncAbortedError(remoteMeta.msg || "Server requested abort");
     }
 
+    // Clock skew detection: warn if local and server clocks differ by >5 minutes
+    if (remoteMeta.ts > 0) {
+      const localTimeSec = Date.now() / 1000;
+      const skewSec = Math.abs(localTimeSec - remoteMeta.ts);
+      if (skewSec > 300) {
+        const skewMin = Math.round(skewSec / 60);
+        onProgress(
+          `Warning: your clock is off by ~${skewMin} minutes. This may cause scheduling issues.`,
+        );
+      }
+    }
+
     // Step 2: Determine sync action
     const action = determineSyncAction(localMeta, remoteMeta);
 
@@ -328,11 +366,14 @@ export async function normalSync(
       throw new FullSyncRequiredError();
     }
 
+    // Negotiate protocol: use v11 (zstd) if server supports it, else legacy
+    const proto: ProtoVersion = (remoteMeta.serverVersion ?? 0) >= 11 ? 11 : 10;
+
     // Step 3: Start sync — exchange graves
     const localIsNewer = localMeta.mod > remoteMeta.mod;
     onProgress("Starting sync session...");
     sessionStarted = true;
-    const remoteGraves = await startSync(serverUrl, hkey, localMeta.usn, localIsNewer);
+    const remoteGraves = await startSync(serverUrl, hkey, localMeta.usn, localIsNewer, proto);
 
     // Apply remote graves (deletions from server)
     onProgress("Applying remote deletions...");
@@ -341,29 +382,29 @@ export async function normalSync(
     // Step 4: Send local graves
     onProgress("Sending local deletions...");
     const localGraves = buildLocalGraves(db);
-    await sendGraves(serverUrl, hkey, localGraves);
+    await sendGraves(serverUrl, hkey, localGraves, proto);
 
     // Step 5: Exchange unchunked changes (models, decks, config, tags)
     const anki21b = isAnki21bFormat(db);
     onProgress("Exchanging deck and notetype changes...");
     const localChanges = buildLocalUnchunkedChanges(db, anki21b, localIsNewer);
-    const remoteChanges = await exchangeChanges(serverUrl, hkey, localChanges);
+    const remoteChanges = await exchangeChanges(serverUrl, hkey, localChanges, proto);
     applyRemoteUnchunkedChanges(db, remoteChanges, anki21b);
 
     // Step 6: Receive server chunks (cards, notes, revlog)
-    await receiveChunks(serverUrl, hkey, db, onProgress);
+    await receiveChunks(serverUrl, hkey, db, onProgress, proto);
 
     // Step 7: Send local chunks
-    await sendChunks(serverUrl, hkey, db, onProgress);
+    await sendChunks(serverUrl, hkey, db, onProgress, proto);
 
     // Step 8: Sanity check
     onProgress("Verifying sync integrity...");
     const counts = getSanityCounts(db, anki21b);
-    await sanityCheck(serverUrl, hkey, counts);
+    await sanityCheck(serverUrl, hkey, counts, proto);
 
     // Step 9: Finish
     onProgress("Finalizing...");
-    const newMod = await finishSync(serverUrl, hkey);
+    const newMod = await finishSync(serverUrl, hkey, proto);
     sessionStarted = false;
 
     // Update USNs and collection metadata
