@@ -279,7 +279,7 @@ export async function downloadMedia(
 
       const { ZipReader, BlobReader, BlobWriter, TextWriter } = await import("@zip-js/zip-js");
       const zipReader = new ZipReader(
-        new BlobReader(new Blob([decompressed.buffer as ArrayBuffer])),
+        new BlobReader(new Blob([decompressed as BlobPart])),
       );
       const entries = await zipReader.getEntries();
 
@@ -428,14 +428,16 @@ export async function uploadMedia(
     const batch = filesToUpload.slice(i, i + UPLOAD_BATCH_SIZE);
 
     // Build ZIP with numeric keys and a _meta mapping
+    // Upload _meta format: array of [actual_filename, filename_in_zip] tuples
     const zipBlobWriter = new BlobWriter("application/zip");
     const zipWriter = new ZipWriter(zipBlobWriter);
-    const meta: Record<string, string> = {};
+    const meta: Array<[string, string]> = [];
 
     for (let j = 0; j < batch.length; j++) {
       const entry = batch[j]!;
-      meta[String(j)] = entry[0];
-      await zipWriter.add(String(j), new BlobReader(entry[1]));
+      const zipKey = String(j);
+      meta.push([entry[0], zipKey]);
+      await zipWriter.add(zipKey, new BlobReader(entry[1]));
     }
 
     // Add _meta entry
@@ -458,8 +460,14 @@ export async function uploadMedia(
       throw new Error(`msync/uploadChanges failed: ${uploadResponse.status} ${uploadResponse.statusText} — ${body}`);
     }
 
-    const r = await readResponseJson(uploadResponse) as { processed?: number; current_usn?: number };
-    uploaded += r.processed ?? batch.length;
+    const r = await readResponseJson(uploadResponse);
+    // Response is a tuple [processed, current_usn] (Serialize_tuple format)
+    if (Array.isArray(r)) {
+      uploaded += (r[0] as number) ?? batch.length;
+    } else {
+      const obj = r as { processed?: number; current_usn?: number };
+      uploaded += obj.processed ?? batch.length;
+    }
   }
 
   // Step 4: Media sanity check
