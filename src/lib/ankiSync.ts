@@ -83,15 +83,26 @@ function buildSyncForm(
   return form;
 }
 
+/** Generate a random session key for sync session tracking. */
+export function generateSessionKey(): string {
+  const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => chars[b % chars.length]).join("");
+}
+
 /**
  * Post to a sync endpoint using legacy multipart transport (v8–v10).
+ * The optional sessionKey ("s") is required for stateful sync endpoints.
  */
 export async function syncPost(
   url: string,
   hkey?: string,
   data: unknown = {},
+  sessionKey?: string,
 ): Promise<Response> {
-  const form = buildSyncForm(data, hkey);
+  const extra: Record<string, string> | undefined = sessionKey ? { s: sessionKey } : undefined;
+  const form = buildSyncForm(data, hkey, extra);
   return fetch(url, { method: "POST", body: form });
 }
 
@@ -100,23 +111,30 @@ export async function syncPost(
  * - Auth via Authorization header
  * - Body is zstd-compressed JSON
  * - Content-Type: application/octet-stream
+ * The optional sessionKey is sent in the anki-sync header for stateful endpoints.
  */
 export async function syncPostV11(
   url: string,
   hkey: string,
   data: unknown = {},
+  sessionKey?: string,
 ): Promise<Response> {
   const { compressZstd } = await import("../utils/zstd");
   const json = new TextEncoder().encode(JSON.stringify(data));
   const compressed = await compressZstd(json);
 
+  const headers: Record<string, string> = {
+    "Authorization": `Bearer ${hkey}`,
+    "Content-Type": "application/octet-stream",
+    "Content-Encoding": "zstd",
+  };
+  if (sessionKey) {
+    headers["anki-sync-session"] = sessionKey;
+  }
+
   return fetch(url, {
     method: "POST",
-    headers: {
-      "Authorization": `Bearer ${hkey}`,
-      "Content-Type": "application/octet-stream",
-      "Content-Encoding": "zstd",
-    },
+    headers,
     body: compressed.buffer as ArrayBuffer,
   });
 }
@@ -459,6 +477,9 @@ export async function uploadMedia(
   return uploaded;
 }
 
+/** Maximum uncompressed payload size accepted by AnkiWeb (300 MB). */
+const MAX_SYNC_PAYLOAD_BYTES = 300 * 1024 * 1024;
+
 /**
  * Upload a full collection database to the sync server, replacing the server's copy.
  * This is equivalent to Anki's "Upload to AnkiWeb" (force one-way push).
@@ -468,11 +489,18 @@ export async function uploadCollection(
   hkey: string,
   sqliteBytes: Uint8Array,
 ): Promise<void> {
+  if (sqliteBytes.byteLength > MAX_SYNC_PAYLOAD_BYTES) {
+    const sizeMB = Math.round(sqliteBytes.byteLength / (1024 * 1024));
+    throw new Error(
+      `Collection is too large to upload (${sizeMB} MB). Maximum is ${MAX_SYNC_PAYLOAD_BYTES / (1024 * 1024)} MB.`,
+    );
+  }
+
   const base = normalizeUrl(serverUrl);
 
   const form = new FormData();
   form.append("k", hkey);
-  form.append("data", new Blob([sqliteBytes.buffer as ArrayBuffer]), "collection.anki2");
+  form.append("data", new Blob([sqliteBytes as BlobPart]), "collection.anki2");
   form.append("c", "0");
 
   const response = await fetch(`${base}/sync/upload`, {

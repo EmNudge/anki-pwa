@@ -85,16 +85,20 @@ export interface UnchunkedChanges {
   crt?: number;
 }
 
-export interface SanityCheckCounts {
-  counts: { new: number; learn: number; review: number };
-  cards: number;
-  notes: number;
-  revlog: number;
-  graves: number;
-  models: number;
-  decks: number;
-  deckConfig: number;
-}
+/**
+ * Sanity check counts as a tuple array matching Anki's Serialize_tuple format:
+ * [[new, learn, review], cards, notes, revlog, graves, models, decks, deckConfig]
+ */
+export type SanityCheckCounts = [
+  dueCounts: [newCount: number, learnCount: number, reviewCount: number],
+  cards: number,
+  notes: number,
+  revlog: number,
+  graves: number,
+  models: number,
+  decks: number,
+  deckConfig: number,
+];
 
 // ── Database format detection ─────────���────────────────────────────
 
@@ -166,7 +170,7 @@ export async function applyRemoteChunk(
   chunk: Chunk,
 ): Promise<void> {
   // Apply revlog entries (always merge, no conflict)
-  for (const [id, cid, usn, ease, ivl, lastIvl, factor, time, type] of chunk.revlog) {
+  for (const [id, cid, usn, ease, ivl, lastIvl, factor, time, type] of chunk.revlog ?? []) {
     db.run(
       "INSERT OR REPLACE INTO revlog (id, cid, usn, ease, ivl, lastIvl, factor, time, type) VALUES (?,?,?,?,?,?,?,?,?)",
       [id, cid, usn, ease, ivl, lastIvl, factor, time, type],
@@ -174,7 +178,7 @@ export async function applyRemoteChunk(
   }
 
   // Apply notes
-  for (const [id, guid, mid, mod, usn, tags, flds, sfld, csum, flags, data] of chunk.notes) {
+  for (const [id, guid, mid, mod, usn, tags, flds, sfld, csum, flags, data] of chunk.notes ?? []) {
     // Check if we have a local version
     const existing = db.exec("SELECT mod, usn FROM notes WHERE id=?", [id]);
     if (existing[0]?.values[0]) {
@@ -191,7 +195,7 @@ export async function applyRemoteChunk(
 
   // Apply cards
   const { reviewDB } = await import("../scheduler/db");
-  for (const [id, nid, did, ord, mod, usn, ctype, queue, due, ivl, factor, reps, lapses, left, odue, odid, flags, data] of chunk.cards) {
+  for (const [id, nid, did, ord, mod, usn, ctype, queue, due, ivl, factor, reps, lapses, left, odue, odid, flags, data] of chunk.cards ?? []) {
     // Check if we have a local version
     const existing = db.exec("SELECT mod, usn FROM cards WHERE id=?", [id]);
     if (existing[0]?.values[0]) {
@@ -390,13 +394,47 @@ function buildLocalUnchunkedAnki2(
   db: Database,
   localIsNewer: boolean,
 ): UnchunkedChanges {
-  // PWA doesn't modify models/decks/dconf/tags, so send empty arrays
-  // (we have no pending changes for these — only server sends updates)
   const changes: UnchunkedChanges = {
     models: [],
     decks: [[], []],
     tags: [],
   };
+
+  // Models (notetypes) with pending changes (usn=-1)
+  const modelsResult = db.exec("SELECT models FROM col");
+  if (modelsResult[0]?.values[0]?.[0]) {
+    const models = JSON.parse(modelsResult[0].values[0][0] as string) as Record<string, SyncModel>;
+    for (const m of Object.values(models)) {
+      if (m.usn === -1) changes.models.push(m);
+    }
+  }
+
+  // Decks with pending changes (usn=-1)
+  const decksResult = db.exec("SELECT decks FROM col");
+  if (decksResult[0]?.values[0]?.[0]) {
+    const decks = JSON.parse(decksResult[0].values[0][0] as string) as Record<string, SyncDeck>;
+    for (const d of Object.values(decks)) {
+      if (d.usn === -1) changes.decks[0].push(d);
+    }
+  }
+
+  // Deck configs with pending changes (usn=-1)
+  const dconfResult = db.exec("SELECT dconf FROM col");
+  if (dconfResult[0]?.values[0]?.[0]) {
+    const dconf = JSON.parse(dconfResult[0].values[0][0] as string) as Record<string, SyncDeckConfig>;
+    for (const c of Object.values(dconf)) {
+      if (c.usn === -1) changes.decks[1].push(c);
+    }
+  }
+
+  // Tags with pending changes (value=-1 in the JSON object)
+  const tagsResult = db.exec("SELECT tags FROM col");
+  if (tagsResult[0]?.values[0]?.[0]) {
+    const tags = JSON.parse(tagsResult[0].values[0][0] as string) as Record<string, number>;
+    for (const [tag, usn] of Object.entries(tags)) {
+      if (usn === -1) changes.tags.push(tag);
+    }
+  }
 
   // If local is newer, include conf and crt so the server can update
   if (localIsNewer) {
@@ -420,6 +458,62 @@ function buildLocalUnchunkedAnki21b(
     decks: [[], []],
     tags: [],
   };
+
+  // Notetypes with pending changes (usn=-1)
+  const ntResult = db.exec(
+    "SELECT id, name, mtime_secs, usn, config FROM notetypes WHERE usn=-1",
+  );
+  if (ntResult[0]) {
+    for (const row of ntResult[0].values) {
+      let obj: SyncModel;
+      try {
+        obj = { ...JSON.parse(row[4] as string), id: row[0], name: row[1], mtime_secs: row[2], usn: row[3] };
+      } catch {
+        obj = { id: row[0] as number, name: row[1] as string, mtime_secs: row[2] as number, usn: row[3] as number };
+      }
+      changes.models.push(obj);
+    }
+  }
+
+  // Decks with pending changes (usn=-1)
+  const decksResult = db.exec(
+    "SELECT id, name, mtime, usn, common FROM decks WHERE usn=-1",
+  );
+  if (decksResult[0]) {
+    for (const row of decksResult[0].values) {
+      let obj: SyncDeck;
+      try {
+        obj = { ...JSON.parse(row[4] as string), id: row[0], name: row[1], mtime: row[2], usn: row[3] };
+      } catch {
+        obj = { id: row[0] as number, name: row[1] as string, mtime: row[2] as number, usn: row[3] as number };
+      }
+      changes.decks[0].push(obj);
+    }
+  }
+
+  // Deck configs with pending changes (usn=-1)
+  const dcResult = db.exec(
+    "SELECT id, name, mtime, usn, config FROM deck_config WHERE usn=-1",
+  );
+  if (dcResult[0]) {
+    for (const row of dcResult[0].values) {
+      let obj: SyncDeckConfig;
+      try {
+        obj = { ...JSON.parse(row[4] as string), id: row[0], name: row[1], mtime: row[2], usn: row[3] };
+      } catch {
+        obj = { id: row[0] as number, name: row[1] as string, mtime: row[2] as number, usn: row[3] as number };
+      }
+      changes.decks[1].push(obj);
+    }
+  }
+
+  // Tags with pending changes (usn=-1)
+  const tagsResult = db.exec("SELECT tag FROM tags WHERE usn=-1");
+  if (tagsResult[0]) {
+    for (const row of tagsResult[0].values) {
+      changes.tags.push(row[0] as string);
+    }
+  }
 
   if (localIsNewer) {
     const result = db.exec("SELECT conf, crt FROM col");
@@ -551,8 +645,8 @@ export function getSanityCounts(
     deckConfig = Object.keys(dconfObj).length;
   }
 
-  return {
-    counts: { new: newCount, learn: learnCount, review: reviewCount },
+  return [
+    [newCount, learnCount, reviewCount],
     cards,
     notes,
     revlog,
@@ -560,7 +654,7 @@ export function getSanityCounts(
     models,
     decks,
     deckConfig,
-  };
+  ];
 }
 
 // ── Finalize USN after sync ────────────────────────────────────────
@@ -570,10 +664,61 @@ export function finalizeUsn(
   db: Database,
   serverUsn: number,
   serverMod: number,
+  anki21b: boolean,
 ): void {
+  // Chunked data
   db.run("UPDATE cards SET usn=? WHERE usn=-1", [serverUsn]);
   db.run("UPDATE notes SET usn=? WHERE usn=-1", [serverUsn]);
   db.run("UPDATE revlog SET usn=? WHERE usn=-1", [serverUsn]);
   db.run("UPDATE graves SET usn=? WHERE usn=-1", [serverUsn]);
+
+  // Unchunked data
+  if (anki21b) {
+    db.run("UPDATE notetypes SET usn=? WHERE usn=-1", [serverUsn]);
+    db.run("UPDATE decks SET usn=? WHERE usn=-1", [serverUsn]);
+    db.run("UPDATE deck_config SET usn=? WHERE usn=-1", [serverUsn]);
+    db.run("UPDATE tags SET usn=? WHERE usn=-1", [serverUsn]);
+  } else {
+    finalizeUsnAnki2Json(db, serverUsn, "models");
+    finalizeUsnAnki2Json(db, serverUsn, "decks");
+    finalizeUsnAnki2Json(db, serverUsn, "dconf");
+    // Tags: update usn values in the JSON object
+    const tagsResult = db.exec("SELECT tags FROM col");
+    if (tagsResult[0]?.values[0]?.[0]) {
+      const tags = JSON.parse(tagsResult[0].values[0][0] as string) as Record<string, number>;
+      let changed = false;
+      for (const [tag, usn] of Object.entries(tags)) {
+        if (usn === -1) {
+          tags[tag] = serverUsn;
+          changed = true;
+        }
+      }
+      if (changed) {
+        db.run("UPDATE col SET tags=?", [JSON.stringify(tags)]);
+      }
+    }
+  }
+
   db.run("UPDATE col SET usn=?, mod=?, ls=?", [serverUsn, serverMod, serverMod]);
+}
+
+/** Update usn=-1 inside a JSON column of the col table (anki2 format). */
+function finalizeUsnAnki2Json(
+  db: Database,
+  serverUsn: number,
+  column: "models" | "decks" | "dconf",
+): void {
+  const result = db.exec(`SELECT ${column} FROM col`);
+  if (!result[0]?.values[0]?.[0]) return;
+  const data = JSON.parse(result[0].values[0][0] as string) as Record<string, { usn?: number }>;
+  let changed = false;
+  for (const obj of Object.values(data)) {
+    if (obj.usn === -1) {
+      obj.usn = serverUsn;
+      changed = true;
+    }
+  }
+  if (changed) {
+    db.run(`UPDATE col SET ${column}=?`, [JSON.stringify(data)]);
+  }
 }
