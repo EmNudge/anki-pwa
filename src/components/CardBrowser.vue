@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from "vue";
+import { ref, computed, watch, nextTick } from "vue";
 import { ankiDataSig, mediaFilesSig } from "../stores";
 import { getRenderedCardString } from "../utils/render";
 import { sanitizeHtmlForPreview } from "../utils/sanitize";
@@ -8,8 +8,6 @@ import { playAudio } from "../utils/sound";
 type ViewMode = "cards" | "notes";
 const viewMode = ref<ViewMode>("notes");
 const searchQuery = ref("");
-const filterDeck = ref<string | null>(null);
-const filterTag = ref<string | null>(null);
 const sortColumn = ref<string>("sort-field");
 const sortAsc = ref(true);
 const selectedRowKey = ref<string | null>(null);
@@ -28,21 +26,10 @@ function stripHtml(html: string | null): string {
     .trim();
 }
 
-/** All unique field names across all cards */
-const fieldNames = computed(() => {
-  const data = ankiDataSig.value;
-  if (!data) return [];
-  const names = new Set<string>();
-  for (const card of data.cards) {
-    for (const key of Object.keys(card.values)) names.add(key);
-  }
-  return Array.from(names);
-});
-
 /** All unique tags */
 const allTags = computed(() => {
   const data = ankiDataSig.value;
-  if (!data) return [];
+  if (!data) return [] as string[];
   const tags = new Set<string>();
   for (const card of data.cards) {
     for (const tag of card.tags) tags.add(tag);
@@ -53,11 +40,297 @@ const allTags = computed(() => {
 /** All unique deck names */
 const allDecks = computed(() => {
   const data = ankiDataSig.value;
-  if (!data) return [];
+  if (!data) return [] as string[];
   const decks = new Set<string>();
   for (const card of data.cards) decks.add(card.deckName);
   return Array.from(decks).sort();
 });
+
+/** All unique template/note type names */
+const allNoteTypes = computed(() => {
+  const data = ankiDataSig.value;
+  if (!data) return [] as string[];
+  const names = new Set<string>();
+  for (const card of data.cards) {
+    for (const t of card.templates) names.add(t.name);
+  }
+  return Array.from(names).sort();
+});
+
+// ── Search parsing ──
+
+type SearchToken =
+  | { type: "text"; value: string }
+  | { type: "deck"; value: string }
+  | { type: "tag"; value: string }
+  | { type: "is"; value: string }
+  | { type: "flag"; value: number }
+  | { type: "card"; value: string }
+  | { type: "note"; value: string }
+  | { type: "negate"; inner: SearchToken };
+
+const IS_VALUES = ["new", "learn", "review", "due", "suspended", "buried"] as const;
+const FLAG_VALUES = [
+  { value: 0, label: "none" },
+  { value: 1, label: "red" },
+  { value: 2, label: "orange" },
+  { value: 3, label: "green" },
+  { value: 4, label: "blue" },
+  { value: 5, label: "pink" },
+  { value: 6, label: "turquoise" },
+  { value: 7, label: "purple" },
+] as const;
+
+const QUALIFIERS = ["deck:", "tag:", "is:", "flag:", "card:", "note:"] as const;
+
+function parseSearch(query: string): SearchToken[] {
+  const tokens: SearchToken[] = [];
+  // Split on whitespace, but keep quoted strings together
+  const regex = /(-?)(?:"([^"]*)"|(deck|tag|is|flag|card|note):(?:"([^"]*)"|(\S*))|(\S+))/gi;
+  let match;
+  while ((match = regex.exec(query)) !== null) {
+    const negate = match[1] === "-";
+    const quoted = match[2];
+    const qualifier = match[3]?.toLowerCase();
+    const qualifierValueQuoted = match[4];
+    const qualifierValue = match[5];
+    const plainWord = match[6];
+
+    let token: SearchToken;
+    if (quoted != null) {
+      token = { type: "text", value: quoted };
+    } else if (qualifier) {
+      const val = qualifierValueQuoted ?? qualifierValue ?? "";
+      switch (qualifier) {
+        case "deck":
+          token = { type: "deck", value: val };
+          break;
+        case "tag":
+          token = { type: "tag", value: val };
+          break;
+        case "is":
+          token = { type: "is", value: val.toLowerCase() };
+          break;
+        case "flag":
+          token = { type: "flag", value: parseInt(val, 10) || 0 };
+          break;
+        case "card":
+          token = { type: "card", value: val };
+          break;
+        case "note":
+          token = { type: "note", value: val };
+          break;
+        default:
+          token = { type: "text", value: `${qualifier}:${val}` };
+      }
+    } else {
+      token = { type: "text", value: plainWord ?? "" };
+    }
+
+    tokens.push(negate ? { type: "negate", inner: token } : token);
+  }
+  return tokens;
+}
+
+// ── Autocomplete ──
+
+const searchInputRef = ref<HTMLInputElement | null>(null);
+const showAutocomplete = ref(false);
+const selectedSuggestionIndex = ref(0);
+
+type Suggestion = {
+  /** The full text to insert (replaces the current token) */
+  insert: string;
+  /** What to display */
+  label: string;
+  /** Optional description shown dimmed */
+  description?: string;
+};
+
+/** Extract the token currently being typed (from cursor position backwards) */
+function getCurrentToken(input: string, cursorPos: number): { token: string; start: number } {
+  // Walk backwards from cursor to find start of current token
+  let start = cursorPos;
+  while (start > 0 && input[start - 1] !== " ") {
+    start--;
+  }
+  return { token: input.slice(start, cursorPos), start };
+}
+
+const suggestions = computed<Suggestion[]>(() => {
+  const input = searchQuery.value;
+  const cursor = searchInputRef.value?.selectionStart ?? input.length;
+  const { token } = getCurrentToken(input, cursor);
+
+  if (!token) return [];
+
+  const lower = token.toLowerCase();
+  const results: Suggestion[] = [];
+
+  // Check if we're typing a negated token
+  const isNegated = lower.startsWith("-");
+  const prefix = isNegated ? "-" : "";
+  const tokenBody = isNegated ? lower.slice(1) : lower;
+
+  // Step 1: If no colon yet, suggest qualifier prefixes
+  if (!tokenBody.includes(":")) {
+    for (const q of QUALIFIERS) {
+      if (q.startsWith(tokenBody) && tokenBody.length > 0) {
+        results.push({ insert: `${prefix}${q}`, label: `${prefix}${q}`, description: getQualifierHint(q) });
+      }
+    }
+    // Also fall through to text search — don't return early so user sees qualifiers AND can just type text
+    if (results.length > 0) return results;
+    return [];
+  }
+
+  // Step 2: We have a qualifier — suggest values
+  const colonIdx = tokenBody.indexOf(":");
+  const qualifier = tokenBody.slice(0, colonIdx + 1);
+  const valuePart = tokenBody.slice(colonIdx + 1).toLowerCase();
+
+  switch (qualifier) {
+    case "deck:":
+      for (const d of allDecks.value) {
+        if (d.toLowerCase().includes(valuePart)) {
+          const val = d.includes(" ") ? `"${d}"` : d;
+          results.push({ insert: `${prefix}deck:${val}`, label: d });
+        }
+      }
+      break;
+    case "tag:":
+      for (const t of allTags.value) {
+        if (t.toLowerCase().includes(valuePart)) {
+          const val = t.includes(" ") ? `"${t}"` : t;
+          results.push({ insert: `${prefix}tag:${val}`, label: t });
+        }
+      }
+      break;
+    case "is:":
+      for (const v of IS_VALUES) {
+        if (v.startsWith(valuePart)) {
+          results.push({ insert: `${prefix}is:${v}`, label: v, description: getIsHint(v) });
+        }
+      }
+      break;
+    case "flag:":
+      for (const f of FLAG_VALUES) {
+        const numStr = String(f.value);
+        if (numStr.startsWith(valuePart) || f.label.startsWith(valuePart)) {
+          results.push({ insert: `${prefix}flag:${f.value}`, label: `${f.value}`, description: f.label });
+        }
+      }
+      break;
+    case "card:":
+    case "note:":
+      for (const n of allNoteTypes.value) {
+        if (n.toLowerCase().includes(valuePart)) {
+          const val = n.includes(" ") ? `"${n}"` : n;
+          results.push({ insert: `${prefix}${qualifier}${val}`, label: n });
+        }
+      }
+      break;
+  }
+
+  return results.slice(0, 10);
+});
+
+function getQualifierHint(q: string): string {
+  switch (q) {
+    case "deck:": return "filter by deck";
+    case "tag:": return "filter by tag";
+    case "is:": return "card state (new, review, ...)";
+    case "flag:": return "card flag (0-7)";
+    case "card:": return "card/template name";
+    case "note:": return "note type name";
+    default: return "";
+  }
+}
+
+function getIsHint(v: string): string {
+  switch (v) {
+    case "new": return "new cards";
+    case "learn": return "currently learning";
+    case "review": return "review cards";
+    case "due": return "cards due now";
+    case "suspended": return "suspended cards";
+    case "buried": return "buried cards";
+    default: return "";
+  }
+}
+
+function applySuggestion(suggestion: Suggestion) {
+  const input = searchQuery.value;
+  const cursor = searchInputRef.value?.selectionStart ?? input.length;
+  const { start } = getCurrentToken(input, cursor);
+
+  const before = input.slice(0, start);
+  const after = input.slice(cursor);
+  // Only add trailing space for complete values, not qualifier prefixes like "deck:"
+  const isQualifierPrefix = suggestion.insert.endsWith(":");
+  const suffix = isQualifierPrefix ? "" : " ";
+  searchQuery.value = before + suggestion.insert + suffix + after.trimStart();
+  showAutocomplete.value = isQualifierPrefix;
+  selectedSuggestionIndex.value = 0;
+
+  nextTick(() => {
+    const newCursor = (before + suggestion.insert + suffix).length;
+    searchInputRef.value?.setSelectionRange(newCursor, newCursor);
+    searchInputRef.value?.focus();
+  });
+}
+
+function onSearchInput() {
+  showAutocomplete.value = true;
+  selectedSuggestionIndex.value = 0;
+}
+
+function onSearchKeydown(e: KeyboardEvent) {
+  const list = suggestions.value;
+  if (!showAutocomplete.value || list.length === 0) {
+    if (e.key === "Escape") {
+      showAutocomplete.value = false;
+    }
+    return;
+  }
+
+  if (e.key === "Tab" || e.key === "Enter") {
+    e.preventDefault();
+    applySuggestion(list[selectedSuggestionIndex.value]!);
+    return;
+  }
+
+  if (e.key === "ArrowDown") {
+    e.preventDefault();
+    selectedSuggestionIndex.value = (selectedSuggestionIndex.value + 1) % list.length;
+    return;
+  }
+
+  if (e.key === "ArrowUp") {
+    e.preventDefault();
+    selectedSuggestionIndex.value = (selectedSuggestionIndex.value - 1 + list.length) % list.length;
+    return;
+  }
+
+  if (e.key === "Escape") {
+    e.preventDefault();
+    showAutocomplete.value = false;
+    return;
+  }
+}
+
+function onSearchBlur() {
+  // Delay to allow click on suggestion
+  setTimeout(() => {
+    showAutocomplete.value = false;
+  }, 150);
+}
+
+function onSearchFocus() {
+  if (suggestions.value.length > 0) {
+    showAutocomplete.value = true;
+  }
+}
 
 // ── Row types ──
 
@@ -82,13 +355,11 @@ type CardRow = {
   deck: string;
   tags: string[];
   templateName: string;
-  type: string;
-  queue: string;
   due: string;
-  interval: string;
-  ease: string;
-  reviews: string;
-  lapses: string;
+  // Raw scheduling data for filter matching
+  queueName: string;
+  typeName: string;
+  flags: number;
 };
 
 type Row = NoteRow | CardRow;
@@ -158,13 +429,10 @@ const rows = computed<Row[]>(() => {
       deck: card.deckName,
       tags: card.tags,
       templateName: card.templates[0]?.name ?? "",
-      type: sched?.typeName ?? "new",
-      queue: sched?.queueName ?? "new",
       due: sched ? formatDue(sched) : "",
-      interval: sched ? formatInterval(sched.ivl, sched.ivlUnit) : "",
-      ease: sched?.easeFactor != null ? `${Math.round(sched.easeFactor * 100)}%` : "",
-      reviews: sched ? String(sched.reps) : "0",
-      lapses: sched ? String(sched.lapses) : "0",
+      queueName: sched?.queueName ?? "new",
+      typeName: sched?.typeName ?? "new",
+      flags: sched?.flags ?? 0,
     });
   }
   return result;
@@ -181,36 +449,17 @@ function formatDue(sched: { dueType: string; due: number }): string {
   return String(sched.due);
 }
 
-function formatInterval(ivl: number, unit: string): string {
-  if (unit === "seconds") {
-    if (ivl < 60) return `${ivl}s`;
-    if (ivl < 3600) return `${Math.round(ivl / 60)}m`;
-    return `${Math.round(ivl / 3600)}h`;
-  }
-  if (ivl === 0) return "";
-  if (ivl < 30) return `${ivl}d`;
-  if (ivl < 365) return `${(ivl / 30).toFixed(1)}mo`;
-  return `${(ivl / 365).toFixed(1)}y`;
-}
+// ── Filtering ──
 
-/** Filtered + sorted rows */
-const filteredRows = computed(() => {
-  const q = searchQuery.value.toLowerCase();
-  const deckFilter = filterDeck.value;
-  const tagFilter = filterTag.value;
-
-  let result = rows.value;
-
-  if (deckFilter) {
-    result = result.filter((r) => r.deck === deckFilter || r.deck.startsWith(deckFilter + "::"));
+function matchToken(row: Row, token: SearchToken): boolean {
+  if (token.type === "negate") {
+    return !matchToken(row, token.inner);
   }
 
-  if (tagFilter) {
-    result = result.filter((r) => r.tags.includes(tagFilter));
-  }
-
-  if (q) {
-    result = result.filter((row) => {
+  switch (token.type) {
+    case "text": {
+      const q = token.value.toLowerCase();
+      if (!q) return true;
       for (const v of Object.values(row.fields)) {
         if (v.toLowerCase().includes(q)) return true;
       }
@@ -219,7 +468,55 @@ const filteredRows = computed(() => {
       if (row.kind === "card" && row.templateName.toLowerCase().includes(q)) return true;
       if (row.kind === "note" && row.templateNames.toLowerCase().includes(q)) return true;
       return false;
-    });
+    }
+    case "deck": {
+      const v = token.value.toLowerCase();
+      const deck = row.deck.toLowerCase();
+      // Support deck hierarchy: deck:foo matches foo and foo::bar
+      return deck === v || deck.startsWith(v + "::");
+    }
+    case "tag": {
+      const v = token.value.toLowerCase();
+      return row.tags.some((t) => t.toLowerCase() === v || t.toLowerCase().startsWith(v + "::"));
+    }
+    case "is": {
+      if (row.kind === "note") {
+        // For notes, check if *any* matching state applies
+        // We only have first-card data, so approximate
+        return false;
+      }
+      const q = row.queueName;
+      const t = row.typeName;
+      switch (token.value) {
+        case "new": return q === "new";
+        case "learn": return q === "learning" || q === "dayLearning";
+        case "review": return q === "review";
+        case "due": return q === "review" || q === "learning" || q === "dayLearning";
+        case "suspended": return q === "suspended";
+        case "buried": return q === "userBuried" || q === "schedulerBuried";
+        default: return false;
+      }
+    }
+    case "flag": {
+      if (row.kind === "note") return false;
+      return row.flags === token.value;
+    }
+    case "card":
+    case "note": {
+      const v = token.value.toLowerCase();
+      if (row.kind === "card") return row.templateName.toLowerCase().includes(v);
+      return row.templateNames.toLowerCase().includes(v);
+    }
+  }
+}
+
+/** Filtered + sorted rows */
+const filteredRows = computed(() => {
+  const tokens = parseSearch(searchQuery.value);
+  let result = rows.value;
+
+  if (tokens.length > 0) {
+    result = result.filter((row) => tokens.every((token) => matchToken(row, token)));
   }
 
   // Sort
@@ -239,23 +536,15 @@ function getSortValue(row: Row, col: string): string {
   if (col === "sort-field") return row.sortField;
   if (col === "deck") return row.deck;
   if (col === "tags") return row.tags.join(" ");
-  if (col in row.fields) return row.fields[col] ?? "";
 
   if (row.kind === "note") {
-    if (col === "cards") return String(row.cardCount);
     if (col === "card-type") return row.templateNames;
+    if (col === "cards") return String(row.cardCount);
     return "";
   }
 
-  // Card-specific columns
   if (col === "card-type") return row.templateName;
-  if (col === "type") return row.type;
-  if (col === "queue") return row.queue;
   if (col === "due") return row.due;
-  if (col === "interval") return row.interval;
-  if (col === "ease") return row.ease;
-  if (col === "reviews") return row.reviews;
-  if (col === "lapses") return row.lapses;
   return "";
 }
 
@@ -275,40 +564,27 @@ function sortIndicator(col: string): string {
 
 // ── Columns ──
 
-const noteMetaColumns = [
-  { key: "deck", label: "Deck" },
-  { key: "tags", label: "Tags" },
-  { key: "card-type", label: "Card Type" },
-  { key: "cards", label: "Cards" },
-];
-
-const cardMetaColumns = [
-  { key: "deck", label: "Deck" },
-  { key: "tags", label: "Tags" },
-  { key: "card-type", label: "Card Type" },
-  { key: "type", label: "Type" },
-  { key: "queue", label: "Queue" },
-  { key: "due", label: "Due" },
-  { key: "interval", label: "Interval" },
-  { key: "ease", label: "Ease" },
-  { key: "reviews", label: "Reviews" },
-  { key: "lapses", label: "Lapses" },
-];
-
 const visibleColumns = computed(() => {
-  const cols: { key: string; label: string }[] = [];
-  for (const name of fieldNames.value) {
-    cols.push({ key: name, label: name });
+  if (viewMode.value === "notes") {
+    return [
+      { key: "sort-field", label: "Sort Field" },
+      { key: "card-type", label: "Note Type" },
+      { key: "cards", label: "Cards" },
+      { key: "tags", label: "Tags" },
+    ];
   }
-  const meta = viewMode.value === "notes" ? noteMetaColumns : cardMetaColumns;
-  cols.push(...meta);
-  return cols;
+  return [
+    { key: "sort-field", label: "Sort Field" },
+    { key: "card-type", label: "Card Type" },
+    { key: "due", label: "Due" },
+    { key: "deck", label: "Deck" },
+  ];
 });
 
 function getCellValue(row: Row, col: string): string {
+  if (col === "sort-field") return row.sortField;
   if (col === "deck") return row.deck;
   if (col === "tags") return row.tags.join(", ");
-  if (col in row.fields) return row.fields[col] ?? "";
 
   if (row.kind === "note") {
     if (col === "card-type") return row.templateNames;
@@ -317,13 +593,7 @@ function getCellValue(row: Row, col: string): string {
   }
 
   if (col === "card-type") return row.templateName;
-  if (col === "type") return row.type;
-  if (col === "queue") return row.queue;
   if (col === "due") return row.due;
-  if (col === "interval") return row.interval;
-  if (col === "ease") return row.ease;
-  if (col === "reviews") return row.reviews;
-  if (col === "lapses") return row.lapses;
   return "";
 }
 
@@ -403,20 +673,33 @@ function handleDetailClick(event: Event) {
             Cards
           </button>
         </div>
-        <input
-          v-model="searchQuery"
-          type="text"
-          class="search-input"
-          placeholder="Filter..."
-        />
-        <select v-model="filterDeck" class="filter-select">
-          <option :value="null">All decks</option>
-          <option v-for="deck in allDecks" :key="deck" :value="deck">{{ deck }}</option>
-        </select>
-        <select v-if="allTags.length > 0" v-model="filterTag" class="filter-select">
-          <option :value="null">All tags</option>
-          <option v-for="tag in allTags" :key="tag" :value="tag">{{ tag }}</option>
-        </select>
+        <div class="search-wrap">
+          <input
+            ref="searchInputRef"
+            v-model="searchQuery"
+            type="text"
+            class="search-input"
+            placeholder="Filter... (deck:, tag:, is:, flag:)"
+            @input="onSearchInput"
+            @keydown="onSearchKeydown"
+            @blur="onSearchBlur"
+            @focus="onSearchFocus"
+          />
+          <div v-if="showAutocomplete && suggestions.length > 0" class="autocomplete">
+            <div
+              v-for="(s, i) in suggestions"
+              :key="s.insert"
+              :class="['autocomplete-item', { 'autocomplete-item--selected': i === selectedSuggestionIndex }]"
+              @mousedown.prevent="applySuggestion(s)"
+            >
+              <span class="autocomplete-label">{{ s.label }}</span>
+              <span v-if="s.description" class="autocomplete-desc">{{ s.description }}</span>
+            </div>
+            <div class="autocomplete-hint">
+              <kbd>Tab</kbd> to accept
+            </div>
+          </div>
+        </div>
       </div>
       <div class="toolbar-right">
         <span class="result-count">{{ filteredRows.length }} {{ viewMode }}</span>
@@ -463,21 +746,24 @@ function handleDetailClick(event: Event) {
       </div>
 
       <!-- Detail pane -->
-      <div v-if="selectedCard" class="detail-pane" @click="handleDetailClick">
-        <div class="detail-header">
-          <h3 class="detail-title">{{ selectedCard.deckName }}</h3>
-          <span class="detail-meta">{{ selectedCard.templates.map(t => t.name).join(", ") }}</span>
-        </div>
-        <div v-if="selectedPreview" class="detail-preview" v-html="selectedPreview" />
-        <div class="detail-fields">
-          <div v-for="(val, key) in selectedCard.values" :key="key" class="detail-field">
-            <div class="detail-field-label">{{ key }}</div>
-            <div class="detail-field-value" v-html="renderFieldHtml(val)" />
+      <div class="detail-pane" @click="handleDetailClick">
+        <template v-if="selectedCard">
+          <div class="detail-header">
+            <h3 class="detail-title">{{ selectedCard.deckName }}</h3>
+            <span class="detail-meta">{{ selectedCard.templates.map(t => t.name).join(", ") }}</span>
           </div>
-        </div>
-        <div v-if="selectedCard.tags.length > 0" class="detail-tags">
-          <span v-for="tag in selectedCard.tags" :key="tag" class="tag-badge">{{ tag }}</span>
-        </div>
+          <div v-if="selectedPreview" class="detail-preview" v-html="selectedPreview" />
+          <div class="detail-fields">
+            <div v-for="(val, key) in selectedCard.values" :key="key" class="detail-field">
+              <div class="detail-field-label">{{ key }}</div>
+              <div class="detail-field-value" v-html="renderFieldHtml(val)" />
+            </div>
+          </div>
+          <div v-if="selectedCard.tags.length > 0" class="detail-tags">
+            <span v-for="tag in selectedCard.tags" :key="tag" class="tag-badge">{{ tag }}</span>
+          </div>
+        </template>
+        <p v-else class="detail-empty">No card selected</p>
       </div>
     </div>
   </div>
@@ -544,10 +830,16 @@ function handleDetailClick(event: Event) {
   background: var(--color-surface-elevated);
 }
 
-.search-input {
+/* Search with autocomplete */
+.search-wrap {
+  position: relative;
   flex: 1;
   min-width: 120px;
-  max-width: 300px;
+  max-width: 400px;
+}
+
+.search-input {
+  width: 100%;
   padding: var(--spacing-1) var(--spacing-2);
   font-size: var(--font-size-sm);
   color: var(--color-text-primary);
@@ -556,6 +848,7 @@ function handleDetailClick(event: Event) {
   border-radius: var(--radius-sm);
   outline: none;
   transition: var(--transition-colors);
+  box-sizing: border-box;
 }
 
 .search-input:focus {
@@ -567,19 +860,61 @@ function handleDetailClick(event: Event) {
   color: var(--color-text-tertiary);
 }
 
-.filter-select {
-  padding: var(--spacing-1) var(--spacing-2);
-  font-size: var(--font-size-xs);
+.autocomplete {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 2px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg, 0 4px 12px rgba(0, 0, 0, 0.15));
+  z-index: 100;
+  overflow: hidden;
+}
+
+.autocomplete-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  padding: var(--spacing-1-5) var(--spacing-2);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
   color: var(--color-text-primary);
+}
+
+.autocomplete-item:hover,
+.autocomplete-item--selected {
+  background: var(--color-surface-hover);
+}
+
+.autocomplete-label {
+  font-weight: var(--font-weight-medium);
+}
+
+.autocomplete-desc {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-xs);
+  margin-left: auto;
+}
+
+.autocomplete-hint {
+  padding: var(--spacing-1) var(--spacing-2);
+  border-top: 1px solid var(--color-border);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+}
+
+.autocomplete-hint kbd {
+  display: inline-block;
+  padding: 0 var(--spacing-1);
+  font-size: var(--font-size-xs);
+  font-family: inherit;
+  color: var(--color-text-secondary);
   background: var(--color-surface-elevated);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
-  outline: none;
-  max-width: 180px;
-}
-
-.filter-select:focus {
-  border-color: var(--color-border-focus);
 }
 
 .result-count {
@@ -760,6 +1095,16 @@ function handleDetailClick(event: Event) {
   background: var(--color-surface-elevated);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-full);
+}
+
+.detail-empty {
+  margin: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-sm);
 }
 
 .detail-field-value :deep(.sound-btn) {
