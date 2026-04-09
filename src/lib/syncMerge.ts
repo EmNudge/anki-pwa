@@ -102,6 +102,40 @@ export type SanityCheckCounts = [
 
 // ── Database format detection ─────────���────────────────────────────
 
+// ── Helpers ───────────────────────────────────────────────────────
+
+/** Read a JSON column from the `col` table and parse it, returning a fallback on failure. */
+function getColJson<T>(db: Database, column: string, fallback: T): T {
+  const result = db.exec(`SELECT ${column} FROM col`);
+  const raw = result[0]?.values[0]?.[0];
+  if (!raw) return fallback;
+  try {
+    return JSON.parse(raw as string);
+  } catch {
+    return fallback;
+  }
+}
+
+/**
+ * Merge remote items into a local JSON column of the `col` table (anki2 format).
+ * Uses mod-time conflict resolution: remote wins if its mod >= local mod.
+ */
+function mergeColJsonField<T extends { id: number; mod?: number }>(
+  db: Database,
+  column: string,
+  remoteItems: T[],
+): void {
+  if (remoteItems.length === 0) return;
+  const local = getColJson<Record<string, T>>(db, column, {});
+  for (const item of remoteItems) {
+    const existing = local[String(item.id)];
+    if (!existing || (item.mod ?? 0) >= (existing.mod ?? 0)) {
+      local[String(item.id)] = item;
+    }
+  }
+  db.run(`UPDATE col SET ${column}=?`, [JSON.stringify(local)]);
+}
+
 /** Returns true if the DB uses the anki21b format (separate notetypes table). */
 export function isAnki21bFormat(db: Database): boolean {
   const result = db.exec(
@@ -153,12 +187,9 @@ export async function applyRemoteGraves(
         db.run("DELETE FROM decks WHERE id=?", [deckId]);
       } else {
         // anki2: decks are stored as JSON in col.decks
-        const result = db.exec("SELECT decks FROM col");
-        if (result[0]?.values[0]?.[0]) {
-          const decks = JSON.parse(result[0].values[0][0] as string);
-          delete decks[String(deckId)];
-          db.run("UPDATE col SET decks=?", [JSON.stringify(decks)]);
-        }
+        const decks = getColJson<Record<string, unknown>>(db, "decks", {});
+        delete decks[String(deckId)];
+        db.run("UPDATE col SET decks=?", [JSON.stringify(decks)]);
       }
     }
   }
@@ -230,58 +261,15 @@ function applyRemoteUnchunkedAnki2(
   db: Database,
   changes: UnchunkedChanges,
 ): void {
-  // Models (notetypes)
-  if (changes.models.length > 0) {
-    const result = db.exec("SELECT models FROM col");
-    const localModels = result[0]?.values[0]?.[0]
-      ? JSON.parse(result[0].values[0][0] as string)
-      : {};
-    for (const m of changes.models) {
-      const local = localModels[String(m.id)];
-      if (!local || (m.mod ?? 0) >= (local.mod ?? 0)) {
-        localModels[String(m.id)] = m;
-      }
-    }
-    db.run("UPDATE col SET models=?", [JSON.stringify(localModels)]);
-  }
-
-  // Decks
+  // Models, decks, deck configs — merge with mod-time conflict resolution
+  mergeColJsonField(db, "models", changes.models);
   const [remoteDecks, remoteDconf] = changes.decks;
-  if (remoteDecks.length > 0) {
-    const result = db.exec("SELECT decks FROM col");
-    const localDecks = result[0]?.values[0]?.[0]
-      ? JSON.parse(result[0].values[0][0] as string)
-      : {};
-    for (const d of remoteDecks) {
-      const local = localDecks[String(d.id)];
-      if (!local || (d.mod ?? 0) >= (local.mod ?? 0)) {
-        localDecks[String(d.id)] = d;
-      }
-    }
-    db.run("UPDATE col SET decks=?", [JSON.stringify(localDecks)]);
-  }
-
-  // Deck configs
-  if (remoteDconf.length > 0) {
-    const result = db.exec("SELECT dconf FROM col");
-    const localDconf = result[0]?.values[0]?.[0]
-      ? JSON.parse(result[0].values[0][0] as string)
-      : {};
-    for (const c of remoteDconf) {
-      const local = localDconf[String(c.id)];
-      if (!local || (c.mod ?? 0) >= (local.mod ?? 0)) {
-        localDconf[String(c.id)] = c;
-      }
-    }
-    db.run("UPDATE col SET dconf=?", [JSON.stringify(localDconf)]);
-  }
+  mergeColJsonField(db, "decks", remoteDecks);
+  mergeColJsonField(db, "dconf", remoteDconf);
 
   // Tags — merge (union)
   if (changes.tags.length > 0) {
-    const result = db.exec("SELECT tags FROM col");
-    const localTags = result[0]?.values[0]?.[0]
-      ? JSON.parse(result[0].values[0][0] as string)
-      : {};
+    const localTags = getColJson<Record<string, number>>(db, "tags", {});
     for (const tag of changes.tags) {
       if (!localTags[tag]) {
         localTags[tag] = 0;
@@ -401,39 +389,23 @@ function buildLocalUnchunkedAnki2(
   };
 
   // Models (notetypes) with pending changes (usn=-1)
-  const modelsResult = db.exec("SELECT models FROM col");
-  if (modelsResult[0]?.values[0]?.[0]) {
-    const models = JSON.parse(modelsResult[0].values[0][0] as string) as Record<string, SyncModel>;
-    for (const m of Object.values(models)) {
-      if (m.usn === -1) changes.models.push(m);
-    }
+  for (const m of Object.values(getColJson<Record<string, SyncModel>>(db, "models", {}))) {
+    if (m.usn === -1) changes.models.push(m);
   }
 
   // Decks with pending changes (usn=-1)
-  const decksResult = db.exec("SELECT decks FROM col");
-  if (decksResult[0]?.values[0]?.[0]) {
-    const decks = JSON.parse(decksResult[0].values[0][0] as string) as Record<string, SyncDeck>;
-    for (const d of Object.values(decks)) {
-      if (d.usn === -1) changes.decks[0].push(d);
-    }
+  for (const d of Object.values(getColJson<Record<string, SyncDeck>>(db, "decks", {}))) {
+    if (d.usn === -1) changes.decks[0].push(d);
   }
 
   // Deck configs with pending changes (usn=-1)
-  const dconfResult = db.exec("SELECT dconf FROM col");
-  if (dconfResult[0]?.values[0]?.[0]) {
-    const dconf = JSON.parse(dconfResult[0].values[0][0] as string) as Record<string, SyncDeckConfig>;
-    for (const c of Object.values(dconf)) {
-      if (c.usn === -1) changes.decks[1].push(c);
-    }
+  for (const c of Object.values(getColJson<Record<string, SyncDeckConfig>>(db, "dconf", {}))) {
+    if (c.usn === -1) changes.decks[1].push(c);
   }
 
   // Tags with pending changes (value=-1 in the JSON object)
-  const tagsResult = db.exec("SELECT tags FROM col");
-  if (tagsResult[0]?.values[0]?.[0]) {
-    const tags = JSON.parse(tagsResult[0].values[0][0] as string) as Record<string, number>;
-    for (const [tag, usn] of Object.entries(tags)) {
-      if (usn === -1) changes.tags.push(tag);
-    }
+  for (const [tag, usn] of Object.entries(getColJson<Record<string, number>>(db, "tags", {}))) {
+    if (usn === -1) changes.tags.push(tag);
   }
 
   // If local is newer, include conf and crt so the server can update
@@ -626,23 +598,9 @@ export function getSanityCounts(
     decks = scalar("SELECT count() FROM decks");
     deckConfig = scalar("SELECT count() FROM deck_config");
   } else {
-    const modelsResult = db.exec("SELECT models FROM col");
-    const modelsObj = modelsResult[0]?.values[0]?.[0]
-      ? JSON.parse(modelsResult[0].values[0][0] as string)
-      : {};
-    models = Object.keys(modelsObj).length;
-
-    const decksResult = db.exec("SELECT decks FROM col");
-    const decksObj = decksResult[0]?.values[0]?.[0]
-      ? JSON.parse(decksResult[0].values[0][0] as string)
-      : {};
-    decks = Object.keys(decksObj).length;
-
-    const dconfResult = db.exec("SELECT dconf FROM col");
-    const dconfObj = dconfResult[0]?.values[0]?.[0]
-      ? JSON.parse(dconfResult[0].values[0][0] as string)
-      : {};
-    deckConfig = Object.keys(dconfObj).length;
+    models = Object.keys(getColJson(db, "models", {})).length;
+    decks = Object.keys(getColJson(db, "decks", {})).length;
+    deckConfig = Object.keys(getColJson(db, "dconf", {})).length;
   }
 
   return [
@@ -683,19 +641,16 @@ export function finalizeUsn(
     finalizeUsnAnki2Json(db, serverUsn, "decks");
     finalizeUsnAnki2Json(db, serverUsn, "dconf");
     // Tags: update usn values in the JSON object
-    const tagsResult = db.exec("SELECT tags FROM col");
-    if (tagsResult[0]?.values[0]?.[0]) {
-      const tags = JSON.parse(tagsResult[0].values[0][0] as string) as Record<string, number>;
-      let changed = false;
-      for (const [tag, usn] of Object.entries(tags)) {
-        if (usn === -1) {
-          tags[tag] = serverUsn;
-          changed = true;
-        }
+    const tags = getColJson<Record<string, number>>(db, "tags", {});
+    let changed = false;
+    for (const [tag, usn] of Object.entries(tags)) {
+      if (usn === -1) {
+        tags[tag] = serverUsn;
+        changed = true;
       }
-      if (changed) {
-        db.run("UPDATE col SET tags=?", [JSON.stringify(tags)]);
-      }
+    }
+    if (changed) {
+      db.run("UPDATE col SET tags=?", [JSON.stringify(tags)]);
     }
   }
 
@@ -708,9 +663,7 @@ function finalizeUsnAnki2Json(
   serverUsn: number,
   column: "models" | "decks" | "dconf",
 ): void {
-  const result = db.exec(`SELECT ${column} FROM col`);
-  if (!result[0]?.values[0]?.[0]) return;
-  const data = JSON.parse(result[0].values[0][0] as string) as Record<string, { usn?: number }>;
+  const data = getColJson<Record<string, { usn?: number }>>(db, column, {});
   let changed = false;
   for (const obj of Object.values(data)) {
     if (obj.usn === -1) {
