@@ -24,6 +24,7 @@ import {
   loadMediaObjectUrls,
   revokeMediaObjectUrls,
   mediaCachePath,
+  mediaKeyToFilename,
   clearMediaCache,
   filterMediaKeys,
 } from "./utils/mediaCache";
@@ -210,25 +211,33 @@ export async function loadSyncedCollection(
   const cache = await ankiCachePromise;
   await cache.put(
     "/sync/collection.sqlite",
-    new Response(new Blob([bytes.buffer as ArrayBuffer])),
+    new Response(new Blob([bytes as BlobPart])),
   );
 
   // Revoke old object URLs before clearing
   revokeOldMediaUrls();
 
-  // Clear old media entries and store new ones
-  await clearMediaCache(cache);
-
+  // Store new media entries first, then clear old ones that weren't replaced.
+  // This avoids losing all media if the new store operations fail.
   let mediaFiles: Map<string, string> | undefined;
+  const newMediaFilenames = new Set<string>();
   if (mediaBlobs && mediaBlobs.size > 0) {
     mediaFiles = new Map<string, string>();
     const puts: Promise<void>[] = [];
     for (const [filename, blob] of mediaBlobs) {
+      newMediaFilenames.add(filename);
       mediaFiles.set(filename, URL.createObjectURL(blob));
       puts.push(cache.put(mediaCachePath(filename), new Response(blob)));
     }
     await Promise.all(puts);
   }
+
+  // Clear old media entries that weren't replaced by new ones
+  const oldMediaKeys = filterMediaKeys(await cache.keys());
+  const deletes = oldMediaKeys.filter(
+    (req) => !newMediaFilenames.has(mediaKeyToFilename(req)),
+  );
+  await Promise.all(deletes.map((req) => cache.delete(req)));
 
   persistActiveDeckSourceId(SYNC_COLLECTION_ID);
   activeDeckInputSig.value = { kind: "sqlite", bytes, mediaFiles };
@@ -254,7 +263,7 @@ export async function refreshSyncedCollection(bytes: Uint8Array) {
   const cache = await ankiCachePromise;
   await cache.put(
     "/sync/collection.sqlite",
-    new Response(new Blob([bytes.buffer as ArrayBuffer])),
+    new Response(new Blob([bytes as BlobPart])),
   );
 
   // Recover existing media object URLs from the current activeDeckInputSig
@@ -266,6 +275,38 @@ export async function refreshSyncedCollection(bytes: Uint8Array) {
   activeDeckInputSig.value = { kind: "sqlite", bytes, mediaFiles: existingMedia };
   activeViewSig.value = "review";
   reviewModeSig.value = "studying";
+}
+
+/**
+ * Add new media blobs to the cache and update the active deck's media map.
+ * Used during incremental sync to add newly downloaded media without a full reload.
+ */
+export async function addMediaToCache(mediaBlobs: Map<string, Blob>) {
+  if (mediaBlobs.size === 0) return;
+
+  const cache = await ankiCachePromise;
+  const puts: Promise<void>[] = [];
+  const currentInput = activeDeckInputSig.value;
+
+  // Get or create the media files map
+  const existingMedia =
+    currentInput?.kind === "sqlite" ? currentInput.mediaFiles : undefined;
+  const mediaFiles = existingMedia ? new Map(existingMedia) : new Map<string, string>();
+
+  for (const [filename, blob] of mediaBlobs) {
+    // Revoke old URL if replacing an existing entry
+    const oldUrl = mediaFiles.get(filename);
+    if (oldUrl) URL.revokeObjectURL(oldUrl);
+
+    mediaFiles.set(filename, URL.createObjectURL(blob));
+    puts.push(cache.put(mediaCachePath(filename), new Response(blob)));
+  }
+  await Promise.all(puts);
+
+  // Update the active deck input with the new media map
+  if (currentInput?.kind === "sqlite") {
+    activeDeckInputSig.value = { ...currentInput, mediaFiles };
+  }
 }
 
 export async function clearSyncedCollection() {
@@ -287,9 +328,14 @@ export const ankiDataSig = shallowRef<AnkiData | null>(null);
 let activeDeckLoadVersion = 0;
 
 watch(activeDeckInputSig, async (newInput, oldInput) => {
-  // Revoke object URLs from previous deck to prevent memory leaks
+  // Revoke object URLs from previous deck to prevent memory leaks.
+  // Skip revocation when the same Map reference is reused (e.g. refreshSyncedCollection)
+  // to avoid invalidating URLs that the new input still needs.
   if (oldInput?.kind === "sqlite" && oldInput.mediaFiles) {
-    revokeMediaObjectUrls(oldInput.mediaFiles);
+    const newMedia = newInput?.kind === "sqlite" ? newInput.mediaFiles : undefined;
+    if (oldInput.mediaFiles !== newMedia) {
+      revokeMediaObjectUrls(oldInput.mediaFiles);
+    }
   }
   // Revoke media object URLs from previous AnkiData (from .apkg parsing)
   const oldData = ankiDataSig.value;
@@ -687,7 +733,7 @@ export async function updateNote(
     const cache = await caches.open("anki-cache");
     await cache.put(
       "/sync/collection.sqlite",
-      new Response(new Blob([newBytes.buffer as ArrayBuffer])),
+      new Response(new Blob([newBytes as BlobPart])),
     );
 
     // Update in-place without triggering re-parse
