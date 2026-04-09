@@ -5,7 +5,9 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "node",
-    exclude: ['**/node_modules/**', '**/dist/**', '**/e2e/**', '**/sync-integration.test.ts'],
+    include: ["src/__tests__/sync-integration.test.ts"],
+    testTimeout: 30_000,
+    hookTimeout: 45_000,
   },
   resolve: {
     alias: {

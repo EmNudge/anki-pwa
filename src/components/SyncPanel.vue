@@ -23,7 +23,7 @@ import {
   initializeReviewQueue,
 } from "../stores";
 import { applyReviewStateToSqlite } from "../lib/syncWrite";
-import { normalSync, FullSyncRequiredError, SyncAbortedError } from "../lib/normalSync";
+import { normalSync, FullSyncRequiredError, SyncAbortedError, ClockSkewError } from "../lib/normalSync";
 import mime from "mime";
 
 const serverUrl = ref("");

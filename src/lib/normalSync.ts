@@ -11,6 +11,7 @@ import {
   syncPost,
   syncPostV11,
   readResponseJson,
+  generateSessionKey,
   type SyncState,
 } from "./ankiSync";
 import { mergeIndexedDBToSqlite } from "./syncWrite";
@@ -120,6 +121,15 @@ export class SyncAbortedError extends Error {
   }
 }
 
+export class ClockSkewError extends Error {
+  constructor(skewMinutes: number) {
+    super(
+      `Your clock is off by ~${skewMinutes} minutes. Sync cannot proceed because incorrect timestamps would corrupt scheduling data. Please fix your system clock and try again.`,
+    );
+    this.name = "ClockSkewError";
+  }
+}
+
 type ProgressCallback = (status: string) => void;
 
 interface NormalSyncResult {
@@ -141,13 +151,14 @@ async function syncEndpoint(
   hkey: string,
   data: unknown = {},
   proto: ProtoVersion = 10,
+  sessionKey?: string,
 ): Promise<unknown> {
   const base = normalizeUrl(serverUrl);
   const url = `${base}/sync/${endpoint}`;
 
   const response = proto >= 11
-    ? await syncPostV11(url, hkey, data)
-    : await syncPost(url, hkey, data);
+    ? await syncPostV11(url, hkey, data, sessionKey)
+    : await syncPost(url, hkey, data, sessionKey);
 
   if (response.status === 401 || response.status === 403) {
     throw new Error("Authentication expired. Please log in again.");
@@ -212,11 +223,12 @@ async function startSync(
   clientUsn: number,
   localIsNewer: boolean,
   proto: ProtoVersion = 10,
+  sessionKey?: string,
 ): Promise<Graves> {
   const r = await syncEndpoint(serverUrl, "start", hkey, {
     minUsn: clientUsn,
     lnewer: localIsNewer,
-  }, proto) as RawStartResponse;
+  }, proto, sessionKey) as RawStartResponse;
   return {
     cards: r.cards ?? [],
     notes: r.notes ?? [],
@@ -229,6 +241,7 @@ async function sendGraves(
   hkey: string,
   graves: Graves,
   proto: ProtoVersion = 10,
+  sessionKey?: string,
 ): Promise<void> {
   // Chunk graves in batches of CHUNK_SIZE
   const allIds: Array<[number, "cards" | "notes" | "decks"]> = [
@@ -243,14 +256,14 @@ async function sendGraves(
     for (const [id, type] of batch) {
       chunk[type].push(id);
     }
-    await syncEndpoint(serverUrl, "applyGraves", hkey, { chunk }, proto);
+    await syncEndpoint(serverUrl, "applyGraves", hkey, { chunk }, proto, sessionKey);
   }
 
   // If no graves at all, still send an empty one
   if (allIds.length === 0) {
     await syncEndpoint(serverUrl, "applyGraves", hkey, {
       chunk: { cards: [], notes: [], decks: [] },
-    }, proto);
+    }, proto, sessionKey);
   }
 }
 
@@ -259,10 +272,11 @@ async function exchangeChanges(
   hkey: string,
   localChanges: UnchunkedChanges,
   proto: ProtoVersion = 10,
+  sessionKey?: string,
 ): Promise<UnchunkedChanges> {
   const r = await syncEndpoint(serverUrl, "applyChanges", hkey, {
     changes: localChanges,
-  }, proto) as RawApplyChangesResponse;
+  }, proto, sessionKey) as RawApplyChangesResponse;
   return {
     models: r.models ?? [],
     decks: r.decks ?? [[], []],
@@ -278,12 +292,13 @@ async function receiveChunks(
   db: import("sql.js").Database,
   onProgress: ProgressCallback,
   proto: ProtoVersion = 10,
+  sessionKey?: string,
 ): Promise<void> {
   let chunkNum = 0;
   while (true) {
     chunkNum++;
     onProgress(`Receiving server changes (chunk ${chunkNum})...`);
-    const result = await syncEndpoint(serverUrl, "chunk", hkey, {}, proto);
+    const result = await syncEndpoint(serverUrl, "chunk", hkey, {}, proto, sessionKey);
     const chunk = result as Chunk;
     await applyRemoteChunk(db, chunk);
     if (chunk.done) break;
@@ -296,12 +311,13 @@ async function sendChunks(
   db: import("sql.js").Database,
   onProgress: ProgressCallback,
   proto: ProtoVersion = 10,
+  sessionKey?: string,
 ): Promise<void> {
   let chunkNum = 0;
   for (const chunk of buildLocalChunks(db)) {
     chunkNum++;
     onProgress(`Sending local changes (chunk ${chunkNum})...`);
-    await syncEndpoint(serverUrl, "applyChunk", hkey, { chunk }, proto);
+    await syncEndpoint(serverUrl, "applyChunk", hkey, { chunk }, proto, sessionKey);
   }
 }
 
@@ -310,12 +326,13 @@ async function sanityCheck(
   hkey: string,
   counts: SanityCheckCounts,
   proto: ProtoVersion = 10,
+  sessionKey?: string,
 ): Promise<void> {
   const r = await syncEndpoint(serverUrl, "sanityCheck2", hkey, {
     client: counts,
-  }, proto) as RawSanityCheckResponse;
+  }, proto, sessionKey) as RawSanityCheckResponse;
   if (r.status === "bad") {
-    throw new Error(
+    throw new FullSyncRequiredError(
       "Sync sanity check failed: client and server counts do not match. A full sync is required.",
     );
   }
@@ -325,8 +342,9 @@ async function finishSync(
   serverUrl: string,
   hkey: string,
   proto: ProtoVersion = 10,
+  sessionKey?: string,
 ): Promise<number> {
-  const result = await syncEndpoint(serverUrl, "finish", hkey, {}, proto);
+  const result = await syncEndpoint(serverUrl, "finish", hkey, {}, proto, sessionKey);
   // Server returns the new mod time (number)
   if (typeof result === "number") return result;
   // Some servers wrap in an object
@@ -336,9 +354,11 @@ async function finishSync(
 async function abortSync(
   serverUrl: string,
   hkey: string,
+  proto: ProtoVersion = 10,
+  sessionKey?: string,
 ): Promise<void> {
   try {
-    await syncEndpoint(serverUrl, "abort", hkey);
+    await syncEndpoint(serverUrl, "abort", hkey, {}, proto, sessionKey);
   } catch {
     // Ignore abort errors — the sync is already failed
   }
@@ -367,6 +387,8 @@ export async function normalSync(
 ): Promise<NormalSyncResult> {
   const db = await createDatabase(sqliteBytes);
   let sessionStarted = false;
+  let proto: ProtoVersion = 10;
+  const sessionKey = generateSessionKey();
 
   try {
     // Step 0: Merge IndexedDB review state into SQLite (marks changed rows with usn=-1)
@@ -386,15 +408,12 @@ export async function normalSync(
       throw new SyncAbortedError(remoteMeta.msg || "Server requested abort");
     }
 
-    // Clock skew detection: warn if local and server clocks differ by >5 minutes
+    // Clock skew detection: block sync if clocks differ by >5 minutes
     if (remoteMeta.ts > 0) {
       const localTimeSec = Date.now() / 1000;
       const skewSec = Math.abs(localTimeSec - remoteMeta.ts);
       if (skewSec > 300) {
-        const skewMin = Math.round(skewSec / 60);
-        onProgress(
-          `Warning: your clock is off by ~${skewMin} minutes. This may cause scheduling issues.`,
-        );
+        throw new ClockSkewError(Math.round(skewSec / 60));
       }
     }
 
@@ -413,48 +432,51 @@ export async function normalSync(
     }
 
     // Negotiate protocol: use v11 (zstd) if server supports it, else legacy
-    const proto: ProtoVersion = (remoteMeta.serverVersion ?? 0) >= 11 ? 11 : 10;
+    proto = (remoteMeta.serverVersion ?? 0) >= 11 ? 11 : 10;
 
     // Step 3: Start sync — exchange graves
     const localIsNewer = localMeta.mod > remoteMeta.mod;
     onProgress("Starting sync session...");
     sessionStarted = true;
-    const remoteGraves = await startSync(serverUrl, hkey, localMeta.usn, localIsNewer, proto);
+    const remoteGraves = await startSync(serverUrl, hkey, localMeta.usn, localIsNewer, proto, sessionKey);
 
     // Apply remote graves (deletions from server)
-    onProgress("Applying remote deletions...");
+    const remoteGraveCount = remoteGraves.cards.length + remoteGraves.notes.length + remoteGraves.decks.length;
+    onProgress(`Applying ${remoteGraveCount} remote deletion${remoteGraveCount !== 1 ? "s" : ""}...`);
     await applyRemoteGraves(db, remoteGraves);
 
     // Step 4: Send local graves
-    onProgress("Sending local deletions...");
     const localGraves = buildLocalGraves(db);
-    await sendGraves(serverUrl, hkey, localGraves, proto);
+    const localGraveCount = localGraves.cards.length + localGraves.notes.length + localGraves.decks.length;
+    onProgress(`Sending ${localGraveCount} local deletion${localGraveCount !== 1 ? "s" : ""}...`);
+    await sendGraves(serverUrl, hkey, localGraves, proto, sessionKey);
 
     // Step 5: Exchange unchunked changes (models, decks, config, tags)
     const anki21b = isAnki21bFormat(db);
-    onProgress("Exchanging deck and notetype changes...");
     const localChanges = buildLocalUnchunkedChanges(db, anki21b, localIsNewer);
-    const remoteChanges = await exchangeChanges(serverUrl, hkey, localChanges, proto);
+    const localUnchunkedCount = localChanges.models.length + localChanges.decks[0].length + localChanges.decks[1].length + localChanges.tags.length;
+    onProgress(`Exchanging metadata (${localUnchunkedCount} local change${localUnchunkedCount !== 1 ? "s" : ""})...`);
+    const remoteChanges = await exchangeChanges(serverUrl, hkey, localChanges, proto, sessionKey);
     applyRemoteUnchunkedChanges(db, remoteChanges, anki21b);
 
     // Step 6: Receive server chunks (cards, notes, revlog)
-    await receiveChunks(serverUrl, hkey, db, onProgress, proto);
+    await receiveChunks(serverUrl, hkey, db, onProgress, proto, sessionKey);
 
     // Step 7: Send local chunks
-    await sendChunks(serverUrl, hkey, db, onProgress, proto);
+    await sendChunks(serverUrl, hkey, db, onProgress, proto, sessionKey);
 
     // Step 8: Sanity check
     onProgress("Verifying sync integrity...");
     const counts = getSanityCounts(db, anki21b);
-    await sanityCheck(serverUrl, hkey, counts, proto);
+    await sanityCheck(serverUrl, hkey, counts, proto, sessionKey);
 
     // Step 9: Finish
     onProgress("Finalizing...");
-    const newMod = await finishSync(serverUrl, hkey, proto);
+    const newMod = await finishSync(serverUrl, hkey, proto, sessionKey);
     sessionStarted = false;
 
     // Update USNs and collection metadata
-    finalizeUsn(db, remoteMeta.usn, newMod);
+    finalizeUsn(db, remoteMeta.usn, newMod, anki21b);
 
     // Export modified SQLite
     const newBytes = new Uint8Array(db.export());
@@ -471,7 +493,7 @@ export async function normalSync(
     };
   } catch (error) {
     if (sessionStarted) {
-      await abortSync(serverUrl, hkey);
+      await abortSync(serverUrl, hkey, proto, sessionKey);
     }
     try { db.close(); } catch { /* already closed */ }
     throw error;

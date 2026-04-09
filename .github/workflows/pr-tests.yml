@@ -42,3 +42,49 @@ jobs:
           name: playwright-report
           path: playwright-report/
           retention-days: 30
+
+  sync-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/checkout@v4
+        with:
+          repository: ankitects/anki
+          path: _anki
+          fetch-depth: 1
+          submodules: recursive
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Rust toolchain and protobuf
+        uses: dtolnay/rust-toolchain@stable
+      - run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - name: Cache Cargo build
+        uses: actions/cache@v4
+        with:
+          path: |
+            _anki/target
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: sync-server-${{ runner.os }}-${{ hashFiles('_anki/Cargo.lock') }}
+          restore-keys: sync-server-${{ runner.os }}-
+
+      - name: Build anki-sync-server
+        run: |
+          cd _anki
+          cargo build --package anki-sync-server --release
+        env:
+          CARGO_INCREMENTAL: 0
+          PROTOC: /usr/bin/protoc
+
+      - run: npm ci
+
+      - name: Run sync integration tests
+        run: npm run test:integration
+        env:
+          ANKI_SYNC_SERVER_BIN: ${{ github.workspace }}/_anki/target/release/anki-sync-server
