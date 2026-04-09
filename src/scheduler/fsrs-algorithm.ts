@@ -1,6 +1,6 @@
 import { FSRS, Rating, Card, createEmptyCard, FSRSParameters } from "ts-fsrs";
 import type { Answer } from "./types";
-import type { SchedulingAlgorithm, SchedulingResult } from "./algorithm";
+import type { SchedulingAlgorithm, SchedulingResult, CardState } from "./algorithm";
 
 /**
  * Maps our Answer type to FSRS Rating
@@ -38,12 +38,11 @@ export class FSRSAlgorithm implements SchedulingAlgorithm {
     this.fsrs = new FSRS(fsrsParams);
   }
 
-  createCard(): unknown {
-    const card = createEmptyCard();
-    return card;
+  createCard(): Card {
+    return createEmptyCard();
   }
 
-  reviewCard(cardState: unknown, answer: Answer): SchedulingResult {
+  reviewCard(cardState: CardState, answer: Answer): SchedulingResult {
     const rating = ANSWER_TO_FSRS_RATING[answer];
     const card = cardState as Card;
     const now = new Date();
@@ -66,7 +65,7 @@ export class FSRSAlgorithm implements SchedulingAlgorithm {
     };
   }
 
-  getNextIntervals(cardState: unknown): Record<Answer, Date> {
+  getNextIntervals(cardState: CardState): Record<Answer, Date> {
     const card = cardState as Card;
     const now = new Date();
 
@@ -80,12 +79,12 @@ export class FSRSAlgorithm implements SchedulingAlgorithm {
     };
   }
 
-  getDueDate(cardState: unknown): Date {
+  getDueDate(cardState: CardState): Date {
     const card = cardState as Card;
     return card.due;
   }
 
-  getDisplayInfo(cardState: unknown): {
+  getDisplayInfo(cardState: CardState): {
     stability?: number;
     difficulty?: number;
     repetitions?: number;

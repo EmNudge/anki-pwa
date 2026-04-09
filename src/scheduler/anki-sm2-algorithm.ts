@@ -1,11 +1,11 @@
 import type { Answer } from "./types";
-import type { SchedulingAlgorithm, SchedulingResult } from "./algorithm";
+import type { SchedulingAlgorithm, SchedulingResult, CardState } from "./algorithm";
 import { DEFAULT_SM2_PARAMS, type SM2Params } from "./types";
 import { MS_PER_DAY } from "~/utils/constants";
 
-type CardPhase = "new" | "learning" | "review" | "relearning";
+export type CardPhase = "new" | "learning" | "review" | "relearning";
 
-interface AnkiSM2CardState {
+export interface AnkiSM2CardState {
   phase: CardPhase;
   /** Current learning/relearning step index */
   step: number;
@@ -19,6 +19,19 @@ interface AnkiSM2CardState {
   lapses: number;
   /** Total number of reviews */
   reps: number;
+}
+
+export interface AnkiSM2ReviewLog {
+  answer: Answer;
+  previousPhase: CardPhase;
+  newPhase: CardPhase;
+  ease: number;
+  interval: number;
+  previousInterval: number;
+  lapses: number;
+  timestamp: number;
+  leeched: boolean;
+  burySiblings: boolean;
 }
 
 const MIN_EASE = 1.3;
@@ -411,7 +424,7 @@ export class AnkiSM2Algorithm implements SchedulingAlgorithm {
     };
   }
 
-  reviewCard(cardState: unknown, answer: Answer, cardId?: number): SchedulingResult {
+  reviewCard(cardState: CardState, answer: Answer, cardId?: number): SchedulingResult {
     const card = cardState as AnkiSM2CardState;
     const params = this.params;
     const callSeed = cardId ?? 0;
@@ -481,28 +494,25 @@ export class AnkiSM2Algorithm implements SchedulingAlgorithm {
     }
 
     const reviewNow = Date.now();
-    const newCardState = newState as AnkiSM2CardState;
     const leeched = card.phase === "review" && answer === "again"
-      && newCardState.lapses >= params.leechThreshold
-      && ((newCardState.lapses - params.leechThreshold) % Math.ceil(params.leechThreshold / 2) === 0);
-    return {
-      cardState: newState,
-      reviewLog: {
-        answer,
-        previousPhase: card.phase,
-        newPhase: newState.phase,
-        ease: newState.ease,
-        interval: encodeIntervalForRevlog(newState, reviewNow),
-        previousInterval: encodeIntervalForRevlog(card, reviewNow),
-        lapses: newState.lapses,
-        timestamp: reviewNow,
-        leeched,
-        burySiblings: params.buryNew || params.buryReviews,
-      },
+      && newState.lapses >= params.leechThreshold
+      && ((newState.lapses - params.leechThreshold) % Math.ceil(params.leechThreshold / 2) === 0);
+    const reviewLog: AnkiSM2ReviewLog = {
+      answer,
+      previousPhase: card.phase,
+      newPhase: newState.phase,
+      ease: newState.ease,
+      interval: encodeIntervalForRevlog(newState, reviewNow),
+      previousInterval: encodeIntervalForRevlog(card, reviewNow),
+      lapses: newState.lapses,
+      timestamp: reviewNow,
+      leeched,
+      burySiblings: params.buryNew || params.buryReviews,
     };
+    return { cardState: newState, reviewLog };
   }
 
-  getNextIntervals(cardState: unknown): Record<Answer, Date> {
+  getNextIntervals(cardState: CardState): Record<Answer, Date> {
     const card = cardState as AnkiSM2CardState;
     const intervals: Record<Answer, Date> = {} as Record<Answer, Date>;
 
@@ -515,12 +525,12 @@ export class AnkiSM2Algorithm implements SchedulingAlgorithm {
     return intervals;
   }
 
-  getDueDate(cardState: unknown): Date {
+  getDueDate(cardState: CardState): Date {
     const card = cardState as AnkiSM2CardState;
     return new Date(card.due);
   }
 
-  getDisplayInfo(cardState: unknown): {
+  getDisplayInfo(cardState: CardState): {
     ease?: number;
     interval?: number;
     repetitions?: number;
@@ -538,7 +548,7 @@ export class AnkiSM2Algorithm implements SchedulingAlgorithm {
     };
   }
 
-  isInLearning(cardState: unknown): boolean {
+  isInLearning(cardState: CardState): boolean {
     const card = cardState as AnkiSM2CardState;
     return card.phase === "learning" || card.phase === "relearning";
   }

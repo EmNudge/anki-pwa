@@ -16,6 +16,7 @@ import {
 } from "../lib/syncWrite";
 import { stringHash } from "../utils/constants";
 import type { CardReviewState } from "../scheduler/types";
+import type { CardState } from "../scheduler/algorithm";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GAP 1: Field checksum uses DJB2 hash instead of SHA-1
@@ -194,7 +195,7 @@ describe("GAP 5: Card data lrt should be included when lastReviewed is 0", () =>
       cardId: "123",
       deckId: "deck1",
       algorithm: "fsrs",
-      cardState: { stability: 10.0, difficulty: 5.0 },
+      cardState: { stability: 10.0, difficulty: 5.0 } as CardState,
       createdAt: Date.now(),
       lastReviewed: 0, // epoch — falsy in JS but valid timestamp
     };
@@ -722,7 +723,7 @@ describe("GAP 19: Leech detection not implemented", () => {
     });
 
     // Start with a review card and lapse 8 times
-    let card: unknown = {
+    const card = {
       phase: "review" as const,
       step: 0,
       ease: 2.5,
@@ -730,7 +731,7 @@ describe("GAP 19: Leech detection not implemented", () => {
       due: Date.now(),
       lapses: 7,
       reps: 20,
-    };
+    } as CardState;
 
     // 8th lapse — should trigger leech in Anki (default threshold = 8)
     const result = algo.reviewCard(card, "again");
@@ -739,7 +740,7 @@ describe("GAP 19: Leech detection not implemented", () => {
 
     // In Anki, this card would be flagged as a leech.
     // The reviewLog or card state should indicate leech status.
-    const log = result.reviewLog as { leeched?: boolean };
+    const log = result.reviewLog as unknown as { leeched?: boolean };
     expect(log).toHaveProperty("leeched", true);
   });
 });
@@ -781,7 +782,7 @@ describe("GAP 20: Sibling burying not implemented", () => {
     // After reviewing a card, getNextIntervals doesn't check siblings
     const card = algo.createCard();
     const result = algo.reviewCard(card, "good");
-    const log = result.reviewLog as Record<string, unknown>;
+    const log = result.reviewLog as unknown as Record<string, unknown>;
 
     // Anki's answer result includes information about which siblings to bury.
     // The PWA's reviewLog has no such field.

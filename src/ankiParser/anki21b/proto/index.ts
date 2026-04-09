@@ -40,7 +40,7 @@ type Anki21bNotesTypeConfig = {
   targetDeckIdUnused: number;
 };
 
-function parseNotesTypeConfigProto(proto: Uint8Array) {
+function parseNotesTypeConfigProto(proto: Uint8Array): Anki21bNotesTypeConfig {
   const { root } = protobuf.parse(notesTypeProto);
   const NotesTypeConfig = root.lookupType("NotesTypeConfig");
 
@@ -54,7 +54,7 @@ type Anki21bTemplate = {
   id: number;
   qFormat: string;
 };
-export function parseTemplatesProto(proto: Uint8Array) {
+export function parseTemplatesProto(proto: Uint8Array): Anki21bTemplate {
   const { root } = protobuf.parse(templatesProto);
   const Template = root.lookupType("TemplateConfig");
 
@@ -79,9 +79,11 @@ type Anki21bFieldConfig = {
   preventDeletion: boolean;
   other: Uint8Array;
 };
-export function parseFieldConfigProto(proto: Uint8Array) {
+export function parseFieldConfigProto(proto: Uint8Array): Anki21bFieldConfig {
   const { root } = protobuf.parse(fieldConfigProto);
   const FieldConfig = root.lookupType("FieldConfig");
 
+  // protobufjs decode returns IMessage which doesn't match our typed interface,
+  // but the runtime shape is correct for these known proto definitions
   return FieldConfig.decode(proto) as unknown as Anki21bFieldConfig;
 }

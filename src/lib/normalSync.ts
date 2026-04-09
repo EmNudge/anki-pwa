@@ -28,6 +28,9 @@ import {
   type Chunk,
   type UnchunkedChanges,
   type SanityCheckCounts,
+  type SyncModel,
+  type SyncDeck,
+  type SyncDeckConfig,
 } from "./syncMerge";
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -44,6 +47,54 @@ interface SyncMeta {
   mediaUsn: number;
   /** Server's maximum supported protocol version (undefined = legacy v10) */
   serverVersion: number | undefined;
+}
+
+/** Raw meta response from the sync server. */
+interface RawMetaResponse {
+  mod?: number;
+  modified?: number;
+  scm?: number;
+  schema?: number;
+  usn?: number;
+  ts?: number;
+  current_time?: number;
+  msg?: string;
+  server_message?: string;
+  cont?: boolean;
+  should_continue?: boolean;
+  hostNum?: number;
+  host_number?: number;
+  empty?: boolean;
+  mediaUsn?: number;
+  media_usn?: number;
+  v?: number;
+  server_version?: number;
+}
+
+/** Raw start response from the sync server (remote graves). */
+interface RawStartResponse {
+  cards?: number[];
+  notes?: number[];
+  decks?: number[];
+}
+
+/** Raw applyChanges response from the sync server. */
+interface RawApplyChangesResponse {
+  models?: SyncModel[];
+  decks?: [SyncDeck[], SyncDeckConfig[]];
+  tags?: string[];
+  conf?: Record<string, unknown>;
+  crt?: number;
+}
+
+/** Raw sanityCheck2 response from the sync server. */
+interface RawSanityCheckResponse {
+  status?: string;
+}
+
+/** Raw finish response from the sync server. */
+interface RawFinishResponse {
+  mod?: number;
 }
 
 interface LocalMeta {
@@ -116,27 +167,26 @@ async function fetchMeta(
   hkey: string,
 ): Promise<SyncMeta> {
   // Request v11 — server will respond with its max supported version
-  const result = await syncEndpoint(serverUrl, "meta", hkey, {
+  const r = await syncEndpoint(serverUrl, "meta", hkey, {
     v: 11,
     cv: "anki-pwa,0.1,web",
-  });
-  const r = result as Record<string, unknown>;
+  }) as RawMetaResponse;
 
   // Detect server version from response.
   // v11 servers include a "v" or "server_version" field.
   // Legacy servers omit it (implicitly v10 or below).
-  const serverVersion = (r.v ?? r.server_version) as number | undefined;
+  const serverVersion = r.v ?? r.server_version;
 
   return {
-    mod: (r.mod ?? r.modified ?? 0) as number,
-    scm: (r.scm ?? r.schema ?? 0) as number,
-    usn: (r.usn ?? 0) as number,
-    ts: (r.ts ?? r.current_time ?? 0) as number,
-    msg: (r.msg ?? r.server_message ?? "") as string,
-    cont: (r.cont ?? r.should_continue ?? true) as boolean,
-    hostNum: (r.hostNum ?? r.host_number ?? 0) as number,
-    empty: (r.empty ?? false) as boolean,
-    mediaUsn: (r.mediaUsn ?? r.media_usn ?? 0) as number,
+    mod: r.mod ?? r.modified ?? 0,
+    scm: r.scm ?? r.schema ?? 0,
+    usn: r.usn ?? 0,
+    ts: r.ts ?? r.current_time ?? 0,
+    msg: r.msg ?? r.server_message ?? "",
+    cont: r.cont ?? r.should_continue ?? true,
+    hostNum: r.hostNum ?? r.host_number ?? 0,
+    empty: r.empty ?? false,
+    mediaUsn: r.mediaUsn ?? r.media_usn ?? 0,
     serverVersion,
   };
 }
@@ -163,15 +213,14 @@ async function startSync(
   localIsNewer: boolean,
   proto: ProtoVersion = 10,
 ): Promise<Graves> {
-  const result = await syncEndpoint(serverUrl, "start", hkey, {
+  const r = await syncEndpoint(serverUrl, "start", hkey, {
     minUsn: clientUsn,
     lnewer: localIsNewer,
-  }, proto);
-  const r = result as Record<string, unknown>;
+  }, proto) as RawStartResponse;
   return {
-    cards: (r.cards ?? []) as number[],
-    notes: (r.notes ?? []) as number[],
-    decks: (r.decks ?? []) as number[],
+    cards: r.cards ?? [],
+    notes: r.notes ?? [],
+    decks: r.decks ?? [],
   };
 }
 
@@ -211,16 +260,15 @@ async function exchangeChanges(
   localChanges: UnchunkedChanges,
   proto: ProtoVersion = 10,
 ): Promise<UnchunkedChanges> {
-  const result = await syncEndpoint(serverUrl, "applyChanges", hkey, {
+  const r = await syncEndpoint(serverUrl, "applyChanges", hkey, {
     changes: localChanges,
-  }, proto);
-  const r = result as Record<string, unknown>;
+  }, proto) as RawApplyChangesResponse;
   return {
-    models: (r.models ?? []) as unknown[],
-    decks: (r.decks ?? [[], []]) as [unknown[], unknown[]],
-    tags: (r.tags ?? []) as string[],
+    models: r.models ?? [],
+    decks: r.decks ?? [[], []],
+    tags: r.tags ?? [],
     conf: r.conf,
-    crt: r.crt as number | undefined,
+    crt: r.crt,
   };
 }
 
@@ -263,10 +311,9 @@ async function sanityCheck(
   counts: SanityCheckCounts,
   proto: ProtoVersion = 10,
 ): Promise<void> {
-  const result = await syncEndpoint(serverUrl, "sanityCheck2", hkey, {
+  const r = await syncEndpoint(serverUrl, "sanityCheck2", hkey, {
     client: counts,
-  }, proto);
-  const r = result as { status?: string };
+  }, proto) as RawSanityCheckResponse;
   if (r.status === "bad") {
     throw new Error(
       "Sync sanity check failed: client and server counts do not match. A full sync is required.",
@@ -283,8 +330,7 @@ async function finishSync(
   // Server returns the new mod time (number)
   if (typeof result === "number") return result;
   // Some servers wrap in an object
-  const r = result as { mod?: number };
-  return r.mod ?? Date.now();
+  return (result as RawFinishResponse).mod ?? Date.now();
 }
 
 async function abortSync(

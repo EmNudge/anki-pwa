@@ -16,6 +16,10 @@ const ankiDeckSchema = z.object({
 
 export type AnkiDeckSpec = z.infer<typeof ankiDeckSchema>;
 
+interface OllamaGenerateResponse {
+  response: string;
+}
+
 async function ollamaGenerate(prompt: string, model: string = DEFAULT_MODEL): Promise<string> {
   const response = await fetch(`${OLLAMA_BASE_URL}/api/generate`, {
     method: "POST",
@@ -32,7 +36,7 @@ async function ollamaGenerate(prompt: string, model: string = DEFAULT_MODEL): Pr
     throw new Error(`Ollama request failed: ${response.status} ${response.statusText}`);
   }
 
-  const data = await response.json();
+  const data = (await response.json()) as OllamaGenerateResponse;
   return data.response;
 }
 
@@ -48,12 +52,16 @@ export async function checkOllamaAvailable(): Promise<boolean> {
   }
 }
 
+interface OllamaTagsResponse {
+  models?: Array<{ name: string }>;
+}
+
 export async function getOllamaModels(): Promise<string[]> {
   try {
     const response = await fetch(`${OLLAMA_BASE_URL}/api/tags`);
     if (!response.ok) return [];
-    const data = await response.json();
-    return (data.models ?? []).map((m: { name: string }) => m.name);
+    const data = (await response.json()) as OllamaTagsResponse;
+    return (data.models ?? []).map((m) => m.name);
   } catch {
     return [];
   }

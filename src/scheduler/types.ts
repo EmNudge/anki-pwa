@@ -8,6 +8,8 @@ export type AlgorithmType = "sm2" | "fsrs";
  */
 export type Answer = "again" | "hard" | "good" | "easy";
 
+import type { CardState, ReviewLogEntry } from "./algorithm";
+
 /**
  * Review state for a card, combining our card ID with scheduling data
  */
@@ -29,10 +31,10 @@ export interface CardReviewState {
 
   /**
    * Card state (serializable) - structure depends on algorithm
-   * For SM-2: { due: Date, interval: number, easeFactor: number, repetitions: number }
-   * For FSRS: { due: Date, stability: number, difficulty: number, ... }
+   * For SM-2: AnkiSM2CardState
+   * For FSRS: Card (from ts-fsrs)
    */
-  cardState: unknown;
+  cardState: CardState;
 
   /**
    * Timestamp when this card was first created/seen
@@ -204,5 +206,5 @@ export interface StoredReviewLog {
   cardId: string;
   timestamp: number;
   rating: Answer | number; // Can be Answer string or legacy number rating
-  reviewLog: unknown; // Algorithm-specific review log data
+  reviewLog: ReviewLogEntry; // Algorithm-specific review log data
 }

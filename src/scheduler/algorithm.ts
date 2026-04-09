@@ -1,4 +1,12 @@
 import type { Answer } from "./types";
+import type { AnkiSM2CardState, AnkiSM2ReviewLog } from "./anki-sm2-algorithm";
+import type { Card, ReviewLog } from "ts-fsrs";
+
+/** Union of all supported card state types. */
+export type CardState = AnkiSM2CardState | Card;
+
+/** Union of all supported review log types. */
+export type ReviewLogEntry = AnkiSM2ReviewLog | ReviewLog;
 
 /**
  * Result of reviewing a card with a scheduling algorithm
@@ -7,12 +15,12 @@ export interface SchedulingResult {
   /**
    * Updated card state (serializable)
    */
-  cardState: unknown;
+  cardState: CardState;
 
   /**
    * Review log entry (serializable)
    */
-  reviewLog: unknown;
+  reviewLog: ReviewLogEntry;
 }
 
 /**
@@ -22,7 +30,7 @@ export interface SchedulingAlgorithm {
   /**
    * Create a new card with initial state
    */
-  createCard(): unknown;
+  createCard(): CardState;
 
   /**
    * Review a card and return the updated state
@@ -30,28 +38,28 @@ export interface SchedulingAlgorithm {
    * @param answer User's answer
    * @returns Updated card state and review log
    */
-  reviewCard(cardState: unknown, answer: Answer): SchedulingResult;
+  reviewCard(cardState: CardState, answer: Answer): SchedulingResult;
 
   /**
    * Get the next intervals for each answer type
    * @param cardState Current card state
    * @returns Map of answers to due dates
    */
-  getNextIntervals(cardState: unknown): Record<Answer, Date>;
+  getNextIntervals(cardState: CardState): Record<Answer, Date>;
 
   /**
    * Get the due date from a card state
    * @param cardState Card state
    * @returns Due date
    */
-  getDueDate(cardState: unknown): Date;
+  getDueDate(cardState: CardState): Date;
 
   /**
    * Get display info for the card (for UI visualization)
    * @param cardState Card state
    * @returns Display information
    */
-  getDisplayInfo(cardState: unknown): {
+  getDisplayInfo(cardState: CardState): {
     ease?: number;
     interval?: number;
     repetitions?: number;
@@ -64,5 +72,5 @@ export interface SchedulingAlgorithm {
    * Whether the card is currently in a learning or relearning phase.
    * Learning cards need to be re-shown within the same session.
    */
-  isInLearning?(cardState: unknown): boolean;
+  isInLearning?(cardState: CardState): boolean;
 }

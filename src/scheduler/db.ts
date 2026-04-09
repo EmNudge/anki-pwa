@@ -1,4 +1,5 @@
 import type { CardReviewState, DailyStats, SchedulerSettings, StoredReviewLog } from "./types";
+import type { CardState } from "./algorithm";
 import { DEFAULT_SCHEDULER_SETTINGS } from "./types";
 
 const DB_NAME = "anki-review-db";
@@ -62,7 +63,7 @@ class ReviewDB {
                 const migratedCard: CardReviewState = {
                   ...rest,
                   algorithm: "sm2",
-                  cardState: sm2State,
+                  cardState: sm2State as CardState,
                 };
                 cardStore.put(migratedCard);
               }
