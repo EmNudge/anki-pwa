@@ -13,8 +13,12 @@ export function filterMediaKeys(allKeys: readonly Request[]): Request[] {
 }
 
 /** Extract the filename from a media cache key. */
-function mediaKeyToFilename(req: Request): string {
-  return new URL(req.url).pathname.slice(MEDIA_PATH_PREFIX.length);
+export function mediaKeyToFilename(req: Request): string {
+  // decodeURIComponent is needed because the Cache API URL-encodes pathnames
+  // (e.g., spaces → %20, unicode → %XX), but card HTML references raw filenames.
+  return decodeURIComponent(
+    new URL(req.url).pathname.slice(MEDIA_PATH_PREFIX.length),
+  );
 }
 
 /** Build a cache key path for a media filename. */

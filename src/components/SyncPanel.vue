@@ -20,6 +20,7 @@ import {
   getActiveDeckId,
   getCachedSqlite,
   refreshSyncedCollection,
+  addMediaToCache,
   initializeReviewQueue,
 } from "../stores";
 import { applyReviewStateToSqlite } from "../lib/syncWrite";
@@ -125,6 +126,26 @@ async function handleSync() {
       syncStatus.value = "Updating local collection...";
       await refreshSyncedCollection(result.sqliteBytes);
       await initializeReviewQueue();
+    }
+
+    // Download any new media files from the server
+    syncStatus.value = "Checking for new media...";
+    try {
+      const mediaBlobs = await downloadMedia(serverUrl.value, state.hkey, (s) => { syncStatus.value = s; });
+      if (mediaBlobs.size > 0) {
+        // Apply MIME types to downloaded blobs
+        const typedBlobs = new Map<string, Blob>();
+        for (const [filename, blob] of mediaBlobs) {
+          typedBlobs.set(
+            filename,
+            new Blob([blob], { type: mime.getType(filename) ?? "application/octet-stream" }),
+          );
+        }
+        syncStatus.value = `Downloaded ${mediaBlobs.size} media file${mediaBlobs.size === 1 ? "" : "s"}. Caching...`;
+        await addMediaToCache(typedBlobs);
+      }
+    } catch (mediaErr) {
+      console.warn("Media download failed (non-fatal):", mediaErr);
     }
 
     // Upload any local media files the server doesn't have

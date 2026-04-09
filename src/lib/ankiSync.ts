@@ -567,7 +567,7 @@ async function decompressIfNeeded(bytes: Uint8Array): Promise<Uint8Array> {
   if (bytes[0] === 0x1f && bytes[1] === 0x8b) {
     const ds = new DecompressionStream("gzip");
     const decompressed = new Response(
-      new Blob([bytes.buffer as ArrayBuffer]).stream().pipeThrough(ds),
+      new Blob([bytes as BlobPart]).stream().pipeThrough(ds),
     );
     return new Uint8Array(await decompressed.arrayBuffer());
   }
