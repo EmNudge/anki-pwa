@@ -426,12 +426,8 @@ describe("Parser Gaps (expected to fail)", () => {
 
       // With req filtering, only the Forward card (ord=0) should remain
       // because Back (field 1) is empty and Reverse requires it
-      const forwardCards = result.cards.filter(
-        (c) => c.templates[0]?.name === "Forward",
-      );
-      const reverseCards = result.cards.filter(
-        (c) => c.templates[0]?.name === "Reverse",
-      );
+      const forwardCards = result.cards.filter((c) => c.templates[0]?.name === "Forward");
+      const reverseCards = result.cards.filter((c) => c.templates[0]?.name === "Reverse");
 
       expect(forwardCards).toHaveLength(1);
       // This is the assertion that should fail — reverse card should be filtered
@@ -451,9 +447,7 @@ describe("Parser Gaps (expected to fail)", () => {
             [0, "all", [0, 1]], // Card 0 requires BOTH field 0 AND field 1
           ],
           fields: [{ name: "Front" }, { name: "Back" }],
-          templates: [
-            { name: "Card 1", qfmt: "{{Front}} - {{Back}}", afmt: "{{Back}}", ord: 0 },
-          ],
+          templates: [{ name: "Card 1", qfmt: "{{Front}} - {{Back}}", afmt: "{{Back}}", ord: 0 }],
         },
       ];
 
@@ -552,9 +546,7 @@ describe("Parser Gaps (expected to fail)", () => {
           latexsvg: true,
           req: [[0, "any", [0]]],
           fields: [{ name: "Text" }],
-          templates: [
-            { name: "Cloze", qfmt: "{{cloze:Text}}", afmt: "{{cloze:Text}}", ord: 0 },
-          ],
+          templates: [{ name: "Cloze", qfmt: "{{cloze:Text}}", afmt: "{{cloze:Text}}", ord: 0 }],
         },
       ];
       const notes2: Anki2Note[] = [
@@ -569,9 +561,7 @@ describe("Parser Gaps (expected to fail)", () => {
       const notetypes: Anki21bNotetype[] = [
         { id: "1", name: "Cloze", config: { css: ".card {}", kind: 1, latexSvg: true } },
       ];
-      const fields: Anki21bField[] = [
-        { ntid: "1", ord: 0, name: "Text", config: {} },
-      ];
+      const fields: Anki21bField[] = [{ ntid: "1", ord: 0, name: "Text", config: {} }];
       const templates21b: Anki21bTemplate[] = [
         { ntid: "1", ord: 0, name: "Cloze", qFormat: "{{cloze:Text}}", aFormat: "{{cloze:Text}}" },
       ];
@@ -585,7 +575,19 @@ describe("Parser Gaps (expected to fail)", () => {
       // Both formats should produce cards with the same set of keys
       // anki2 now has noteData, csum, sfld which anki21b doesn't have yet
       // Check that anki21b has at least the core fields
-      const coreKeys = ["values", "tags", "templates", "css", "deckName", "guid", "scheduling", "noteType", "latexSvg", "latexPre", "req"];
+      const coreKeys = [
+        "values",
+        "tags",
+        "templates",
+        "css",
+        "deckName",
+        "guid",
+        "scheduling",
+        "noteType",
+        "latexSvg",
+        "latexPre",
+        "req",
+      ];
       for (const key of coreKeys) {
         expect(card21bKeys).toContain(key);
         expect(card2Keys).toContain(key);

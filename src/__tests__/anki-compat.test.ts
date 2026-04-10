@@ -67,10 +67,7 @@ describe("Issue 4: notes.sfld column type in schema", () => {
     // Official Anki schema: sfld integer not null
     const { readFileSync } = await import("fs");
     const { resolve } = await import("path");
-    const source = readFileSync(
-      resolve(__dirname, "../ankiExporter/index.ts"),
-      "utf-8",
-    );
+    const source = readFileSync(resolve(__dirname, "../ankiExporter/index.ts"), "utf-8");
     const sfldMatch = source.match(/sfld\s+(\w+)/);
     expect(sfldMatch?.[1]).toBe("integer");
   });

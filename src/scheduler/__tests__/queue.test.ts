@@ -3,9 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { ReviewQueue, type ReviewCard } from "../queue";
 import { DEFAULT_SCHEDULER_SETTINGS } from "../types";
 
-function makeReviewCard(
-  overrides: Partial<ReviewCard> & { cardId: string },
-): ReviewCard {
+function makeReviewCard(overrides: Partial<ReviewCard> & { cardId: string }): ReviewCard {
   const now = Date.now();
   return {
     cardIndex: 0,

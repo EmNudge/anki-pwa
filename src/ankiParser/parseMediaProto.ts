@@ -36,6 +36,12 @@ function readLengthDelimited(
   return { data, newOffset: afterLength + length };
 }
 
+function skipUnknownField(buffer: Uint8Array, offset: number, wireType: number): number | null {
+  if (wireType === 0) return readVarint(buffer, offset).newOffset;
+  if (wireType === 2) return readLengthDelimited(buffer, offset).newOffset;
+  return null;
+}
+
 export function parseMediaProto(buffer: Uint8Array): Record<string, string> {
   const result: Record<string, string> = {};
   let offset = 0;
@@ -87,19 +93,9 @@ export function parseMediaProto(buffer: Uint8Array): Record<string, string> {
           const { newOffset: afterHash } = readLengthDelimited(entryData, entryOffset);
           entryOffset = afterHash;
         } else {
-          // Unknown field, try to skip
-          if (entryWireType === 0) {
-            // Varint
-            const { newOffset } = readVarint(entryData, entryOffset);
-            entryOffset = newOffset;
-          } else if (entryWireType === 2) {
-            // Length-delimited
-            const { newOffset } = readLengthDelimited(entryData, entryOffset);
-            entryOffset = newOffset;
-          } else {
-            // Unknown wire type, break
-            break;
-          }
+          const skipped = skipUnknownField(entryData, entryOffset, entryWireType);
+          if (skipped === null) break;
+          entryOffset = skipped;
         }
       }
 
@@ -110,19 +106,9 @@ export function parseMediaProto(buffer: Uint8Array): Record<string, string> {
         entryIndex++;
       }
     } else {
-      // Skip unknown fields
-      if (wireType === 0) {
-        // Varint
-        const { newOffset } = readVarint(buffer, offset);
-        offset = newOffset;
-      } else if (wireType === 2) {
-        // Length-delimited
-        const { newOffset } = readLengthDelimited(buffer, offset);
-        offset = newOffset;
-      } else {
-        // Unknown wire type, break to avoid infinite loop
-        break;
-      }
+      const skipped = skipUnknownField(buffer, offset, wireType);
+      if (skipped === null) break;
+      offset = skipped;
     }
   }
 

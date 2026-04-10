@@ -1,6 +1,6 @@
 import { type Database } from "sql.js";
 
-let sqlJsPromise: Promise<Awaited<ReturnType<typeof import("sql.js")["default"]>>> | null = null;
+let sqlJsPromise: Promise<Awaited<ReturnType<(typeof import("sql.js"))["default"]>>> | null = null;
 
 export async function createDatabase(data?: Uint8Array): Promise<Database> {
   if (!sqlJsPromise) {

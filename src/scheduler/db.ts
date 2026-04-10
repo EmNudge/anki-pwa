@@ -119,28 +119,32 @@ class ReviewDB {
     return new Promise((resolve, reject) => {
       const tx = db.transaction(storeNames, mode);
       const request = fn(tx);
-      request.onsuccess = () => resolve(mapResult ? mapResult(request.result) : (request.result as T));
+      request.onsuccess = () =>
+        resolve(mapResult ? mapResult(request.result) : (request.result as T));
       request.onerror = () => reject(request.error);
     });
   }
 
   async getCard(cardId: string): Promise<CardReviewState | null> {
-    return this.run(["cards"], "readonly", (tx) =>
-      tx.objectStore("cards").get(cardId),
-      (r) => r as CardReviewState | null ?? null,
+    return this.run(
+      ["cards"],
+      "readonly",
+      (tx) => tx.objectStore("cards").get(cardId),
+      (r) => (r as CardReviewState | null) ?? null,
     );
   }
 
   async saveCard(card: CardReviewState): Promise<void> {
-    await this.run(["cards"], "readwrite", (tx) =>
-      tx.objectStore("cards").put(card),
-    );
+    await this.run(["cards"], "readwrite", (tx) => tx.objectStore("cards").put(card));
   }
 
   /**
    * Partially update a card's fields without replacing the whole record.
    */
-  async patchCard(cardId: string, patch: Partial<CardReviewState>): Promise<CardReviewState | null> {
+  async patchCard(
+    cardId: string,
+    patch: Partial<CardReviewState>,
+  ): Promise<CardReviewState | null> {
     const db = await this.ensureInit();
     return new Promise((resolve, reject) => {
       const tx = db.transaction("cards", "readwrite");
@@ -148,7 +152,10 @@ class ReviewDB {
       const getReq = store.get(cardId);
       getReq.onsuccess = () => {
         const existing = getReq.result as CardReviewState | undefined;
-        if (!existing) { resolve(null); return; }
+        if (!existing) {
+          resolve(null);
+          return;
+        }
         const updated = { ...existing, ...patch };
         const putReq = store.put(updated);
         putReq.onsuccess = () => resolve(updated);
@@ -171,9 +178,7 @@ class ReviewDB {
   }
 
   async saveReviewLog(log: StoredReviewLog): Promise<void> {
-    await this.run(["reviewLogs"], "readwrite", (tx) =>
-      tx.objectStore("reviewLogs").put(log),
-    );
+    await this.run(["reviewLogs"], "readwrite", (tx) => tx.objectStore("reviewLogs").put(log));
   }
 
   async getReviewLogsForCard(cardId: string): Promise<StoredReviewLog[]> {
@@ -182,23 +187,46 @@ class ReviewDB {
     );
   }
 
+  async getReviewLogsForCards(cardIds: string[]): Promise<StoredReviewLog[]> {
+    if (cardIds.length === 0) return [];
+    const db = await this.ensureInit();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction("reviewLogs", "readonly");
+      const index = tx.objectStore("reviewLogs").index("cardId");
+      const results: StoredReviewLog[] = [];
+      let completed = 0;
+      for (const cardId of cardIds) {
+        const request = index.getAll(cardId);
+        request.onsuccess = () => {
+          results.push(...(request.result as StoredReviewLog[]));
+          completed++;
+          if (completed === cardIds.length) resolve(results);
+        };
+        request.onerror = () => reject(request.error);
+      }
+    });
+  }
+
   async getDailyStats(date: string): Promise<DailyStats | null> {
-    return this.run(["dailyStats"], "readonly", (tx) =>
-      tx.objectStore("dailyStats").get(date),
-      (r) => r as DailyStats | null ?? null,
+    return this.run(
+      ["dailyStats"],
+      "readonly",
+      (tx) => tx.objectStore("dailyStats").get(date),
+      (r) => (r as DailyStats | null) ?? null,
     );
   }
 
   async saveDailyStats(stats: DailyStats): Promise<void> {
-    await this.run(["dailyStats"], "readwrite", (tx) =>
-      tx.objectStore("dailyStats").put(stats),
-    );
+    await this.run(["dailyStats"], "readwrite", (tx) => tx.objectStore("dailyStats").put(stats));
   }
 
   async getSettings(deckId: string): Promise<SchedulerSettings> {
-    return this.run(["settings"], "readonly", (tx) =>
-      tx.objectStore("settings").get(deckId),
-      (r) => (r as { settings?: SchedulerSettings } | undefined)?.settings ?? DEFAULT_SCHEDULER_SETTINGS,
+    return this.run(
+      ["settings"],
+      "readonly",
+      (tx) => tx.objectStore("settings").get(deckId),
+      (r) =>
+        (r as { settings?: SchedulerSettings } | undefined)?.settings ?? DEFAULT_SCHEDULER_SETTINGS,
     );
   }
 
@@ -212,9 +240,7 @@ class ReviewDB {
    * Delete a card from the cards store (e.g. when applying remote graves).
    */
   async deleteCard(cardId: string): Promise<void> {
-    await this.run(["cards"], "readwrite", (tx) =>
-      tx.objectStore("cards").delete(cardId),
-    );
+    await this.run(["cards"], "readwrite", (tx) => tx.objectStore("cards").delete(cardId));
   }
 
   /**

@@ -156,9 +156,10 @@ async function syncEndpoint(
   const base = normalizeUrl(serverUrl);
   const url = `${base}/sync/${endpoint}`;
 
-  const response = proto >= 11
-    ? await syncPostV11(url, hkey, data, sessionKey)
-    : await syncPost(url, hkey, data, sessionKey);
+  const response =
+    proto >= 11
+      ? await syncPostV11(url, hkey, data, sessionKey)
+      : await syncPost(url, hkey, data, sessionKey);
 
   if (response.status === 401 || response.status === 403) {
     throw new Error("Authentication expired. Please log in again.");
@@ -173,15 +174,12 @@ async function syncEndpoint(
 
 // ── Individual sync steps ──────────────────────────────────────────
 
-async function fetchMeta(
-  serverUrl: string,
-  hkey: string,
-): Promise<SyncMeta> {
+async function fetchMeta(serverUrl: string, hkey: string): Promise<SyncMeta> {
   // Request v11 — server will respond with its max supported version
-  const r = await syncEndpoint(serverUrl, "meta", hkey, {
+  const r = (await syncEndpoint(serverUrl, "meta", hkey, {
     v: 11,
     cv: "anki-pwa,0.1,web",
-  }) as RawMetaResponse;
+  })) as RawMetaResponse;
 
   // Detect server version from response.
   // v11 servers include a "v" or "server_version" field.
@@ -225,10 +223,17 @@ async function startSync(
   proto: ProtoVersion = 10,
   sessionKey?: string,
 ): Promise<Graves> {
-  const r = await syncEndpoint(serverUrl, "start", hkey, {
-    minUsn: clientUsn,
-    lnewer: localIsNewer,
-  }, proto, sessionKey) as RawStartResponse;
+  const r = (await syncEndpoint(
+    serverUrl,
+    "start",
+    hkey,
+    {
+      minUsn: clientUsn,
+      lnewer: localIsNewer,
+    },
+    proto,
+    sessionKey,
+  )) as RawStartResponse;
   return {
     cards: r.cards ?? [],
     notes: r.notes ?? [],
@@ -261,9 +266,16 @@ async function sendGraves(
 
   // If no graves at all, still send an empty one
   if (allIds.length === 0) {
-    await syncEndpoint(serverUrl, "applyGraves", hkey, {
-      chunk: { cards: [], notes: [], decks: [] },
-    }, proto, sessionKey);
+    await syncEndpoint(
+      serverUrl,
+      "applyGraves",
+      hkey,
+      {
+        chunk: { cards: [], notes: [], decks: [] },
+      },
+      proto,
+      sessionKey,
+    );
   }
 }
 
@@ -274,9 +286,16 @@ async function exchangeChanges(
   proto: ProtoVersion = 10,
   sessionKey?: string,
 ): Promise<UnchunkedChanges> {
-  const r = await syncEndpoint(serverUrl, "applyChanges", hkey, {
-    changes: localChanges,
-  }, proto, sessionKey) as RawApplyChangesResponse;
+  const r = (await syncEndpoint(
+    serverUrl,
+    "applyChanges",
+    hkey,
+    {
+      changes: localChanges,
+    },
+    proto,
+    sessionKey,
+  )) as RawApplyChangesResponse;
   return {
     models: r.models ?? [],
     decks: r.decks ?? [[], []],
@@ -328,9 +347,16 @@ async function sanityCheck(
   proto: ProtoVersion = 10,
   sessionKey?: string,
 ): Promise<void> {
-  const r = await syncEndpoint(serverUrl, "sanityCheck2", hkey, {
-    client: counts,
-  }, proto, sessionKey) as RawSanityCheckResponse;
+  const r = (await syncEndpoint(
+    serverUrl,
+    "sanityCheck2",
+    hkey,
+    {
+      client: counts,
+    },
+    proto,
+    sessionKey,
+  )) as RawSanityCheckResponse;
   if (r.status === "bad") {
     throw new FullSyncRequiredError(
       "Sync sanity check failed: client and server counts do not match. A full sync is required.",
@@ -438,24 +464,41 @@ export async function normalSync(
     const localIsNewer = localMeta.mod > remoteMeta.mod;
     onProgress("Starting sync session...");
     sessionStarted = true;
-    const remoteGraves = await startSync(serverUrl, hkey, localMeta.usn, localIsNewer, proto, sessionKey);
+    const remoteGraves = await startSync(
+      serverUrl,
+      hkey,
+      localMeta.usn,
+      localIsNewer,
+      proto,
+      sessionKey,
+    );
 
     // Apply remote graves (deletions from server)
-    const remoteGraveCount = remoteGraves.cards.length + remoteGraves.notes.length + remoteGraves.decks.length;
-    onProgress(`Applying ${remoteGraveCount} remote deletion${remoteGraveCount !== 1 ? "s" : ""}...`);
+    const remoteGraveCount =
+      remoteGraves.cards.length + remoteGraves.notes.length + remoteGraves.decks.length;
+    onProgress(
+      `Applying ${remoteGraveCount} remote deletion${remoteGraveCount !== 1 ? "s" : ""}...`,
+    );
     await applyRemoteGraves(db, remoteGraves);
 
     // Step 4: Send local graves
     const localGraves = buildLocalGraves(db);
-    const localGraveCount = localGraves.cards.length + localGraves.notes.length + localGraves.decks.length;
+    const localGraveCount =
+      localGraves.cards.length + localGraves.notes.length + localGraves.decks.length;
     onProgress(`Sending ${localGraveCount} local deletion${localGraveCount !== 1 ? "s" : ""}...`);
     await sendGraves(serverUrl, hkey, localGraves, proto, sessionKey);
 
     // Step 5: Exchange unchunked changes (models, decks, config, tags)
     const anki21b = isAnki21bFormat(db);
     const localChanges = buildLocalUnchunkedChanges(db, anki21b, localIsNewer);
-    const localUnchunkedCount = localChanges.models.length + localChanges.decks[0].length + localChanges.decks[1].length + localChanges.tags.length;
-    onProgress(`Exchanging metadata (${localUnchunkedCount} local change${localUnchunkedCount !== 1 ? "s" : ""})...`);
+    const localUnchunkedCount =
+      localChanges.models.length +
+      localChanges.decks[0].length +
+      localChanges.decks[1].length +
+      localChanges.tags.length;
+    onProgress(
+      `Exchanging metadata (${localUnchunkedCount} local change${localUnchunkedCount !== 1 ? "s" : ""})...`,
+    );
     const remoteChanges = await exchangeChanges(serverUrl, hkey, localChanges, proto, sessionKey);
     applyRemoteUnchunkedChanges(db, remoteChanges, anki21b);
 
@@ -495,7 +538,11 @@ export async function normalSync(
     if (sessionStarted) {
       await abortSync(serverUrl, hkey, proto, sessionKey);
     }
-    try { db.close(); } catch { /* already closed */ }
+    try {
+      db.close();
+    } catch {
+      /* already closed */
+    }
     throw error;
   }
 }

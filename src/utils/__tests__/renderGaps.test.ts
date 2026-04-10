@@ -267,8 +267,7 @@ describe("Rendering Gaps (expected to fail)", () => {
       // The regex approach may fail because {{#A}}...{{/A}} with (.|\\n)+?
       // could match "x{{/A}}{{#B}}y{{/B}}{{#A}}z" as the content
       const html = getRenderedCardString({
-        templateString:
-          "{{#A}}x{{/A}}{{#B}}y{{/B}}{{#A}}z{{/A}}",
+        templateString: "{{#A}}x{{/A}}{{#B}}y{{/B}}{{#A}}z{{/A}}",
         variables,
         mediaFiles: new Map(),
       });
@@ -424,7 +423,7 @@ describe("Rendering Gaps (expected to fail)", () => {
   describe("#20 - anki-mathjax tags", () => {
     it("should render <anki-mathjax> inline tags", () => {
       const variables = {
-        Front: 'The formula is <anki-mathjax>x^2 + y^2 = r^2</anki-mathjax>.',
+        Front: "The formula is <anki-mathjax>x^2 + y^2 = r^2</anki-mathjax>.",
       };
 
       const html = getRenderedCardString({

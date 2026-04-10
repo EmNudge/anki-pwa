@@ -354,9 +354,21 @@ describe("Anki2 Parser", () => {
     it("should expose dueType based on queue", async () => {
       const db = await createAnki2Database();
       const models: Anki2Model[] = [
-        { id: "1", css: "", latexPre: "", latexPost: "", fields: [{ name: "Front" }, { name: "Back" }], templates: [{ name: "Card 1", qfmt: "{{Front}}", afmt: "{{Back}}", ord: 0 }, { name: "Card 2", qfmt: "{{Back}}", afmt: "{{Front}}", ord: 1 }] },
+        {
+          id: "1",
+          css: "",
+          latexPre: "",
+          latexPost: "",
+          fields: [{ name: "Front" }, { name: "Back" }],
+          templates: [
+            { name: "Card 1", qfmt: "{{Front}}", afmt: "{{Back}}", ord: 0 },
+            { name: "Card 2", qfmt: "{{Back}}", afmt: "{{Front}}", ord: 1 },
+          ],
+        },
       ];
-      const notes: Anki2Note[] = [{ id: 1, modelId: "1", tags: [], fields: { Front: "Hello", Back: "World" } }];
+      const notes: Anki2Note[] = [
+        { id: 1, modelId: "1", tags: [], fields: { Front: "Hello", Back: "World" } },
+      ];
       insertAnki2Data(db, models, notes);
 
       db.run(`UPDATE cards SET type = 0, queue = 0, due = 42 WHERE id = 1000`);
@@ -373,10 +385,21 @@ describe("Anki2 Parser", () => {
     it("should expose ivlUnit as seconds for negative ivl", async () => {
       const db = await createAnki2Database();
       const models: Anki2Model[] = [
-        { id: "1", css: "", latexPre: "", latexPost: "", fields: [{ name: "Front" }, { name: "Back" }], templates: [{ name: "Card 1", qfmt: "{{Front}}", afmt: "{{Back}}", ord: 0 }] },
+        {
+          id: "1",
+          css: "",
+          latexPre: "",
+          latexPost: "",
+          fields: [{ name: "Front" }, { name: "Back" }],
+          templates: [{ name: "Card 1", qfmt: "{{Front}}", afmt: "{{Back}}", ord: 0 }],
+        },
       ];
-      insertAnki2Data(db, models, [{ id: 1, modelId: "1", tags: [], fields: { Front: "Hello", Back: "World" } }]);
-      db.run(`UPDATE cards SET type = 1, queue = 1, ivl = -600, due = ${Math.floor(Date.now() / 1000)} WHERE id = 1000`);
+      insertAnki2Data(db, models, [
+        { id: 1, modelId: "1", tags: [], fields: { Front: "Hello", Back: "World" } },
+      ]);
+      db.run(
+        `UPDATE cards SET type = 1, queue = 1, ivl = -600, due = ${Math.floor(Date.now() / 1000)} WHERE id = 1000`,
+      );
 
       const result = getDataFromAnki2(db);
       expect(result.cards[0]?.scheduling?.ivl).toBe(-600);
@@ -386,10 +409,21 @@ describe("Anki2 Parser", () => {
     it("should expose odue, flags, and left", async () => {
       const db = await createAnki2Database();
       const models: Anki2Model[] = [
-        { id: "1", css: "", latexPre: "", latexPost: "", fields: [{ name: "Front" }, { name: "Back" }], templates: [{ name: "Card 1", qfmt: "{{Front}}", afmt: "{{Back}}", ord: 0 }] },
+        {
+          id: "1",
+          css: "",
+          latexPre: "",
+          latexPost: "",
+          fields: [{ name: "Front" }, { name: "Back" }],
+          templates: [{ name: "Card 1", qfmt: "{{Front}}", afmt: "{{Back}}", ord: 0 }],
+        },
       ];
-      insertAnki2Data(db, models, [{ id: 1, modelId: "1", tags: [], fields: { Front: "Hello", Back: "World" } }]);
-      db.run(`UPDATE cards SET did = 2, odid = 1, odue = 100, flags = 3, left = 2002, type = 2, queue = 2 WHERE id = 1000`);
+      insertAnki2Data(db, models, [
+        { id: 1, modelId: "1", tags: [], fields: { Front: "Hello", Back: "World" } },
+      ]);
+      db.run(
+        `UPDATE cards SET did = 2, odid = 1, odue = 100, flags = 3, left = 2002, type = 2, queue = 2 WHERE id = 1000`,
+      );
 
       const result = getDataFromAnki2(db);
       const sched = result.cards[0]?.scheduling;
@@ -401,9 +435,18 @@ describe("Anki2 Parser", () => {
     it("should set easeFactor to null when factor is 0", async () => {
       const db = await createAnki2Database();
       const models: Anki2Model[] = [
-        { id: "1", css: "", latexPre: "", latexPost: "", fields: [{ name: "Front" }, { name: "Back" }], templates: [{ name: "Card 1", qfmt: "{{Front}}", afmt: "{{Back}}", ord: 0 }] },
+        {
+          id: "1",
+          css: "",
+          latexPre: "",
+          latexPost: "",
+          fields: [{ name: "Front" }, { name: "Back" }],
+          templates: [{ name: "Card 1", qfmt: "{{Front}}", afmt: "{{Back}}", ord: 0 }],
+        },
       ];
-      insertAnki2Data(db, models, [{ id: 1, modelId: "1", tags: [], fields: { Front: "Hello", Back: "World" } }]);
+      insertAnki2Data(db, models, [
+        { id: 1, modelId: "1", tags: [], fields: { Front: "Hello", Back: "World" } },
+      ]);
       db.run(`UPDATE cards SET type = 0, queue = 0, factor = 0 WHERE id = 1000`);
 
       const result = getDataFromAnki2(db);
@@ -416,9 +459,18 @@ describe("Anki2 Parser", () => {
     it("should expose noteData from notes.data", async () => {
       const db = await createAnki2Database();
       const models: Anki2Model[] = [
-        { id: "1", css: "", latexPre: "", latexPost: "", fields: [{ name: "Front" }, { name: "Back" }], templates: [{ name: "Card 1", qfmt: "{{Front}}", afmt: "{{Back}}", ord: 0 }] },
+        {
+          id: "1",
+          css: "",
+          latexPre: "",
+          latexPost: "",
+          fields: [{ name: "Front" }, { name: "Back" }],
+          templates: [{ name: "Card 1", qfmt: "{{Front}}", afmt: "{{Back}}", ord: 0 }],
+        },
       ];
-      insertAnki2Data(db, models, [{ id: 1, modelId: "1", tags: [], fields: { Front: "Hello", Back: "World" } }]);
+      insertAnki2Data(db, models, [
+        { id: 1, modelId: "1", tags: [], fields: { Front: "Hello", Back: "World" } },
+      ]);
       db.run(`UPDATE notes SET data = '{"key":"value"}' WHERE id = 1`);
 
       const result = getDataFromAnki2(db);
@@ -428,9 +480,18 @@ describe("Anki2 Parser", () => {
     it("should expose csum and sfld", async () => {
       const db = await createAnki2Database();
       const models: Anki2Model[] = [
-        { id: "1", css: "", latexPre: "", latexPost: "", fields: [{ name: "Front" }, { name: "Back" }], templates: [{ name: "Card 1", qfmt: "{{Front}}", afmt: "{{Back}}", ord: 0 }] },
+        {
+          id: "1",
+          css: "",
+          latexPre: "",
+          latexPost: "",
+          fields: [{ name: "Front" }, { name: "Back" }],
+          templates: [{ name: "Card 1", qfmt: "{{Front}}", afmt: "{{Back}}", ord: 0 }],
+        },
       ];
-      insertAnki2Data(db, models, [{ id: 1, modelId: "1", tags: [], fields: { Front: "Hello", Back: "World" } }]);
+      insertAnki2Data(db, models, [
+        { id: 1, modelId: "1", tags: [], fields: { Front: "Hello", Back: "World" } },
+      ]);
       db.run(`UPDATE notes SET sfld = 'Hello', csum = 12345678 WHERE id = 1`);
 
       const result = getDataFromAnki2(db);
@@ -440,14 +501,25 @@ describe("Anki2 Parser", () => {
 
     it("should parse graves table", async () => {
       const db = await createAnki2Database();
-      db.run(`CREATE TABLE IF NOT EXISTS graves (usn INTEGER NOT NULL, oid INTEGER NOT NULL, type INTEGER NOT NULL)`);
+      db.run(
+        `CREATE TABLE IF NOT EXISTS graves (usn INTEGER NOT NULL, oid INTEGER NOT NULL, type INTEGER NOT NULL)`,
+      );
       db.run(`INSERT INTO graves (usn, oid, type) VALUES (0, 999, 1)`);
       db.run(`INSERT INTO graves (usn, oid, type) VALUES (0, 888, 0)`);
 
       const models: Anki2Model[] = [
-        { id: "1", css: "", latexPre: "", latexPost: "", fields: [{ name: "Front" }, { name: "Back" }], templates: [{ name: "Card 1", qfmt: "{{Front}}", afmt: "{{Back}}", ord: 0 }] },
+        {
+          id: "1",
+          css: "",
+          latexPre: "",
+          latexPost: "",
+          fields: [{ name: "Front" }, { name: "Back" }],
+          templates: [{ name: "Card 1", qfmt: "{{Front}}", afmt: "{{Back}}", ord: 0 }],
+        },
       ];
-      insertAnki2Data(db, models, [{ id: 1, modelId: "1", tags: [], fields: { Front: "Hello", Back: "World" } }]);
+      insertAnki2Data(db, models, [
+        { id: 1, modelId: "1", tags: [], fields: { Front: "Hello", Back: "World" } },
+      ]);
 
       const result = getDataFromAnki2(db);
       expect(result.graves).toHaveLength(2);
@@ -456,11 +528,22 @@ describe("Anki2 Parser", () => {
     it("should parse deck config learn/relearn steps", async () => {
       const db = await createAnki2Database();
       const models: Anki2Model[] = [
-        { id: "1", css: "", latexPre: "", latexPost: "", fields: [{ name: "Front" }, { name: "Back" }], templates: [{ name: "Card 1", qfmt: "{{Front}}", afmt: "{{Back}}", ord: 0 }] },
+        {
+          id: "1",
+          css: "",
+          latexPre: "",
+          latexPost: "",
+          fields: [{ name: "Front" }, { name: "Back" }],
+          templates: [{ name: "Card 1", qfmt: "{{Front}}", afmt: "{{Back}}", ord: 0 }],
+        },
       ];
-      insertAnki2Data(db, models, [{ id: 1, modelId: "1", tags: [], fields: { Front: "Hello", Back: "World" } }]);
+      insertAnki2Data(db, models, [
+        { id: 1, modelId: "1", tags: [], fields: { Front: "Hello", Back: "World" } },
+      ]);
       db.run(`UPDATE col SET dconf = ? WHERE id = 1`, [
-        JSON.stringify({ "1": { id: 1, name: "Default", new: { delays: [1, 10, 30] }, lapse: { delays: [10] } } }),
+        JSON.stringify({
+          "1": { id: 1, name: "Default", new: { delays: [1, 10, 30] }, lapse: { delays: [10] } },
+        }),
       ]);
 
       const result = getDataFromAnki2(db);
@@ -471,9 +554,18 @@ describe("Anki2 Parser", () => {
     it("should compute schema hash for notesTypes", async () => {
       const db = await createAnki2Database();
       const models: Anki2Model[] = [
-        { id: "1", css: "", latexPre: "", latexPost: "", fields: [{ name: "Front" }, { name: "Back" }], templates: [{ name: "Card 1", qfmt: "{{Front}}", afmt: "{{Back}}", ord: 0 }] },
+        {
+          id: "1",
+          css: "",
+          latexPre: "",
+          latexPost: "",
+          fields: [{ name: "Front" }, { name: "Back" }],
+          templates: [{ name: "Card 1", qfmt: "{{Front}}", afmt: "{{Back}}", ord: 0 }],
+        },
       ];
-      insertAnki2Data(db, models, [{ id: 1, modelId: "1", tags: [], fields: { Front: "Hello", Back: "World" } }]);
+      insertAnki2Data(db, models, [
+        { id: 1, modelId: "1", tags: [], fields: { Front: "Hello", Back: "World" } },
+      ]);
 
       const result = getDataFromAnki2(db);
       expect(result.notesTypes).not.toBeNull();
@@ -483,15 +575,29 @@ describe("Anki2 Parser", () => {
 
     it("should label revlog types correctly", async () => {
       const db = await createAnki2Database();
-      db.run(`CREATE TABLE IF NOT EXISTS revlog (id INTEGER PRIMARY KEY, cid INTEGER NOT NULL, usn INTEGER NOT NULL, ease INTEGER NOT NULL, ivl INTEGER NOT NULL, lastIvl INTEGER NOT NULL, factor INTEGER NOT NULL, time INTEGER NOT NULL, type INTEGER NOT NULL)`);
+      db.run(
+        `CREATE TABLE IF NOT EXISTS revlog (id INTEGER PRIMARY KEY, cid INTEGER NOT NULL, usn INTEGER NOT NULL, ease INTEGER NOT NULL, ivl INTEGER NOT NULL, lastIvl INTEGER NOT NULL, factor INTEGER NOT NULL, time INTEGER NOT NULL, type INTEGER NOT NULL)`,
+      );
       const models: Anki2Model[] = [
-        { id: "1", css: "", latexPre: "", latexPost: "", fields: [{ name: "Front" }, { name: "Back" }], templates: [{ name: "Card 1", qfmt: "{{Front}}", afmt: "{{Back}}", ord: 0 }] },
+        {
+          id: "1",
+          css: "",
+          latexPre: "",
+          latexPost: "",
+          fields: [{ name: "Front" }, { name: "Back" }],
+          templates: [{ name: "Card 1", qfmt: "{{Front}}", afmt: "{{Back}}", ord: 0 }],
+        },
       ];
-      insertAnki2Data(db, models, [{ id: 1, modelId: "1", tags: [], fields: { Front: "Hello", Back: "World" } }]);
+      insertAnki2Data(db, models, [
+        { id: 1, modelId: "1", tags: [], fields: { Front: "Hello", Back: "World" } },
+      ]);
 
       const now = Date.now();
       for (let t = 0; t <= 4; t++) {
-        db.run(`INSERT INTO revlog (id, cid, usn, ease, ivl, lastIvl, factor, time, type) VALUES (?, 1000, 0, 3, 1, 0, 2500, 5000, ?)`, [now + t, t]);
+        db.run(
+          `INSERT INTO revlog (id, cid, usn, ease, ivl, lastIvl, factor, time, type) VALUES (?, 1000, 0, 3, 1, 0, 2500, 5000, ?)`,
+          [now + t, t],
+        );
       }
 
       const result = getDataFromAnki2(db);

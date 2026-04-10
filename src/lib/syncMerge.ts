@@ -19,26 +19,56 @@ export interface Graves {
  * A revlog row: [id, cid, usn, ease, ivl, lastIvl, factor, time, type]
  */
 export type RevlogRow = [
-  id: number, cid: number, usn: number, ease: number,
-  ivl: number, lastIvl: number, factor: number, time: number, type: number,
+  id: number,
+  cid: number,
+  usn: number,
+  ease: number,
+  ivl: number,
+  lastIvl: number,
+  factor: number,
+  time: number,
+  type: number,
 ];
 
 /**
  * A note row: [id, guid, mid, mod, usn, tags, flds, sfld, csum, flags, data]
  */
 export type NoteRow = [
-  id: number, guid: string, mid: number, mod: number, usn: number,
-  tags: string, flds: string, sfld: string, csum: number, flags: number, data: string,
+  id: number,
+  guid: string,
+  mid: number,
+  mod: number,
+  usn: number,
+  tags: string,
+  flds: string,
+  sfld: string,
+  csum: number,
+  flags: number,
+  data: string,
 ];
 
 /**
  * A card row: [id, nid, did, ord, mod, usn, type, queue, due, ivl, factor, reps, lapses, left, odue, odid, flags, data]
  */
 export type CardRow = [
-  id: number, nid: number, did: number, ord: number, mod: number, usn: number,
-  type: number, queue: number, due: number, ivl: number, factor: number,
-  reps: number, lapses: number, left: number, odue: number, odid: number,
-  flags: number, data: string,
+  id: number,
+  nid: number,
+  did: number,
+  ord: number,
+  mod: number,
+  usn: number,
+  type: number,
+  queue: number,
+  due: number,
+  ivl: number,
+  factor: number,
+  reps: number,
+  lapses: number,
+  left: number,
+  odue: number,
+  odid: number,
+  flags: number,
+  data: string,
 ];
 
 export interface Chunk {
@@ -138,19 +168,14 @@ function mergeColJsonField<T extends { id: number; mod?: number }>(
 
 /** Returns true if the DB uses the anki21b format (separate notetypes table). */
 export function isAnki21bFormat(db: Database): boolean {
-  const result = db.exec(
-    "SELECT name FROM sqlite_master WHERE type='table' AND name='notetypes'",
-  );
+  const result = db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='notetypes'");
   return (result[0]?.values.length ?? 0) > 0;
 }
 
 // ── Apply remote data ─────────��────────────────────────────────────
 
 /** Delete cards/notes/decks from SQLite and IndexedDB based on remote graves. */
-export async function applyRemoteGraves(
-  db: Database,
-  graves: Graves,
-): Promise<void> {
+export async function applyRemoteGraves(db: Database, graves: Graves): Promise<void> {
   const { reviewDB } = await import("../scheduler/db");
 
   // Delete cards
@@ -196,10 +221,7 @@ export async function applyRemoteGraves(
 }
 
 /** Apply a chunk of incoming cards/notes/revlog from the server. */
-export async function applyRemoteChunk(
-  db: Database,
-  chunk: Chunk,
-): Promise<void> {
+export async function applyRemoteChunk(db: Database, chunk: Chunk): Promise<void> {
   // Apply revlog entries (always merge, no conflict)
   for (const [id, cid, usn, ease, ivl, lastIvl, factor, time, type] of chunk.revlog ?? []) {
     db.run(
@@ -226,7 +248,26 @@ export async function applyRemoteChunk(
 
   // Apply cards
   const { reviewDB } = await import("../scheduler/db");
-  for (const [id, nid, did, ord, mod, usn, ctype, queue, due, ivl, factor, reps, lapses, left, odue, odid, flags, data] of chunk.cards ?? []) {
+  for (const [
+    id,
+    nid,
+    did,
+    ord,
+    mod,
+    usn,
+    ctype,
+    queue,
+    due,
+    ivl,
+    factor,
+    reps,
+    lapses,
+    left,
+    odue,
+    odid,
+    flags,
+    data,
+  ] of chunk.cards ?? []) {
     // Check if we have a local version
     const existing = db.exec("SELECT mod, usn FROM cards WHERE id=?", [id]);
     if (existing[0]?.values[0]) {
@@ -237,7 +278,26 @@ export async function applyRemoteChunk(
     }
     db.run(
       "INSERT OR REPLACE INTO cards (id, nid, did, ord, mod, usn, type, queue, due, ivl, factor, reps, lapses, left, odue, odid, flags, data) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-      [id, nid, did, ord, mod, usn, ctype, queue, due, ivl, factor, reps, lapses, left, odue, odid, flags, data],
+      [
+        id,
+        nid,
+        did,
+        ord,
+        mod,
+        usn,
+        ctype,
+        queue,
+        due,
+        ivl,
+        factor,
+        reps,
+        lapses,
+        left,
+        odue,
+        odid,
+        flags,
+        data,
+      ],
     );
     // Also update IndexedDB if this card exists there — remote is newer
     await reviewDB.deleteCard(String(id));
@@ -257,10 +317,7 @@ export function applyRemoteUnchunkedChanges(
   }
 }
 
-function applyRemoteUnchunkedAnki2(
-  db: Database,
-  changes: UnchunkedChanges,
-): void {
+function applyRemoteUnchunkedAnki2(db: Database, changes: UnchunkedChanges): void {
   // Models, decks, deck configs — merge with mod-time conflict resolution
   mergeColJsonField(db, "models", changes.models);
   const [remoteDecks, remoteDconf] = changes.decks;
@@ -289,10 +346,7 @@ function applyRemoteUnchunkedAnki2(
   }
 }
 
-function applyRemoteUnchunkedAnki21b(
-  db: Database,
-  changes: UnchunkedChanges,
-): void {
+function applyRemoteUnchunkedAnki21b(db: Database, changes: UnchunkedChanges): void {
   // Models (notetypes) — stored in notetypes table
   for (const m of changes.models) {
     const mtimeSecs = (m as SyncModel & { mtime_secs?: number }).mtime_secs;
@@ -315,10 +369,13 @@ function applyRemoteUnchunkedAnki21b(
       const localMtime = existing[0].values[0][0] as number;
       if ((d.mtime ?? 0) < localMtime) continue;
     }
-    db.run(
-      "INSERT OR REPLACE INTO decks (id, name, mtime, usn, common) VALUES (?,?,?,?,?)",
-      [d.id, d.name ?? "", d.mtime ?? 0, d.usn ?? 0, JSON.stringify(d)],
-    );
+    db.run("INSERT OR REPLACE INTO decks (id, name, mtime, usn, common) VALUES (?,?,?,?,?)", [
+      d.id,
+      d.name ?? "",
+      d.mtime ?? 0,
+      d.usn ?? 0,
+      JSON.stringify(d),
+    ]);
   }
 
   // Deck configs
@@ -328,10 +385,13 @@ function applyRemoteUnchunkedAnki21b(
       const localMtime = existing[0].values[0][0] as number;
       if ((c.mtime ?? 0) < localMtime) continue;
     }
-    db.run(
-      "INSERT OR REPLACE INTO deck_config (id, name, mtime, usn, config) VALUES (?,?,?,?,?)",
-      [c.id, c.name ?? "", c.mtime ?? 0, c.usn ?? 0, JSON.stringify(c)],
-    );
+    db.run("INSERT OR REPLACE INTO deck_config (id, name, mtime, usn, config) VALUES (?,?,?,?,?)", [
+      c.id,
+      c.name ?? "",
+      c.mtime ?? 0,
+      c.usn ?? 0,
+      JSON.stringify(c),
+    ]);
   }
 
   // Tags
@@ -378,10 +438,7 @@ export function buildLocalUnchunkedChanges(
   return buildLocalUnchunkedAnki2(db, localIsNewer);
 }
 
-function buildLocalUnchunkedAnki2(
-  db: Database,
-  localIsNewer: boolean,
-): UnchunkedChanges {
+function buildLocalUnchunkedAnki2(db: Database, localIsNewer: boolean): UnchunkedChanges {
   const changes: UnchunkedChanges = {
     models: [],
     decks: [[], []],
@@ -413,7 +470,11 @@ function buildLocalUnchunkedAnki2(
     const result = db.exec("SELECT conf, crt FROM col");
     if (result[0]?.values[0]) {
       const confStr = result[0].values[0][0] as string;
-      try { changes.conf = JSON.parse(confStr); } catch { /* skip */ }
+      try {
+        changes.conf = JSON.parse(confStr);
+      } catch {
+        /* skip */
+      }
       changes.crt = result[0].values[0][1] as number;
     }
   }
@@ -421,10 +482,7 @@ function buildLocalUnchunkedAnki2(
   return changes;
 }
 
-function buildLocalUnchunkedAnki21b(
-  db: Database,
-  localIsNewer: boolean,
-): UnchunkedChanges {
+function buildLocalUnchunkedAnki21b(db: Database, localIsNewer: boolean): UnchunkedChanges {
   const changes: UnchunkedChanges = {
     models: [],
     decks: [[], []],
@@ -432,48 +490,75 @@ function buildLocalUnchunkedAnki21b(
   };
 
   // Notetypes with pending changes (usn=-1)
-  const ntResult = db.exec(
-    "SELECT id, name, mtime_secs, usn, config FROM notetypes WHERE usn=-1",
-  );
+  const ntResult = db.exec("SELECT id, name, mtime_secs, usn, config FROM notetypes WHERE usn=-1");
   if (ntResult[0]) {
     for (const row of ntResult[0].values) {
       let obj: SyncModel;
       try {
-        obj = { ...JSON.parse(row[4] as string), id: row[0], name: row[1], mtime_secs: row[2], usn: row[3] };
+        obj = {
+          ...JSON.parse(row[4] as string),
+          id: row[0],
+          name: row[1],
+          mtime_secs: row[2],
+          usn: row[3],
+        };
       } catch {
-        obj = { id: row[0] as number, name: row[1] as string, mtime_secs: row[2] as number, usn: row[3] as number };
+        obj = {
+          id: row[0] as number,
+          name: row[1] as string,
+          mtime_secs: row[2] as number,
+          usn: row[3] as number,
+        };
       }
       changes.models.push(obj);
     }
   }
 
   // Decks with pending changes (usn=-1)
-  const decksResult = db.exec(
-    "SELECT id, name, mtime, usn, common FROM decks WHERE usn=-1",
-  );
+  const decksResult = db.exec("SELECT id, name, mtime, usn, common FROM decks WHERE usn=-1");
   if (decksResult[0]) {
     for (const row of decksResult[0].values) {
       let obj: SyncDeck;
       try {
-        obj = { ...JSON.parse(row[4] as string), id: row[0], name: row[1], mtime: row[2], usn: row[3] };
+        obj = {
+          ...JSON.parse(row[4] as string),
+          id: row[0],
+          name: row[1],
+          mtime: row[2],
+          usn: row[3],
+        };
       } catch {
-        obj = { id: row[0] as number, name: row[1] as string, mtime: row[2] as number, usn: row[3] as number };
+        obj = {
+          id: row[0] as number,
+          name: row[1] as string,
+          mtime: row[2] as number,
+          usn: row[3] as number,
+        };
       }
       changes.decks[0].push(obj);
     }
   }
 
   // Deck configs with pending changes (usn=-1)
-  const dcResult = db.exec(
-    "SELECT id, name, mtime, usn, config FROM deck_config WHERE usn=-1",
-  );
+  const dcResult = db.exec("SELECT id, name, mtime, usn, config FROM deck_config WHERE usn=-1");
   if (dcResult[0]) {
     for (const row of dcResult[0].values) {
       let obj: SyncDeckConfig;
       try {
-        obj = { ...JSON.parse(row[4] as string), id: row[0], name: row[1], mtime: row[2], usn: row[3] };
+        obj = {
+          ...JSON.parse(row[4] as string),
+          id: row[0],
+          name: row[1],
+          mtime: row[2],
+          usn: row[3],
+        };
       } catch {
-        obj = { id: row[0] as number, name: row[1] as string, mtime: row[2] as number, usn: row[3] as number };
+        obj = {
+          id: row[0] as number,
+          name: row[1] as string,
+          mtime: row[2] as number,
+          usn: row[3] as number,
+        };
       }
       changes.decks[1].push(obj);
     }
@@ -491,7 +576,11 @@ function buildLocalUnchunkedAnki21b(
     const result = db.exec("SELECT conf, crt FROM col");
     if (result[0]?.values[0]) {
       const confStr = result[0].values[0][0] as string;
-      try { changes.conf = JSON.parse(confStr); } catch { /* skip */ }
+      try {
+        changes.conf = JSON.parse(confStr);
+      } catch {
+        /* skip */
+      }
       changes.crt = result[0].values[0][1] as number;
     }
   }
@@ -533,7 +622,9 @@ export function* buildLocalChunks(db: Database): Generator<Chunk> {
   }
 
   // Yield in chunks of CHUNK_SIZE (interleaving types)
-  let ci = 0, ni = 0, ri = 0;
+  let ci = 0,
+    ni = 0,
+    ri = 0;
   const total = pendingCards.length + pendingNotes.length + pendingRevlog.length;
   if (total === 0) {
     yield { done: true, cards: [], notes: [], revlog: [] };
@@ -570,10 +661,7 @@ export function* buildLocalChunks(db: Database): Generator<Chunk> {
 
 // ── Sanity check counts ──────────���─────────────────────────────────
 
-export function getSanityCounts(
-  db: Database,
-  anki21b: boolean,
-): SanityCheckCounts {
+export function getSanityCounts(db: Database, anki21b: boolean): SanityCheckCounts {
   const scalar = (sql: string): number => {
     const r = db.exec(sql);
     return (r[0]?.values[0]?.[0] as number) ?? 0;

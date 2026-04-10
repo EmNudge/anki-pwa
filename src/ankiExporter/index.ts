@@ -13,7 +13,8 @@ function fieldChecksum(field: string): number {
 
 function guidFromId(_id: number): string {
   // Generate a random base91-like GUID (random source, not derived from ID)
-  const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!#$%&()*+,-./:;<=>?@[]^_`{|}~";
+  const chars =
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!#$%&()*+,-./:;<=>?@[]^_`{|}~";
   let result = "";
   for (let i = 0; i < 10; i++) {
     result += chars[Math.floor(Math.random() * chars.length)];
@@ -219,10 +220,21 @@ export async function createApkg(spec: AnkiDeckSpec): Promise<Blob> {
   });
 
   // Insert collection row
-  db.run(
-    "INSERT INTO col VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-    [1, nowSecs, nowMs, nowMs, 11, 0, -1, 0, DEFAULT_CONF, models, decks, DEFAULT_DCONF, "{}"],
-  );
+  db.run("INSERT INTO col VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", [
+    1,
+    nowSecs,
+    nowMs,
+    nowMs,
+    11,
+    0,
+    -1,
+    0,
+    DEFAULT_CONF,
+    models,
+    decks,
+    DEFAULT_DCONF,
+    "{}",
+  ]);
 
   // Insert notes and cards — use separate counters to avoid ID collisions
   // Collision handling: IDs are offset from base timestamp; in a full implementation
@@ -240,15 +252,40 @@ export async function createApkg(spec: AnkiDeckSpec): Promise<Blob> {
     const tags = (card.tags ?? []).join(" ");
     const sfld = card.front.replace(/<[^>]*>/g, "").trim();
 
-    db.run(
-      "INSERT INTO notes VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-      [noteId, guid, modelId, nowSecs, -1, tags ? ` ${tags} ` : "", flds, sfld, csum, 0, ""],
-    );
+    db.run("INSERT INTO notes VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", [
+      noteId,
+      guid,
+      modelId,
+      nowSecs,
+      -1,
+      tags ? ` ${tags} ` : "",
+      flds,
+      sfld,
+      csum,
+      0,
+      "",
+    ]);
 
-    db.run(
-      "INSERT INTO cards VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-      [cardId, noteId, deckId, 0, nowSecs, -1, 0, 0, i, 0, 0, 0, 0, 0, 0, 0, 0, ""],
-    );
+    db.run("INSERT INTO cards VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", [
+      cardId,
+      noteId,
+      deckId,
+      0,
+      nowSecs,
+      -1,
+      0,
+      0,
+      i,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      "",
+    ]);
   }
 
   // Export database to binary

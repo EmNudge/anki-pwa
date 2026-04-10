@@ -22,9 +22,7 @@ export function getAutoplayAudioSources(html: string): string[] {
   const allAudioContainers = new DOMParser()
     .parseFromString(html, "text/html")
     .querySelectorAll<HTMLAudioElement>("div.audio-container[data-autoplay] audio");
-  return [...allAudioContainers]
-    .map((audio) => audio.getAttribute("src"))
-    .filter(isTruthy);
+  return [...allAudioContainers].map((audio) => audio.getAttribute("src")).filter(isTruthy);
 }
 
 export function playAudio(src: string): void {

@@ -3,6 +3,7 @@ import { reviewDB } from "./db";
 import type { SchedulingAlgorithm } from "./algorithm";
 import { FSRSAlgorithm } from "./fsrs-algorithm";
 import { AnkiSM2Algorithm } from "./anki-sm2-algorithm";
+import { QUEUE_SUSPENDED, QUEUE_SCHED_BURIED, QUEUE_USER_BURIED } from "../lib/syncWrite";
 
 /**
  * Represents a card ready for review, combining deck data with review state
@@ -90,7 +91,7 @@ export class ReviewQueue {
   private async unburyCards(): Promise<void> {
     const cards = await reviewDB.getCardsForDeck(this.deckId);
     for (const card of cards) {
-      if (card.queueOverride === -3) {
+      if (card.queueOverride === QUEUE_USER_BURIED) {
         await reviewDB.patchCard(card.cardId, { queueOverride: undefined });
       }
     }
@@ -109,7 +110,11 @@ export class ReviewQueue {
    * @param templatesPerCard Number of templates for each card (assumes all cards have same templates)
    * @param ankiCardIds Optional array of native Anki card IDs (from SQLite) — when provided, used as card IDs instead of positional indices
    */
-  async buildQueue(totalCards: number, templatesPerCard: number, ankiCardIds?: number[]): Promise<ReviewCard[]> {
+  async buildQueue(
+    totalCards: number,
+    templatesPerCard: number,
+    ankiCardIds?: number[],
+  ): Promise<ReviewCard[]> {
     // Get existing review states
     const existingStates = await reviewDB.getCardsForDeck(this.deckId);
     const stateMap = new Map<string, CardReviewState>(
@@ -163,9 +168,13 @@ export class ReviewQueue {
     for (const card of queue) {
       try {
         // Skip suspended cards entirely
-        if (card.reviewState.queueOverride === -1) continue;
+        if (card.reviewState.queueOverride === QUEUE_SUSPENDED) continue;
         // Skip buried cards (they'll be unburied on day rollover)
-        if (card.reviewState.queueOverride === -3 || card.reviewState.queueOverride === -2) continue;
+        if (
+          card.reviewState.queueOverride === QUEUE_USER_BURIED ||
+          card.reviewState.queueOverride === QUEUE_SCHED_BURIED
+        )
+          continue;
 
         const dueDate = this.algorithm.getDueDate(card.reviewState.cardState);
         const dueMs = dueDate.getTime();
@@ -193,9 +202,7 @@ export class ReviewQueue {
     const selectedReviews = dueReviews.slice(0, reviewLeft);
 
     const includeAhead =
-      this.settings.showAheadOfSchedule &&
-      selectedReviews.length === 0 &&
-      selectedNew.length === 0
+      this.settings.showAheadOfSchedule && selectedReviews.length === 0 && selectedNew.length === 0
         ? aheadCards
         : [];
 

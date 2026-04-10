@@ -545,9 +545,7 @@ describe("Anki21b Parser", () => {
       const templates: Anki21bTemplate[] = [
         { ntid: "1", ord: 0, name: "Card 1", qFormat: "{{Front}}", aFormat: "{{Back}}" },
       ];
-      const notes: Anki21bNote[] = [
-        { id: 1, mid: "1", tags: [], fields: { Front: "", Back: "" } },
-      ];
+      const notes: Anki21bNote[] = [{ id: 1, mid: "1", tags: [], fields: { Front: "", Back: "" } }];
 
       insertAnki21bData(db, notetypes, fields, templates, notes);
 
@@ -561,7 +559,9 @@ describe("Anki21b Parser", () => {
     it("should expose the tags table with collapse state", async () => {
       const db = await createAnki21bDatabase();
 
-      db.run(`CREATE TABLE IF NOT EXISTS tags (tag TEXT NOT NULL PRIMARY KEY, usn INTEGER NOT NULL, collapsed INTEGER NOT NULL DEFAULT 0)`);
+      db.run(
+        `CREATE TABLE IF NOT EXISTS tags (tag TEXT NOT NULL PRIMARY KEY, usn INTEGER NOT NULL, collapsed INTEGER NOT NULL DEFAULT 0)`,
+      );
       db.run(`INSERT INTO tags (tag, usn, collapsed) VALUES ('vocab', 0, 0)`);
       db.run(`INSERT INTO tags (tag, usn, collapsed) VALUES ('vocab::german', 0, 1)`);
 

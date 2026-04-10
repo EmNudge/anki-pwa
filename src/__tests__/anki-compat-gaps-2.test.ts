@@ -9,11 +9,7 @@
  */
 import { describe, it, expect } from "vitest";
 import { AnkiSM2Algorithm } from "../scheduler/anki-sm2-algorithm";
-import {
-  convertDue,
-  phaseToRevlogType,
-  serializeCardData,
-} from "../lib/syncWrite";
+import { convertDue, phaseToRevlogType, serializeCardData } from "../lib/syncWrite";
 import { stringHash } from "../utils/constants";
 import type { CardReviewState } from "../scheduler/types";
 import type { CardState } from "../scheduler/algorithm";
@@ -293,10 +289,7 @@ describe("GAP 8: Exporter sfld should store HTML-stripped text", () => {
     // but sfld is set to card.front directly (with HTML intact).
     // In Anki, sfld is always the HTML-stripped sort field.
     const fs = await import("fs");
-    const source = fs.readFileSync(
-      new URL("../ankiExporter/index.ts", import.meta.url),
-      "utf-8",
-    );
+    const source = fs.readFileSync(new URL("../ankiExporter/index.ts", import.meta.url), "utf-8");
 
     // The INSERT INTO notes uses card.front directly as the sfld value.
     // In Anki, sfld is HTML-stripped. The PWA should strip HTML from sfld.
@@ -308,8 +301,8 @@ describe("GAP 8: Exporter sfld should store HTML-stripped text", () => {
     // Check that all occurrences of "card.front" used as sfld have HTML stripping
     const noteInsertSection = source.split("INSERT INTO notes")[1]?.split(";")[0] ?? "";
     // The array of values passed to the INSERT
-    const usesFrontDirectly = noteInsertSection.includes("card.front") &&
-      !noteInsertSection.includes('card.front.replace');
+    const usesFrontDirectly =
+      noteInsertSection.includes("card.front") && !noteInsertSection.includes("card.front.replace");
     // If card.front is used directly without .replace, HTML isn't stripped
     expect(usesFrontDirectly).toBe(false);
   });
@@ -329,10 +322,7 @@ describe("GAP 9: Exporter col.mod should be milliseconds", () => {
     // The exporter sets: now = Math.floor(Date.now() / 1000) (SECONDS)
     // Then inserts col with mod=now (seconds) but Anki expects milliseconds.
     const fs = await import("fs");
-    const source = fs.readFileSync(
-      new URL("../ankiExporter/index.ts", import.meta.url),
-      "utf-8",
-    );
+    const source = fs.readFileSync(new URL("../ankiExporter/index.ts", import.meta.url), "utf-8");
 
     // Check that the INSERT INTO col doesn't use seconds for mod
     // The source has: const now = Math.floor(Date.now() / 1000)
@@ -373,10 +363,7 @@ describe("GAP 10: Exporter schema missing indexes", () => {
 
     // Read the schema from the source file
     const fs = await import("fs");
-    const source = fs.readFileSync(
-      new URL("../ankiExporter/index.ts", import.meta.url),
-      "utf-8",
-    );
+    const source = fs.readFileSync(new URL("../ankiExporter/index.ts", import.meta.url), "utf-8");
 
     for (const idx of requiredIndexes) {
       expect(source).toContain(idx);
@@ -397,27 +384,20 @@ describe("GAP 10: Exporter schema missing indexes", () => {
 describe("GAP 11: GUID should use random source, not be derived from note ID", () => {
   it("guidFromId should use random source for GUID generation", async () => {
     const fs = await import("fs");
-    const source = fs.readFileSync(
-      new URL("../ankiExporter/index.ts", import.meta.url),
-      "utf-8",
-    );
+    const source = fs.readFileSync(new URL("../ankiExporter/index.ts", import.meta.url), "utf-8");
 
     // The function guidFromId should use randomness like Anki (random u64).
     // PWA derives GUID deterministically from note ID.
     // Check that guidFromId's body (not generateId) uses Math.random or crypto
     const guidFnMatch = source.match(/function guidFromId[\s\S]*?^}/m);
     const guidFnBody = guidFnMatch?.[0] ?? "";
-    const usesRandom =
-      guidFnBody.includes("Math.random") || guidFnBody.includes("crypto");
+    const usesRandom = guidFnBody.includes("Math.random") || guidFnBody.includes("crypto");
     expect(usesRandom).toBe(true);
   });
 
   it("guidFromId should not pad with 'a'", async () => {
     const fs = await import("fs");
-    const source = fs.readFileSync(
-      new URL("../ankiExporter/index.ts", import.meta.url),
-      "utf-8",
-    );
+    const source = fs.readFileSync(new URL("../ankiExporter/index.ts", import.meta.url), "utf-8");
 
     // Anki doesn't pad GUIDs — they're variable length
     expect(source).not.toContain("padEnd");
@@ -440,10 +420,7 @@ describe("GAP 11: GUID should use random source, not be derived from note ID", (
 describe("GAP 12: Exporter ID generation is fragile", () => {
   it("generateId should not be used twice in quick succession without collision check", async () => {
     const fs = await import("fs");
-    const source = fs.readFileSync(
-      new URL("../ankiExporter/index.ts", import.meta.url),
-      "utf-8",
-    );
+    const source = fs.readFileSync(new URL("../ankiExporter/index.ts", import.meta.url), "utf-8");
 
     // The source has: generateId() + 1 for modelId
     // This means modelId = Date.now() + random(0,999) + 1
@@ -471,10 +448,7 @@ describe("GAP 12: Exporter ID generation is fragile", () => {
 describe("GAP 13: Exporter interleaves note and card IDs from same counter", () => {
   it("card ID should not be noteId + 1 (should be independent)", async () => {
     const fs = await import("fs");
-    const source = fs.readFileSync(
-      new URL("../ankiExporter/index.ts", import.meta.url),
-      "utf-8",
-    );
+    const source = fs.readFileSync(new URL("../ankiExporter/index.ts", import.meta.url), "utf-8");
 
     // Check that card IDs are generated independently of note IDs
     // The source has: noteId = nextId++; cardId = nextId++;
@@ -482,8 +456,7 @@ describe("GAP 13: Exporter interleaves note and card IDs from same counter", () 
     // Anki would generate each ID as a separate timestamp.
 
     // Verify the pattern exists (proving the gap)
-    const hasSequentialIds =
-      source.includes("nextId++") || source.includes("nextId += 1");
+    const hasSequentialIds = source.includes("nextId++") || source.includes("nextId += 1");
     expect(hasSequentialIds).toBe(false);
   });
 });
@@ -532,18 +505,13 @@ describe("GAP 15: encodeLeft caller never computes stepsToday", () => {
     // The caller (applyReviewStateToSqlite) should compute stepsToday
     // based on the day rollover boundary, but it never does.
     const fs = await import("fs");
-    const source = fs.readFileSync(
-      new URL("../lib/syncWrite.ts", import.meta.url),
-      "utf-8",
-    );
+    const source = fs.readFileSync(new URL("../lib/syncWrite.ts", import.meta.url), "utf-8");
 
     // Check that the caller passes stepsToday to encodeLeft
     // It should compute stepsToday from rollover time
     const encodeLeftCalls = source.match(/encodeLeft\([^)]+\)/g) ?? [];
     // Every call to encodeLeft should include a stepsToday argument
-    const allCallsHaveStepsToday = encodeLeftCalls.every(
-      (call) => call.split(",").length >= 3,
-    );
+    const allCallsHaveStepsToday = encodeLeftCalls.every((call) => call.split(",").length >= 3);
     expect(allCallsHaveStepsToday).toBe(true);
   });
 });
@@ -687,10 +655,7 @@ describe("GAP 18: Deck config should match Anki's expected fields", () => {
   it("dconf new.order should be 0 (NEW_CARDS_DUE), not 1 (RANDOM)", async () => {
     // In modern Anki (v2+), the default is order: 0 (NEW_CARDS_DUE).
     const fs = await import("fs");
-    const source = fs.readFileSync(
-      new URL("../ankiExporter/index.ts", import.meta.url),
-      "utf-8",
-    );
+    const source = fs.readFileSync(new URL("../ankiExporter/index.ts", import.meta.url), "utf-8");
 
     // Extract the order value from the new config in DEFAULT_DCONF
     const orderMatch = source.match(/order:\s*(\d+)/);

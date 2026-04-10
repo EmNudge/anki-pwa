@@ -178,7 +178,11 @@ const suggestions = computed<Suggestion[]>(() => {
   if (!tokenBody.includes(":")) {
     for (const q of QUALIFIERS) {
       if (q.startsWith(tokenBody) && tokenBody.length > 0) {
-        results.push({ insert: `${prefix}${q}`, label: `${prefix}${q}`, description: getQualifierHint(q) });
+        results.push({
+          insert: `${prefix}${q}`,
+          label: `${prefix}${q}`,
+          description: getQualifierHint(q),
+        });
       }
     }
     // Also fall through to text search — don't return early so user sees qualifiers AND can just type text
@@ -219,7 +223,11 @@ const suggestions = computed<Suggestion[]>(() => {
       for (const f of FLAG_VALUES) {
         const numStr = String(f.value);
         if (numStr.startsWith(valuePart) || f.label.startsWith(valuePart)) {
-          results.push({ insert: `${prefix}flag:${f.value}`, label: `${f.value}`, description: f.label });
+          results.push({
+            insert: `${prefix}flag:${f.value}`,
+            label: `${f.value}`,
+            description: f.label,
+          });
         }
       }
       break;
@@ -239,25 +247,39 @@ const suggestions = computed<Suggestion[]>(() => {
 
 function getQualifierHint(q: string): string {
   switch (q) {
-    case "deck:": return "filter by deck";
-    case "tag:": return "filter by tag";
-    case "is:": return "card state (new, review, ...)";
-    case "flag:": return "card flag (0-7)";
-    case "card:": return "card/template name";
-    case "note:": return "note type name";
-    default: return "";
+    case "deck:":
+      return "filter by deck";
+    case "tag:":
+      return "filter by tag";
+    case "is:":
+      return "card state (new, review, ...)";
+    case "flag:":
+      return "card flag (0-7)";
+    case "card:":
+      return "card/template name";
+    case "note:":
+      return "note type name";
+    default:
+      return "";
   }
 }
 
 function getIsHint(v: string): string {
   switch (v) {
-    case "new": return "new cards";
-    case "learn": return "currently learning";
-    case "review": return "review cards";
-    case "due": return "cards due now";
-    case "suspended": return "suspended cards";
-    case "buried": return "buried cards";
-    default: return "";
+    case "new":
+      return "new cards";
+    case "learn":
+      return "currently learning";
+    case "review":
+      return "review cards";
+    case "due":
+      return "cards due now";
+    case "suspended":
+      return "suspended cards";
+    case "buried":
+      return "buried cards";
+    default:
+      return "";
   }
 }
 
@@ -490,13 +512,20 @@ function matchToken(row: Row, token: SearchToken): boolean {
       const q = row.queueName;
       const t = row.typeName;
       switch (token.value) {
-        case "new": return q === "new";
-        case "learn": return q === "learning" || q === "dayLearning";
-        case "review": return q === "review";
-        case "due": return q === "review" || q === "learning" || q === "dayLearning";
-        case "suspended": return q === "suspended";
-        case "buried": return q === "userBuried" || q === "schedulerBuried";
-        default: return false;
+        case "new":
+          return q === "new";
+        case "learn":
+          return q === "learning" || q === "dayLearning";
+        case "review":
+          return q === "review";
+        case "due":
+          return q === "review" || q === "learning" || q === "dayLearning";
+        case "suspended":
+          return q === "suspended";
+        case "buried":
+          return q === "userBuried" || q === "schedulerBuried";
+        default:
+          return false;
       }
     }
     case "flag": {
@@ -703,15 +732,16 @@ async function handleNoteSave(payload: { fields: Record<string, string | null>; 
             <div
               v-for="(s, i) in suggestions"
               :key="s.insert"
-              :class="['autocomplete-item', { 'autocomplete-item--selected': i === selectedSuggestionIndex }]"
+              :class="[
+                'autocomplete-item',
+                { 'autocomplete-item--selected': i === selectedSuggestionIndex },
+              ]"
               @mousedown.prevent="applySuggestion(s)"
             >
               <span class="autocomplete-label">{{ s.label }}</span>
               <span v-if="s.description" class="autocomplete-desc">{{ s.description }}</span>
             </div>
-            <div class="autocomplete-hint">
-              <kbd>Tab</kbd> to accept
-            </div>
+            <div class="autocomplete-hint"><kbd>Tab</kbd> to accept</div>
           </div>
         </div>
       </div>
@@ -747,11 +777,7 @@ async function handleNoteSave(payload: { fields: Record<string, string | null>; 
               :class="['tr', { 'tr--selected': selectedRowKey === row.key }]"
               @click="selectedRowKey = row.key"
             >
-              <td
-                v-for="col in visibleColumns"
-                :key="col.key"
-                class="td"
-              >
+              <td v-for="col in visibleColumns" :key="col.key" class="td">
                 {{ getCellValue(row, col.key) }}
               </td>
             </tr>
@@ -765,7 +791,9 @@ async function handleNoteSave(payload: { fields: Record<string, string | null>; 
           <div class="detail-header">
             <div class="detail-header-text">
               <h3 class="detail-title">{{ selectedCard.deckName }}</h3>
-              <span class="detail-meta">{{ selectedCard.templates.map(t => t.name).join(", ") }}</span>
+              <span class="detail-meta">{{
+                selectedCard.templates.map((t) => t.name).join(", ")
+              }}</span>
             </div>
             <Button variant="secondary" size="sm" @click="editModalOpen = true">Edit</Button>
           </div>

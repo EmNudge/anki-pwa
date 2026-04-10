@@ -309,8 +309,10 @@ function applyFilter(
 const RUBY_RE = / ?([^\s[]+)\[([^\]]+)\]/g;
 
 function applyFuriganaFilter(text: string): string {
-  return text.replace(RUBY_RE, (_m, base: string, reading: string) =>
-    `<ruby>${base}<rt>${reading}</rt></ruby>`);
+  return text.replace(
+    RUBY_RE,
+    (_m, base: string, reading: string) => `<ruby>${base}<rt>${reading}</rt></ruby>`,
+  );
 }
 
 function applyKanjiFilter(text: string): string {
@@ -591,7 +593,10 @@ function replaceLatex(renderedString: string, macros: Record<string, string> = {
   return (
     renderedString
       // <anki-mathjax block="true">...</anki-mathjax> → display math
-      .replace(/<anki-mathjax\s+block="true"\s*>([\s\S]+?)<\/anki-mathjax>/g, replaceDisplayMathBlock)
+      .replace(
+        /<anki-mathjax\s+block="true"\s*>([\s\S]+?)<\/anki-mathjax>/g,
+        replaceDisplayMathBlock,
+      )
       // <anki-mathjax>...</anki-mathjax> → inline math
       .replace(/<anki-mathjax>([\s\S]+?)<\/anki-mathjax>/g, replaceInlineMathBlock)
       // [$$]...[/$$] is display math
@@ -657,10 +662,7 @@ function replaceTemplatingSyntax(renderedString: string) {
  * When isCloze is true, first unwraps cloze markers to check if
  * the underlying content is non-empty.
  */
-function fieldIsNotEmpty(
-  value: string | null | undefined,
-  isCloze?: boolean,
-): boolean {
+function fieldIsNotEmpty(value: string | null | undefined, isCloze?: boolean): boolean {
   if (!value) return false;
   const processed = isCloze
     ? parseClozeNodes(value)

@@ -105,7 +105,9 @@ function updateFsrsParam<K extends keyof NonNullable<SchedulerSettings["fsrsPara
             @change="updateSetting('enabled', ($event.target as HTMLInputElement).checked)"
           />
         </label>
-        <div class="help-text">When disabled, cards are shown sequentially without spaced repetition</div>
+        <div class="help-text">
+          When disabled, cards are shown sequentially without spaced repetition
+        </div>
       </div>
     </div>
 
@@ -175,7 +177,9 @@ function updateFsrsParam<K extends keyof NonNullable<SchedulerSettings["fsrsPara
           type="text"
           class="form-input"
           :value="formatSteps(sm2.learningSteps)"
-          @change="updateSm2Param('learningSteps', parseSteps(($event.target as HTMLInputElement).value))"
+          @change="
+            updateSm2Param('learningSteps', parseSteps(($event.target as HTMLInputElement).value))
+          "
         />
         <div class="help-text">Steps for new cards (e.g., "1m 10m" or "1m 10m 1h")</div>
       </div>
@@ -187,7 +191,12 @@ function updateFsrsParam<K extends keyof NonNullable<SchedulerSettings["fsrsPara
           :value="sm2.graduatingInterval"
           min="1"
           max="365"
-          @change="updateSm2Param('graduatingInterval', parseInt(($event.target as HTMLInputElement).value, 10))"
+          @change="
+            updateSm2Param(
+              'graduatingInterval',
+              parseInt(($event.target as HTMLInputElement).value, 10),
+            )
+          "
         />
         <div class="help-text">Interval when a learning card graduates via Good</div>
       </div>
@@ -199,7 +208,9 @@ function updateFsrsParam<K extends keyof NonNullable<SchedulerSettings["fsrsPara
           :value="sm2.easyInterval"
           min="1"
           max="365"
-          @change="updateSm2Param('easyInterval', parseInt(($event.target as HTMLInputElement).value, 10))"
+          @change="
+            updateSm2Param('easyInterval', parseInt(($event.target as HTMLInputElement).value, 10))
+          "
         />
         <div class="help-text">Interval when a learning card graduates via Easy</div>
       </div>
@@ -213,7 +224,9 @@ function updateFsrsParam<K extends keyof NonNullable<SchedulerSettings["fsrsPara
           type="text"
           class="form-input"
           :value="formatSteps(sm2.relearningSteps)"
-          @change="updateSm2Param('relearningSteps', parseSteps(($event.target as HTMLInputElement).value))"
+          @change="
+            updateSm2Param('relearningSteps', parseSteps(($event.target as HTMLInputElement).value))
+          "
         />
         <div class="help-text">Steps when a review card is failed (e.g., "10m")</div>
       </div>
@@ -226,7 +239,12 @@ function updateFsrsParam<K extends keyof NonNullable<SchedulerSettings["fsrsPara
           min="0"
           max="1"
           step="0.05"
-          @change="updateSm2Param('lapseNewInterval', parseFloat(($event.target as HTMLInputElement).value))"
+          @change="
+            updateSm2Param(
+              'lapseNewInterval',
+              parseFloat(($event.target as HTMLInputElement).value),
+            )
+          "
         />
         <div class="help-text">Interval multiplier after a lapse (0 = reset, 0.5 = halve)</div>
       </div>
@@ -238,7 +256,12 @@ function updateFsrsParam<K extends keyof NonNullable<SchedulerSettings["fsrsPara
           :value="sm2.minLapseInterval"
           min="1"
           max="365"
-          @change="updateSm2Param('minLapseInterval', parseInt(($event.target as HTMLInputElement).value, 10))"
+          @change="
+            updateSm2Param(
+              'minLapseInterval',
+              parseInt(($event.target as HTMLInputElement).value, 10),
+            )
+          "
         />
         <div class="help-text">Minimum interval after a lapse</div>
       </div>
@@ -255,7 +278,9 @@ function updateFsrsParam<K extends keyof NonNullable<SchedulerSettings["fsrsPara
           min="1.3"
           max="5"
           step="0.1"
-          @change="updateSm2Param('startingEase', parseFloat(($event.target as HTMLInputElement).value))"
+          @change="
+            updateSm2Param('startingEase', parseFloat(($event.target as HTMLInputElement).value))
+          "
         />
         <div class="help-text">Initial ease factor for new cards (2.5 = 250%)</div>
       </div>
@@ -268,7 +293,9 @@ function updateFsrsParam<K extends keyof NonNullable<SchedulerSettings["fsrsPara
           min="1"
           max="3"
           step="0.05"
-          @change="updateSm2Param('easyBonus', parseFloat(($event.target as HTMLInputElement).value))"
+          @change="
+            updateSm2Param('easyBonus', parseFloat(($event.target as HTMLInputElement).value))
+          "
         />
         <div class="help-text">Extra multiplier for Easy on review cards (1.3 = 130%)</div>
       </div>
@@ -281,7 +308,9 @@ function updateFsrsParam<K extends keyof NonNullable<SchedulerSettings["fsrsPara
           min="1"
           max="2"
           step="0.05"
-          @change="updateSm2Param('hardMultiplier', parseFloat(($event.target as HTMLInputElement).value))"
+          @change="
+            updateSm2Param('hardMultiplier', parseFloat(($event.target as HTMLInputElement).value))
+          "
         />
         <div class="help-text">Multiplier for Hard on review cards (1.2 = 120%)</div>
       </div>
@@ -294,7 +323,12 @@ function updateFsrsParam<K extends keyof NonNullable<SchedulerSettings["fsrsPara
           min="0.5"
           max="2"
           step="0.05"
-          @change="updateSm2Param('intervalModifier', parseFloat(($event.target as HTMLInputElement).value))"
+          @change="
+            updateSm2Param(
+              'intervalModifier',
+              parseFloat(($event.target as HTMLInputElement).value),
+            )
+          "
         />
         <div class="help-text">Global multiplier for all intervals (1.0 = no change)</div>
       </div>
@@ -306,7 +340,12 @@ function updateFsrsParam<K extends keyof NonNullable<SchedulerSettings["fsrsPara
           :value="sm2.maximumInterval"
           min="1"
           max="36500"
-          @change="updateSm2Param('maximumInterval', parseInt(($event.target as HTMLInputElement).value, 10))"
+          @change="
+            updateSm2Param(
+              'maximumInterval',
+              parseInt(($event.target as HTMLInputElement).value, 10),
+            )
+          "
         />
         <div class="help-text">Maximum days between reviews (36500 = 100 years)</div>
       </div>

@@ -22,9 +22,7 @@ const fileInput = ref<HTMLInputElement>();
 
 const sampleDecks = computed(() => sampleDeckData.map(createSampleDeckLibraryItem));
 const uploadedDecks = computed(() =>
-  [...cachedFilesSig.value]
-    .sort((a, b) => b.addedAt - a.addedAt)
-    .map(createCachedDeckLibraryItem),
+  [...cachedFilesSig.value].sort((a, b) => b.addedAt - a.addedAt).map(createCachedDeckLibraryItem),
 );
 
 // Track collapsed state for parent decks
@@ -64,7 +62,7 @@ function flattenTree(nodes: DeckTreeNode[]): DeckTreeNode[] {
   return result;
 }
 
-const flatTree = computed(() => deckInfoSig.value ? flattenTree(deckInfoSig.value.tree) : []);
+const flatTree = computed(() => (deckInfoSig.value ? flattenTree(deckInfoSig.value.tree) : []));
 
 function handleOpenSettings(node: DeckTreeNode, event: Event) {
   event.stopPropagation();
@@ -131,21 +129,47 @@ function handleOpenSettings(node: DeckTreeNode, event: Event) {
               :title="collapsed.has(node.fullName) ? 'Expand' : 'Collapse'"
               @click="toggleCollapse(node.fullName, $event)"
             >
-              <span :class="['collapse-icon', { 'collapse-icon--collapsed': collapsed.has(node.fullName) }]">&#9662;</span>
+              <span
+                :class="[
+                  'collapse-icon',
+                  { 'collapse-icon--collapsed': collapsed.has(node.fullName) },
+                ]"
+                >&#9662;</span
+              >
             </button>
             <span v-else class="collapse-spacer" />
             <span class="deck-name">{{ node.name }}</span>
           </div>
           <div class="deck-row-right">
-            <Tooltip text="New"><span class="stat stat--new">{{ node.newCount }}</span></Tooltip>
-            <Tooltip text="Learning"><span class="stat stat--learn">{{ node.learnCount }}</span></Tooltip>
-            <Tooltip text="Due"><span class="stat stat--due">{{ node.dueCount }}</span></Tooltip>
+            <Tooltip text="New"
+              ><span class="stat stat--new">{{ node.newCount }}</span></Tooltip
+            >
+            <Tooltip text="Learning"
+              ><span class="stat stat--learn">{{ node.learnCount }}</span></Tooltip
+            >
+            <Tooltip text="Due"
+              ><span class="stat stat--due">{{ node.dueCount }}</span></Tooltip
+            >
             <button
               class="settings-btn"
               title="Deck settings"
               @click="handleOpenSettings(node, $event)"
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path
+                  d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"
+                />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
             </button>
           </div>
         </div>
@@ -165,7 +189,9 @@ function handleOpenSettings(node: DeckTreeNode, event: Event) {
       </div>
 
       <div v-if="uploadedDecks.length === 0" class="empty-state">
-        <p class="empty-text">No uploaded decks yet. Add an .apkg file to keep your own deck here.</p>
+        <p class="empty-text">
+          No uploaded decks yet. Add an .apkg file to keep your own deck here.
+        </p>
         <Button variant="secondary" @click="fileInput?.click()"> Choose a Deck File </Button>
       </div>
 

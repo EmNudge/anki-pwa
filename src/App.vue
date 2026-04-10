@@ -61,14 +61,11 @@ watch(computedDeckInfo, (newDeckInfo, oldDeckInfo) => {
 });
 
 // Initialize review queue when cards are loaded (scheduler enabled state is per-deck, checked inside)
-watch(
-  [cardsSig, templatesSig, selectedDeckIdSig],
-  ([cards, templates]) => {
-    if (cards.length > 0 && templates && templates.length > 0) {
-      initializeReviewQueue();
-    }
-  },
-);
+watch([cardsSig, templatesSig, selectedDeckIdSig], ([cards, templates]) => {
+  if (cards.length > 0 && templates && templates.length > 0) {
+    initializeReviewQueue();
+  }
+});
 
 // Get current card based on mode
 const currentCardData = computed(() => {
@@ -211,7 +208,8 @@ async function handleChooseAnswer(answer: Answer) {
       </template>
       <p v-else-if="cardsSig.length === 0" class="no-deck-message">
         No deck loaded. Click the
-        <button class="link-btn" @click="reviewModeSig = 'deck-list'">Review</button> tab to choose a deck.
+        <button class="link-btn" @click="reviewModeSig = 'deck-list'">Review</button> tab to choose
+        a deck.
       </p>
     </div>
   </main>
