@@ -390,6 +390,88 @@ async function abortSync(
   }
 }
 
+// ── Deck config → scheduler settings ──────────────────────────────
+
+/**
+ * Extract deck configs from the synced SQLite and apply them to the
+ * IndexedDB scheduler settings so that new/review limits, learning steps,
+ * and other parameters match what the user configured on desktop Anki.
+ */
+async function applyDeckConfigsToScheduler(
+  db: import("sql.js").Database,
+  deckId: string,
+): Promise<void> {
+  const { reviewDB } = await import("../scheduler/db");
+  const { DEFAULT_SM2_PARAMS } = await import("../scheduler/types");
+
+  // Detect format
+  const hasNotetypes = db.exec(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='notetypes'",
+  );
+  const isAnki21b = (hasNotetypes[0]?.values.length ?? 0) > 0;
+
+  // Collect all deck configs
+  type RawDconf = {
+    new?: { delays?: number[]; perDay?: number; order?: number };
+    lapse?: { delays?: number[]; minInt?: number; mult?: number; leechFails?: number };
+    rev?: { perDay?: number; ease4?: number; hardFactor?: number; ivlFct?: number; maxIvl?: number; fuzz?: boolean };
+    maxTaken?: number;
+  };
+
+  const configs = new Map<string, RawDconf>();
+
+  if (isAnki21b) {
+    const dcResult = db.exec("SELECT id, config FROM deck_config");
+    if (dcResult[0]) {
+      for (const row of dcResult[0].values) {
+        try {
+          configs.set(String(row[0]), JSON.parse(row[1] as string));
+        } catch { /* skip */ }
+      }
+    }
+  } else {
+    const dconfRaw = db.exec("SELECT dconf FROM col");
+    if (dconfRaw[0]?.values[0]) {
+      try {
+        const parsed = JSON.parse(dconfRaw[0].values[0][0] as string) as Record<string, RawDconf>;
+        for (const [id, cfg] of Object.entries(parsed)) {
+          configs.set(id, cfg);
+        }
+      } catch { /* skip */ }
+    }
+  }
+
+  if (configs.size === 0) return;
+
+  // For now, apply the first config (deck 1 / default) to the scheduler deckId.
+  // A more complete implementation would map each deck to its config.
+  const cfg = configs.values().next().value as RawDconf | undefined;
+  if (!cfg) return;
+
+  const existing = await reviewDB.getSettings(deckId);
+
+  const sm2Params = {
+    ...DEFAULT_SM2_PARAMS,
+    ...existing.sm2Params,
+    learningSteps: cfg.new?.delays ?? DEFAULT_SM2_PARAMS.learningSteps,
+    relearningSteps: cfg.lapse?.delays ?? DEFAULT_SM2_PARAMS.relearningSteps,
+    lapseNewInterval: cfg.lapse?.mult ?? DEFAULT_SM2_PARAMS.lapseNewInterval,
+    minLapseInterval: cfg.lapse?.minInt ?? DEFAULT_SM2_PARAMS.minLapseInterval,
+    leechThreshold: cfg.lapse?.leechFails ?? DEFAULT_SM2_PARAMS.leechThreshold,
+    easyBonus: cfg.rev?.ease4 ?? DEFAULT_SM2_PARAMS.easyBonus,
+    hardMultiplier: cfg.rev?.hardFactor ?? DEFAULT_SM2_PARAMS.hardMultiplier,
+    intervalModifier: cfg.rev?.ivlFct ?? DEFAULT_SM2_PARAMS.intervalModifier,
+    maximumInterval: cfg.rev?.maxIvl ?? DEFAULT_SM2_PARAMS.maximumInterval,
+  };
+
+  await reviewDB.saveSettings(deckId, {
+    ...existing,
+    dailyNewLimit: cfg.new?.perDay ?? existing.dailyNewLimit,
+    dailyReviewLimit: cfg.rev?.perDay ?? existing.dailyReviewLimit,
+    sm2Params,
+  });
+}
+
 // ── Main orchestrator ──────────────────────────────────────────────
 
 /**
@@ -520,6 +602,10 @@ export async function normalSync(
 
     // Update USNs and collection metadata
     finalizeUsn(db, remoteMeta.usn, newMod, anki21b);
+
+    // Apply synced deck configs to scheduler settings
+    onProgress("Applying deck configuration...");
+    await applyDeckConfigsToScheduler(db, deckId);
 
     // Export modified SQLite
     const newBytes = new Uint8Array(db.export());
