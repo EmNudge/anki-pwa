@@ -9,12 +9,7 @@
  */
 import { describe, it, expect } from "vitest";
 import { AnkiSM2Algorithm } from "../scheduler/anki-sm2-algorithm";
-import {
-  encodeLeft,
-  encodeFactor,
-  phaseToRevlogType,
-  serializeCardData,
-} from "../lib/syncWrite";
+import { encodeLeft, encodeFactor, phaseToRevlogType, serializeCardData } from "../lib/syncWrite";
 import type { CardReviewState } from "../scheduler/types";
 import type { CardState } from "../scheduler/algorithm";
 

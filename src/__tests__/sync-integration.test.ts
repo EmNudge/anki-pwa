@@ -25,11 +25,7 @@ import {
   readResponseJson,
   normalizeUrl,
 } from "../lib/ankiSync";
-import {
-  normalSync,
-  FullSyncRequiredError,
-  ClockSkewError,
-} from "../lib/normalSync";
+import { normalSync, FullSyncRequiredError, ClockSkewError } from "../lib/normalSync";
 
 // ── Constants ──────────────────────────────────────────────────────
 
@@ -38,13 +34,7 @@ const TEST_PASS = "testpass";
 const TEST_DECK_ID = "1";
 
 /** Path to a real .apkg fixture for extracting a valid SQLite collection. */
-const FIXTURE_APKG = join(
-  __dirname,
-  "..",
-  "ankiParser",
-  "__tests__",
-  "ap_gov_vocab_anki11.apkg",
-);
+const FIXTURE_APKG = join(__dirname, "..", "ankiParser", "__tests__", "ap_gov_vocab_anki11.apkg");
 
 // ── Server binary discovery ────────────────────────────────────────
 
@@ -80,11 +70,7 @@ async function waitForServer(url: string, timeoutMs = 15_000): Promise<void> {
   throw new Error(`Sync server did not start within ${timeoutMs}ms`);
 }
 
-function startServer(
-  binary: string,
-  port: number,
-  dataDir: string,
-): ChildProcess {
+function startServer(binary: string, port: number, dataDir: string): ChildProcess {
   const proc = spawn(binary, [], {
     env: {
       ...process.env,
@@ -264,8 +250,12 @@ describe.skipIf(!serverBin)("sync integration", () => {
     test("upload then download roundtrip preserves notes and cards", async () => {
       const hkey = await login(serverUrl, TEST_USER, TEST_PASS);
 
-      const noteCount = withDb(SQL, baseCollection, (db) => scalar(db, "SELECT count() FROM notes"));
-      const cardCount = withDb(SQL, baseCollection, (db) => scalar(db, "SELECT count() FROM cards"));
+      const noteCount = withDb(SQL, baseCollection, (db) =>
+        scalar(db, "SELECT count() FROM notes"),
+      );
+      const cardCount = withDb(SQL, baseCollection, (db) =>
+        scalar(db, "SELECT count() FROM cards"),
+      );
 
       await uploadCollection(serverUrl, hkey, baseCollection);
       const downloaded = await downloadCollection(serverUrl, hkey);
@@ -293,12 +283,7 @@ describe.skipIf(!serverBin)("sync integration", () => {
       await uploadCollection(serverUrl, hkey, baseCollection);
       const serverCopy = await downloadCollection(serverUrl, hkey);
 
-      const result = await normalSync(
-        serverUrl,
-        hkey,
-        TEST_DECK_ID,
-        serverCopy,
-      );
+      const result = await normalSync(serverUrl, hkey, TEST_DECK_ID, serverCopy);
 
       expect(result.action).toBe("noChanges");
     });
@@ -309,7 +294,9 @@ describe.skipIf(!serverBin)("sync integration", () => {
       const serverCopy = await downloadCollection(serverUrl, hkey);
 
       // Get a card ID to modify
-      const cardId = withDb(SQL, serverCopy, (db) => scalar(db, "SELECT id FROM cards LIMIT 1")) as number;
+      const cardId = withDb(SQL, serverCopy, (db) =>
+        scalar(db, "SELECT id FROM cards LIMIT 1"),
+      ) as number;
 
       // Simulate a local review: modify the card and mark as pending
       const modified = mutateCollection(SQL, serverCopy, (db) => {
@@ -326,13 +313,12 @@ describe.skipIf(!serverBin)("sync integration", () => {
       // mismatch (known issue: server may upgrade anki2 schema, changing
       // internal counts). Reaching sanity check proves the data exchange
       // (start, graves, changes, chunks) all succeeded.
-      const result = await normalSync(serverUrl, hkey, TEST_DECK_ID, modified)
-        .catch((e) => {
-          if (e instanceof FullSyncRequiredError && e.message.includes("sanity")) {
-            return "sanity-phase-reached" as const;
-          }
-          throw e;
-        });
+      const result = await normalSync(serverUrl, hkey, TEST_DECK_ID, modified).catch((e) => {
+        if (e instanceof FullSyncRequiredError && e.message.includes("sanity")) {
+          return "sanity-phase-reached" as const;
+        }
+        throw e;
+      });
 
       if (typeof result !== "string") {
         expect(result.action).toBe("normalSync");
@@ -355,27 +341,26 @@ describe.skipIf(!serverBin)("sync integration", () => {
       await uploadCollection(serverUrl, hkey, baseCollection);
       const serverCopy = await downloadCollection(serverUrl, hkey);
 
-      const cardId = withDb(SQL, serverCopy, (db) => scalar(db, "SELECT id FROM cards LIMIT 1")) as number;
+      const cardId = withDb(SQL, serverCopy, (db) =>
+        scalar(db, "SELECT id FROM cards LIMIT 1"),
+      ) as number;
 
       const modified = mutateCollection(SQL, serverCopy, (db) => {
         const nowMs = Date.now();
         const nowSec = Math.floor(nowMs / 1000);
-        db.run(
-          `INSERT INTO revlog VALUES (${nowMs},${cardId},-1,3,1,0,2500,5000,0)`,
-        );
+        db.run(`INSERT INTO revlog VALUES (${nowMs},${cardId},-1,3,1,0,2500,5000,0)`);
         db.run(
           `UPDATE cards SET type=1, queue=1, reps=1, mod=${nowSec}, usn=-1 WHERE id=${cardId}`,
         );
         db.run(`UPDATE col SET mod=${nowMs + 1}`);
       });
 
-      const result = await normalSync(serverUrl, hkey, TEST_DECK_ID, modified)
-        .catch((e) => {
-          if (e instanceof FullSyncRequiredError && e.message.includes("sanity")) {
-            return "sanity-phase-reached" as const;
-          }
-          throw e;
-        });
+      const result = await normalSync(serverUrl, hkey, TEST_DECK_ID, modified).catch((e) => {
+        if (e instanceof FullSyncRequiredError && e.message.includes("sanity")) {
+          return "sanity-phase-reached" as const;
+        }
+        throw e;
+      });
 
       expect(["normalSync", "sanity-phase-reached"]).toContain(
         typeof result === "string" ? result : result.action,
@@ -398,13 +383,12 @@ describe.skipIf(!serverBin)("sync integration", () => {
         db.run("UPDATE col SET decks=?, mod=?", [JSON.stringify(decks), nowMs + 1]);
       });
 
-      const result = await normalSync(serverUrl, hkey, TEST_DECK_ID, modified)
-        .catch((e) => {
-          if (e instanceof FullSyncRequiredError && e.message.includes("sanity")) {
-            return "sanity-phase-reached" as const;
-          }
-          throw e;
-        });
+      const result = await normalSync(serverUrl, hkey, TEST_DECK_ID, modified).catch((e) => {
+        if (e instanceof FullSyncRequiredError && e.message.includes("sanity")) {
+          return "sanity-phase-reached" as const;
+        }
+        throw e;
+      });
 
       expect(["normalSync", "sanity-phase-reached"]).toContain(
         typeof result === "string" ? result : result.action,
@@ -427,13 +411,12 @@ describe.skipIf(!serverBin)("sync integration", () => {
         db.run("UPDATE col SET dconf=?, mod=?", [JSON.stringify(dconf), nowMs + 1]);
       });
 
-      const result = await normalSync(serverUrl, hkey, TEST_DECK_ID, modified)
-        .catch((e) => {
-          if (e instanceof FullSyncRequiredError && e.message.includes("sanity")) {
-            return "sanity-phase-reached" as const;
-          }
-          throw e;
-        });
+      const result = await normalSync(serverUrl, hkey, TEST_DECK_ID, modified).catch((e) => {
+        if (e instanceof FullSyncRequiredError && e.message.includes("sanity")) {
+          return "sanity-phase-reached" as const;
+        }
+        throw e;
+      });
 
       expect(["normalSync", "sanity-phase-reached"]).toContain(
         typeof result === "string" ? result : result.action,
@@ -456,13 +439,12 @@ describe.skipIf(!serverBin)("sync integration", () => {
         db.run("UPDATE col SET models=?, mod=?", [JSON.stringify(models), nowMs + 1]);
       });
 
-      const result = await normalSync(serverUrl, hkey, TEST_DECK_ID, modified)
-        .catch((e) => {
-          if (e instanceof FullSyncRequiredError && e.message.includes("sanity")) {
-            return "sanity-phase-reached" as const;
-          }
-          throw e;
-        });
+      const result = await normalSync(serverUrl, hkey, TEST_DECK_ID, modified).catch((e) => {
+        if (e instanceof FullSyncRequiredError && e.message.includes("sanity")) {
+          return "sanity-phase-reached" as const;
+        }
+        throw e;
+      });
 
       expect(["normalSync", "sanity-phase-reached"]).toContain(
         typeof result === "string" ? result : result.action,
@@ -477,9 +459,9 @@ describe.skipIf(!serverBin)("sync integration", () => {
       const rawCol = await extractCollectionFromApkg();
       const mismatchedScm = createMinimalCollection(SQL, rawCol, { scm: 9999999999 });
 
-      await expect(
-        normalSync(serverUrl, hkey, TEST_DECK_ID, mismatchedScm),
-      ).rejects.toThrow(FullSyncRequiredError);
+      await expect(normalSync(serverUrl, hkey, TEST_DECK_ID, mismatchedScm)).rejects.toThrow(
+        FullSyncRequiredError,
+      );
     });
 
     test("handles graves (deletions) correctly", async () => {
@@ -487,7 +469,9 @@ describe.skipIf(!serverBin)("sync integration", () => {
       await uploadCollection(serverUrl, hkey, baseCollection);
       const serverCopy = await downloadCollection(serverUrl, hkey);
 
-      const cardToDelete = withDb(SQL, serverCopy, (db) => scalar(db, "SELECT id FROM cards LIMIT 1")) as number;
+      const cardToDelete = withDb(SQL, serverCopy, (db) =>
+        scalar(db, "SELECT id FROM cards LIMIT 1"),
+      ) as number;
       const noteToDelete = withDb(SQL, serverCopy, (db) =>
         scalar(db, `SELECT nid FROM cards WHERE id=${cardToDelete}`),
       ) as number;
@@ -501,13 +485,12 @@ describe.skipIf(!serverBin)("sync integration", () => {
         db.run(`UPDATE col SET mod=${nowMs + 1}`);
       });
 
-      const result = await normalSync(serverUrl, hkey, TEST_DECK_ID, modified)
-        .catch((e) => {
-          if (e instanceof FullSyncRequiredError && e.message.includes("sanity")) {
-            return "sanity-phase-reached" as const;
-          }
-          throw e;
-        });
+      const result = await normalSync(serverUrl, hkey, TEST_DECK_ID, modified).catch((e) => {
+        if (e instanceof FullSyncRequiredError && e.message.includes("sanity")) {
+          return "sanity-phase-reached" as const;
+        }
+        throw e;
+      });
 
       expect(["normalSync", "sanity-phase-reached"]).toContain(
         typeof result === "string" ? result : result.action,
@@ -520,12 +503,16 @@ describe.skipIf(!serverBin)("sync integration", () => {
       // Upload baseline with a card at reps=0
       await uploadCollection(serverUrl, hkey, baseCollection);
       const serverCopy = await downloadCollection(serverUrl, hkey);
-      const cardId = withDb(SQL, serverCopy, (db) => scalar(db, "SELECT id FROM cards LIMIT 1")) as number;
+      const cardId = withDb(SQL, serverCopy, (db) =>
+        scalar(db, "SELECT id FROM cards LIMIT 1"),
+      ) as number;
 
       // Simulate server-side change: another device sets reps=5
       const serverEdit = mutateCollection(SQL, serverCopy, (db) => {
         const nowMs = Date.now();
-        db.run(`UPDATE cards SET reps=5, mod=${Math.floor(nowMs / 1000)}, usn=-1 WHERE id=${cardId}`);
+        db.run(
+          `UPDATE cards SET reps=5, mod=${Math.floor(nowMs / 1000)}, usn=-1 WHERE id=${cardId}`,
+        );
         db.run(`UPDATE col SET mod=${nowMs + 1}`);
       });
       await uploadCollection(serverUrl, hkey, serverEdit);
@@ -533,15 +520,16 @@ describe.skipIf(!serverBin)("sync integration", () => {
       // Our local edit: set reps=10 with a NEWER timestamp (should win)
       const localEdit = mutateCollection(SQL, serverCopy, (db) => {
         const futureMs = Date.now() + 5000;
-        db.run(`UPDATE cards SET reps=10, mod=${Math.floor(futureMs / 1000)}, usn=-1 WHERE id=${cardId}`);
+        db.run(
+          `UPDATE cards SET reps=10, mod=${Math.floor(futureMs / 1000)}, usn=-1 WHERE id=${cardId}`,
+        );
         db.run(`UPDATE col SET mod=${futureMs + 1}`);
       });
 
-      const result = await normalSync(serverUrl, hkey, TEST_DECK_ID, localEdit)
-        .catch((e) => {
-          if (e instanceof FullSyncRequiredError) return "sanity-reached" as const;
-          throw e;
-        });
+      const result = await normalSync(serverUrl, hkey, TEST_DECK_ID, localEdit).catch((e) => {
+        if (e instanceof FullSyncRequiredError) return "sanity-reached" as const;
+        throw e;
+      });
 
       if (typeof result !== "string" && result.sqliteBytes) {
         // If sync completed, our newer local edit (reps=10) should have won
@@ -562,21 +550,24 @@ describe.skipIf(!serverBin)("sync integration", () => {
       await uploadCollection(serverUrl, hkey, baseCollection);
       const serverCopy = await downloadCollection(serverUrl, hkey);
 
-      const cardId = withDb(SQL, serverCopy, (db) => scalar(db, "SELECT id FROM cards LIMIT 1")) as number;
+      const cardId = withDb(SQL, serverCopy, (db) =>
+        scalar(db, "SELECT id FROM cards LIMIT 1"),
+      ) as number;
 
       const modified = mutateCollection(SQL, serverCopy, (db) => {
         const nowMs = Date.now();
-        db.run(`UPDATE cards SET reps=1, mod=${Math.floor(nowMs / 1000)}, usn=-1 WHERE id=${cardId}`);
+        db.run(
+          `UPDATE cards SET reps=1, mod=${Math.floor(nowMs / 1000)}, usn=-1 WHERE id=${cardId}`,
+        );
         db.run(`UPDATE col SET mod=${nowMs + 1}`);
       });
 
       // The sync should either succeed or reach the sanity check phase
       // (FullSyncRequiredError from sanity check is acceptable)
-      const result = await normalSync(serverUrl, hkey, TEST_DECK_ID, modified)
-        .catch((e) => {
-          if (e instanceof FullSyncRequiredError) return "sanity-reached" as const;
-          throw e;
-        });
+      const result = await normalSync(serverUrl, hkey, TEST_DECK_ID, modified).catch((e) => {
+        if (e instanceof FullSyncRequiredError) return "sanity-reached" as const;
+        throw e;
+      });
 
       expect(["normalSync", "sanity-reached"]).toContain(
         typeof result === "string" ? result : result.action,
@@ -619,7 +610,10 @@ describe.skipIf(!serverBin)("sync integration", () => {
       const uploadForm = new FormData();
       uploadForm.append("k", hkey);
       uploadForm.append("data", zipBlob, "media.zip");
-      const uploadResp = await fetch(`${base}/msync/uploadChanges`, { method: "POST", body: uploadForm });
+      const uploadResp = await fetch(`${base}/msync/uploadChanges`, {
+        method: "POST",
+        body: uploadForm,
+      });
 
       expect(uploadResp.ok).toBe(true);
       const result = await readResponseJson(uploadResp);
@@ -688,7 +682,10 @@ describe.skipIf(!serverBin)("sync integration", () => {
       const uploadForm = new FormData();
       uploadForm.append("k", hkey);
       uploadForm.append("data", zipBlob, "media.zip");
-      const uploadResp = await fetch(`${base}/msync/uploadChanges`, { method: "POST", body: uploadForm });
+      const uploadResp = await fetch(`${base}/msync/uploadChanges`, {
+        method: "POST",
+        body: uploadForm,
+      });
       expect(uploadResp.ok).toBe(true);
 
       // Begin new media session for download
@@ -707,9 +704,14 @@ describe.skipIf(!serverBin)("sync integration", () => {
       changesForm.append("k", hkey);
       changesForm.append("data", JSON.stringify({ lastUsn: 0 }));
       changesForm.append("c", "0");
-      const changesResp = await fetch(`${base}/msync/mediaChanges`, { method: "POST", body: changesForm });
+      const changesResp = await fetch(`${base}/msync/mediaChanges`, {
+        method: "POST",
+        body: changesForm,
+      });
       expect(changesResp.ok).toBe(true);
-      const changes = await readResponseJson(changesResp) as Array<[string, number, string | null]>;
+      const changes = (await readResponseJson(changesResp)) as Array<
+        [string, number, string | null]
+      >;
       const ourFile = changes.find(([name]) => name === "roundtrip_test.txt");
       expect(ourFile).toBeTruthy();
       expect(ourFile![2]).not.toBeNull(); // sha1 present = file exists
@@ -723,24 +725,35 @@ describe.skipIf(!serverBin)("sync integration", () => {
       expect(dlResp.ok).toBe(true);
 
       // Parse the download ZIP
-      const { ZipReader, BlobReader: BlobReader2, BlobWriter: BlobWriter2, TextWriter } = await import("@zip-js/zip-js");
+      const {
+        ZipReader,
+        BlobReader: BlobReader2,
+        BlobWriter: BlobWriter2,
+        TextWriter,
+      } = await import("@zip-js/zip-js");
       const dlBytes = new Uint8Array(await dlResp.arrayBuffer());
       const zipReader = new ZipReader(new BlobReader2(new Blob([dlBytes])));
       const entries = await zipReader.getEntries();
 
-      type FileEntry = { getData: (w: InstanceType<typeof BlobWriter2> | InstanceType<typeof TextWriter>) => Promise<Blob | string> };
+      type FileEntry = {
+        getData: (
+          w: InstanceType<typeof BlobWriter2> | InstanceType<typeof TextWriter>,
+        ) => Promise<Blob | string>;
+      };
       const metaEntry = entries.find((e) => e.filename === "_meta");
       expect(metaEntry).toBeTruthy();
-      const metaText = await (metaEntry as FileEntry).getData(new TextWriter()) as string;
+      const metaText = (await (metaEntry as FileEntry).getData(new TextWriter())) as string;
       const dlMeta = JSON.parse(metaText) as Record<string, string>;
 
       // Find which zip index maps to our file
-      const zipIndex = Object.entries(dlMeta).find(([, name]) => name === "roundtrip_test.txt")?.[0];
+      const zipIndex = Object.entries(dlMeta).find(
+        ([, name]) => name === "roundtrip_test.txt",
+      )?.[0];
       expect(zipIndex).toBeTruthy();
 
       const dataEntry = entries.find((e) => e.filename === zipIndex);
       expect(dataEntry).toBeTruthy();
-      const dataBlob = await (dataEntry as FileEntry).getData(new BlobWriter2()) as Blob;
+      const dataBlob = (await (dataEntry as FileEntry).getData(new BlobWriter2())) as Blob;
       const downloadedContent = await dataBlob.text();
       expect(downloadedContent).toBe(fileContent);
 
@@ -764,7 +777,10 @@ describe.skipIf(!serverBin)("sync integration", () => {
       const zw = new ZipWriter(new BlobWriter("application/zip"));
       await zw.add("0", new BlobReader(new Blob(["content_a"])));
       await zw.add("1", new BlobReader(new Blob(["content_b"])));
-      const meta: Array<[string, string]> = [["file_a.txt", "0"], ["file_b.txt", "1"]];
+      const meta: Array<[string, string]> = [
+        ["file_a.txt", "0"],
+        ["file_b.txt", "1"],
+      ];
       await zw.add("_meta", new BlobReader(new Blob([JSON.stringify(meta)])));
       const zipBlob = await zw.close();
 
@@ -788,7 +804,9 @@ describe.skipIf(!serverBin)("sync integration", () => {
       const changesResp = await fetch(`${base}/msync/mediaChanges`, { method: "POST", body: cf });
       expect(changesResp.ok).toBe(true);
 
-      const changes = await readResponseJson(changesResp) as Array<[string, number, string | null]>;
+      const changes = (await readResponseJson(changesResp)) as Array<
+        [string, number, string | null]
+      >;
       // Should have our two files
       const fileA = changes.find(([name]) => name === "file_a.txt");
       const fileB = changes.find(([name]) => name === "file_b.txt");
@@ -858,7 +876,9 @@ describe.skipIf(!serverBin)("sync integration", () => {
       cf.append("data", JSON.stringify({ lastUsn: 0 }));
       cf.append("c", "0");
       const changesResp = await fetch(`${base}/msync/mediaChanges`, { method: "POST", body: cf });
-      const changes = await readResponseJson(changesResp) as Array<[string, number, string | null]>;
+      const changes = (await readResponseJson(changesResp)) as Array<
+        [string, number, string | null]
+      >;
 
       // Find the latest entry for our file (should have null sha1 = deleted)
       const deleteEntries = changes.filter(([name]) => name === "to_delete.txt");
@@ -894,9 +914,9 @@ describe.skipIf(!serverBin)("sync integration", () => {
       vi.spyOn(Date, "now").mockImplementation(() => realNow() + 10 * 60 * 1000);
 
       try {
-        await expect(
-          normalSync(serverUrl, hkey, TEST_DECK_ID, modified),
-        ).rejects.toThrow(ClockSkewError);
+        await expect(normalSync(serverUrl, hkey, TEST_DECK_ID, modified)).rejects.toThrow(
+          ClockSkewError,
+        );
       } finally {
         vi.restoreAllMocks();
       }
@@ -923,9 +943,7 @@ describe.skipIf(!serverBin)("sync integration", () => {
       corrupt.close();
 
       // Should throw but not hang or leave server in bad state
-      await expect(
-        normalSync(serverUrl, hkey, TEST_DECK_ID, corruptBytes),
-      ).rejects.toThrow();
+      await expect(normalSync(serverUrl, hkey, TEST_DECK_ID, corruptBytes)).rejects.toThrow();
 
       // Server should still be usable after the failed sync
       const hkey2 = await login(serverUrl, TEST_USER, TEST_PASS);

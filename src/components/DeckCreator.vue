@@ -34,7 +34,10 @@ function exportDeck() {
     <h2 class="title">Create Deck</h2>
 
     <div class="mode-toggle">
-      <button :class="['mode-btn', { 'mode-btn--active': mode === 'manual' }]" @click="mode = 'manual'">
+      <button
+        :class="['mode-btn', { 'mode-btn--active': mode === 'manual' }]"
+        @click="mode = 'manual'"
+      >
         Manual
       </button>
       <button :class="['mode-btn', { 'mode-btn--active': mode === 'ai' }]" @click="mode = 'ai'">
@@ -44,8 +47,8 @@ function exportDeck() {
 
     <template v-if="mode === 'manual'">
       <p class="description">
-        Paste a table with two columns. Column 1 becomes the front of each card, column 2 becomes the
-        back. Export as a text file you can import into Anki.
+        Paste a table with two columns. Column 1 becomes the front of each card, column 2 becomes
+        the back. Export as a text file you can import into Anki.
       </p>
 
       <div class="controls">

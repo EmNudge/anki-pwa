@@ -2,11 +2,7 @@
 import { computed } from "vue";
 import { Button } from "../design-system";
 import type { Answer } from "../scheduler/types";
-import {
-  getReviewControls,
-  triggerReviewControl,
-  type ReviewIntervals,
-} from "./reviewControls";
+import { getReviewControls, triggerReviewControl, type ReviewIntervals } from "./reviewControls";
 
 const props = defineProps<{
   activeSide: "front" | "back";
@@ -28,7 +24,13 @@ const visibleControls = computed(() => getReviewControls(props.activeSide));
     :variant="visibleControls[0]?.variant ?? 'primary'"
     size="lg"
     full-width
-    @click="() => triggerReviewControl('reveal', { reveal: () => emit('reveal'), chooseAnswer: (answer) => emit('chooseAnswer', answer) })"
+    @click="
+      () =>
+        triggerReviewControl('reveal', {
+          reveal: () => emit('reveal'),
+          chooseAnswer: (answer) => emit('chooseAnswer', answer),
+        })
+    "
   >
     {{ visibleControls[0]?.label ?? "Reveal" }}
   </Button>
@@ -46,7 +48,7 @@ const visibleControls = computed(() => getReviewControls(props.activeSide));
       "
     >
       <span class="time">
-        {{ control.interval ? intervals?.[control.interval] ?? control.fallbackInterval : "" }}
+        {{ control.interval ? (intervals?.[control.interval] ?? control.fallbackInterval) : "" }}
       </span>
       <span class="answer">{{ control.label }}</span>
     </Button>

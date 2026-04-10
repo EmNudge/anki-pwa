@@ -65,11 +65,7 @@ export function normalizeUrl(serverUrl: string): string {
  * - Authenticated endpoints also get "k" (host key) as a separate top-level field.
  * - "v": client version string (media sync endpoints)
  */
-function buildSyncForm(
-  data: unknown,
-  hkey?: string,
-  extra?: Record<string, string>,
-): FormData {
+function buildSyncForm(data: unknown, hkey?: string, extra?: Record<string, string>): FormData {
   const form = new FormData();
   if (hkey) {
     form.append("k", hkey);
@@ -125,7 +121,7 @@ export async function syncPostV11(
   const compressed = await compressZstd(json);
 
   const headers: Record<string, string> = {
-    "Authorization": `Bearer ${hkey}`,
+    Authorization: `Bearer ${hkey}`,
     "Content-Type": "application/octet-stream",
     "Content-Encoding": "zstd",
   };
@@ -188,10 +184,15 @@ export async function downloadCollection(
     throw new Error(`Download failed: ${response.status} ${response.statusText}`);
   }
 
-  const bytes = await readResponseBytes(response, onProgress ? (received) => {
-    const mb = (received / (1024 * 1024)).toFixed(1);
-    onProgress(`Downloading collection... (${mb} MB)`);
-  } : undefined);
+  const bytes = await readResponseBytes(
+    response,
+    onProgress
+      ? (received) => {
+          const mb = (received / (1024 * 1024)).toFixed(1);
+          onProgress(`Downloading collection... (${mb} MB)`);
+        }
+      : undefined,
+  );
 
   return decompressIfNeeded(bytes);
 }
@@ -202,11 +203,7 @@ const mediaSyncBeginSchema = z.object({
   usn: z.number(),
 });
 
-const mediaChangeSchema = z.tuple([
-  z.string(),
-  z.number(),
-  z.string().nullable(),
-]);
+const mediaChangeSchema = z.tuple([z.string(), z.number(), z.string().nullable()]);
 
 const mediaChangesSchema = z.array(mediaChangeSchema);
 
@@ -233,7 +230,9 @@ export async function downloadMedia(
 
   if (!beginResponse.ok) {
     const body = await beginResponse.text().catch(() => "(unreadable)");
-    throw new Error(`msync/begin failed: ${beginResponse.status} ${beginResponse.statusText} — ${body}`);
+    throw new Error(
+      `msync/begin failed: ${beginResponse.status} ${beginResponse.statusText} — ${body}`,
+    );
   }
 
   const beginJson = await readResponseJson(beginResponse);
@@ -250,7 +249,9 @@ export async function downloadMedia(
 
     if (!changesResponse.ok) {
       const body = await changesResponse.text().catch(() => "(unreadable)");
-      throw new Error(`msync/mediaChanges failed: ${changesResponse.status} ${changesResponse.statusText} — ${body}`);
+      throw new Error(
+        `msync/mediaChanges failed: ${changesResponse.status} ${changesResponse.statusText} — ${body}`,
+      );
     }
 
     const changesJson = await readResponseJson(changesResponse);
@@ -275,7 +276,9 @@ export async function downloadMedia(
 
       if (!dlResponse.ok) {
         const body = await dlResponse.text().catch(() => "(unreadable)");
-        throw new Error(`msync/downloadFiles failed: ${dlResponse.status} ${dlResponse.statusText} — ${body}`);
+        throw new Error(
+          `msync/downloadFiles failed: ${dlResponse.status} ${dlResponse.statusText} — ${body}`,
+        );
       }
 
       const zipBlob = await dlResponse.blob();
@@ -283,14 +286,14 @@ export async function downloadMedia(
       const decompressed = await decompressIfNeeded(zipBytes);
 
       const { ZipReader, BlobReader, BlobWriter, TextWriter } = await import("@zip-js/zip-js");
-      const zipReader = new ZipReader(
-        new BlobReader(new Blob([decompressed as BlobPart])),
-      );
+      const zipReader = new ZipReader(new BlobReader(new Blob([decompressed as BlobPart])));
       const entries = await zipReader.getEntries();
 
       // Read _meta entry to get index-to-filename mapping
       type EntryWithGetData = {
-        getData: (w: InstanceType<typeof BlobWriter> | InstanceType<typeof TextWriter>) => Promise<Blob | string>;
+        getData: (
+          w: InstanceType<typeof BlobWriter> | InstanceType<typeof TextWriter>,
+        ) => Promise<Blob | string>;
       };
       const metaEntry = entries.find((e) => e.filename === "_meta");
       if (!metaEntry || !("getData" in metaEntry)) {
@@ -364,7 +367,9 @@ export async function uploadMedia(
   });
   if (!beginResponse.ok) {
     const body = await beginResponse.text().catch(() => "(unreadable)");
-    throw new Error(`msync/begin failed: ${beginResponse.status} ${beginResponse.statusText} — ${body}`);
+    throw new Error(
+      `msync/begin failed: ${beginResponse.status} ${beginResponse.statusText} — ${body}`,
+    );
   }
   const beginJson = await readResponseJson(beginResponse);
   const { usn: serverUsn } = mediaSyncBeginSchema.parse(beginJson);
@@ -443,7 +448,9 @@ export async function uploadMedia(
 
     if (!uploadResponse.ok) {
       const body = await uploadResponse.text().catch(() => "(unreadable)");
-      throw new Error(`msync/uploadChanges failed: ${uploadResponse.status} ${uploadResponse.statusText} — ${body}`);
+      throw new Error(
+        `msync/uploadChanges failed: ${uploadResponse.status} ${uploadResponse.statusText} — ${body}`,
+      );
     }
 
     const r = await readResponseJson(uploadResponse);
@@ -463,7 +470,7 @@ export async function uploadMedia(
     local: localCount,
   });
   if (sanityResponse.ok) {
-    const s = await readResponseJson(sanityResponse) as { status?: string };
+    const s = (await readResponseJson(sanityResponse)) as { status?: string };
     if (s.status === "bad") {
       console.warn("Media sanity check failed: local and server media counts differ");
     }
@@ -566,9 +573,7 @@ async function decompressIfNeeded(bytes: Uint8Array): Promise<Uint8Array> {
   // Gzip: 0x1f 0x8b
   if (bytes[0] === 0x1f && bytes[1] === 0x8b) {
     const ds = new DecompressionStream("gzip");
-    const decompressed = new Response(
-      new Blob([bytes as BlobPart]).stream().pipeThrough(ds),
-    );
+    const decompressed = new Response(new Blob([bytes as BlobPart]).stream().pipeThrough(ds));
     return new Uint8Array(await decompressed.arrayBuffer());
   }
 

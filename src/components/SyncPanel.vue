@@ -24,7 +24,12 @@ import {
   initializeReviewQueue,
 } from "../stores";
 import { applyReviewStateToSqlite } from "../lib/syncWrite";
-import { normalSync, FullSyncRequiredError, SyncAbortedError, ClockSkewError } from "../lib/normalSync";
+import {
+  normalSync,
+  FullSyncRequiredError,
+  SyncAbortedError,
+  ClockSkewError,
+} from "../lib/normalSync";
 import mime from "mime";
 
 const serverUrl = ref("");
@@ -106,13 +111,9 @@ async function handleSync() {
 
     // Attempt normal (incremental) sync
     const deckId = getActiveDeckId();
-    const result = await normalSync(
-      serverUrl.value,
-      state.hkey,
-      deckId,
-      cachedBytes,
-      (status) => { syncStatus.value = status; },
-    );
+    const result = await normalSync(serverUrl.value, state.hkey, deckId, cachedBytes, (status) => {
+      syncStatus.value = status;
+    });
 
     if (result.action === "noChanges") {
       syncStatus.value = "Already up to date.";
@@ -131,7 +132,9 @@ async function handleSync() {
     // Download any new media files from the server
     syncStatus.value = "Checking for new media...";
     try {
-      const mediaBlobs = await downloadMedia(serverUrl.value, state.hkey, (s) => { syncStatus.value = s; });
+      const mediaBlobs = await downloadMedia(serverUrl.value, state.hkey, (s) => {
+        syncStatus.value = s;
+      });
       if (mediaBlobs.size > 0) {
         // Apply MIME types to downloaded blobs
         const typedBlobs = new Map<string, Blob>();
@@ -151,7 +154,9 @@ async function handleSync() {
     // Upload any local media files the server doesn't have
     syncStatus.value = "Checking for media to upload...";
     try {
-      const mediaUploaded = await uploadMedia(serverUrl.value, state.hkey, (s) => { syncStatus.value = s; });
+      const mediaUploaded = await uploadMedia(serverUrl.value, state.hkey, (s) => {
+        syncStatus.value = s;
+      });
       if (mediaUploaded > 0) {
         syncStatus.value = `Uploaded ${mediaUploaded} media file${mediaUploaded === 1 ? "" : "s"}.`;
       }
@@ -185,7 +190,9 @@ async function handleSync() {
 /** Full download (pull) — replaces local collection entirely. */
 async function doFullPull(hkey: string) {
   syncStatus.value = "Downloading collection...";
-  const setStatus = (s: string) => { syncStatus.value = s; };
+  const setStatus = (s: string) => {
+    syncStatus.value = s;
+  };
   const sqliteBytes = await downloadCollection(serverUrl.value, hkey, setStatus);
 
   syncStatus.value = "Downloading media files...";
@@ -270,7 +277,9 @@ async function handlePush() {
     // Upload media files
     syncStatus.value = "Uploading media files...";
     try {
-      const mediaUploaded = await uploadMedia(serverUrl.value, state.hkey, (s) => { syncStatus.value = s; });
+      const mediaUploaded = await uploadMedia(serverUrl.value, state.hkey, (s) => {
+        syncStatus.value = s;
+      });
       if (mediaUploaded > 0) {
         syncStatus.value = `Uploaded ${mediaUploaded} media file${mediaUploaded === 1 ? "" : "s"}.`;
       }
@@ -384,11 +393,7 @@ function formatLastSync(timestamp: number | null): string {
           <button class="sync-btn sync-btn--secondary" :disabled="isSyncing" @click="handleLogout">
             Log Out
           </button>
-          <button
-            class="sync-btn sync-btn--danger"
-            :disabled="isSyncing"
-            @click="handleDisconnect"
-          >
+          <button class="sync-btn sync-btn--danger" :disabled="isSyncing" @click="handleDisconnect">
             Disconnect
           </button>
         </div>
@@ -396,8 +401,8 @@ function formatLastSync(timestamp: number | null): string {
         <!-- Full sync required dialog -->
         <div v-if="showFullSyncDialog" class="sync-confirm">
           <p class="sync-confirm-text">
-            <strong>Full sync required.</strong> The collection schema has changed
-            (e.g. notetypes were modified on another device). Choose a direction:
+            <strong>Full sync required.</strong> The collection schema has changed (e.g. notetypes
+            were modified on another device). Choose a direction:
           </p>
           <div class="sync-confirm-actions">
             <button class="sync-btn sync-btn--primary" @click="handlePull">
@@ -437,10 +442,18 @@ function formatLastSync(timestamp: number | null): string {
               Bypass incremental sync and transfer the entire collection.
             </p>
             <div class="sync-actions">
-              <button class="sync-btn sync-btn--secondary" :disabled="isSyncing" @click="handlePull">
+              <button
+                class="sync-btn sync-btn--secondary"
+                :disabled="isSyncing"
+                @click="handlePull"
+              >
                 Full Download
               </button>
-              <button class="sync-btn sync-btn--push" :disabled="isSyncing" @click="showPushConfirm = true">
+              <button
+                class="sync-btn sync-btn--push"
+                :disabled="isSyncing"
+                @click="showPushConfirm = true"
+              >
                 Full Upload
               </button>
             </div>
@@ -477,16 +490,16 @@ function formatLastSync(timestamp: number | null): string {
 
         <h3>What gets synced</h3>
         <p>
-          <strong>Sync</strong> performs an incremental two-way sync, sending only changes since
-          the last sync. Reviews done on desktop and here are merged automatically (newer wins).
+          <strong>Sync</strong> performs an incremental two-way sync, sending only changes since the
+          last sync. Reviews done on desktop and here are merged automatically (newer wins).
         </p>
         <p>
-          If the collection schema changed (e.g. notetypes were edited), a full sync is required
-          and you'll be asked to choose a direction.
+          If the collection schema changed (e.g. notetypes were edited), a full sync is required and
+          you'll be asked to choose a direction.
         </p>
         <p>
-          <strong>Force full sync</strong> options bypass incremental sync and transfer the
-          entire collection in one direction (download or upload).
+          <strong>Force full sync</strong> options bypass incremental sync and transfer the entire
+          collection in one direction (download or upload).
         </p>
       </div>
     </details>

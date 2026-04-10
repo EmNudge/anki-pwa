@@ -2,9 +2,7 @@ import type { SubDeckInfo, DeckTreeNode } from "../types";
 import type { AnkiData } from "../ankiParser";
 
 export function computeDeckInfo(ankiData: AnkiData) {
-  const nameToDeckId = new Map(
-    Object.entries(ankiData.decks).map(([id, deck]) => [deck.name, id]),
-  );
+  const nameToDeckId = new Map(Object.entries(ankiData.decks).map(([id, deck]) => [deck.name, id]));
 
   const cardsWithDeckIds = ankiData.cards.map((card) => ({
     card,

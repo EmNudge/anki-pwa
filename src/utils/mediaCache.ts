@@ -7,18 +7,14 @@ const MEDIA_PATH_PREFIX = "/sync/media/";
 
 /** Filter cache keys that belong to synced media entries. */
 export function filterMediaKeys(allKeys: readonly Request[]): Request[] {
-  return allKeys.filter((req) =>
-    new URL(req.url).pathname.startsWith(MEDIA_PATH_PREFIX),
-  );
+  return allKeys.filter((req) => new URL(req.url).pathname.startsWith(MEDIA_PATH_PREFIX));
 }
 
 /** Extract the filename from a media cache key. */
 export function mediaKeyToFilename(req: Request): string {
   // decodeURIComponent is needed because the Cache API URL-encodes pathnames
   // (e.g., spaces → %20, unicode → %XX), but card HTML references raw filenames.
-  return decodeURIComponent(
-    new URL(req.url).pathname.slice(MEDIA_PATH_PREFIX.length),
-  );
+  return decodeURIComponent(new URL(req.url).pathname.slice(MEDIA_PATH_PREFIX.length));
 }
 
 /** Build a cache key path for a media filename. */
@@ -29,9 +25,7 @@ export function mediaCachePath(filename: string): string {
 /**
  * Load all cached media entries as filename → Blob.
  */
-export async function getLocalMediaEntries(
-  cache: Cache,
-): Promise<Map<string, Blob>> {
+export async function getLocalMediaEntries(cache: Cache): Promise<Map<string, Blob>> {
   const mediaKeys = filterMediaKeys(await cache.keys());
   const entries = new Map<string, Blob>();
   for (const req of mediaKeys) {
@@ -47,9 +41,7 @@ export async function getLocalMediaEntries(
  * Load all cached media entries as filename → object URL string.
  * Caller is responsible for revoking the returned URLs when no longer needed.
  */
-export async function loadMediaObjectUrls(
-  cache: Cache,
-): Promise<Map<string, string>> {
+export async function loadMediaObjectUrls(cache: Cache): Promise<Map<string, string>> {
   const mediaKeys = filterMediaKeys(await cache.keys());
   const urls = new Map<string, string>();
   for (const req of mediaKeys) {

@@ -68,11 +68,7 @@ function handleSave() {
     <div class="edit-form">
       <div v-for="(val, key) in editFields" :key="key" class="field-group">
         <label class="field-label">{{ key }}</label>
-        <textarea
-          v-model="editFields[key]"
-          class="field-input"
-          rows="4"
-        />
+        <textarea v-model="editFields[key]" class="field-input" rows="4" />
       </div>
 
       <div class="tags-section">

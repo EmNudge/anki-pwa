@@ -40,10 +40,30 @@ function icon(comp: Component): Component {
 }
 
 const TAB_DEFINITIONS: { id: AppView; title: string; description: string; icon: Component }[] = [
-  { id: "review", title: "Review", description: "Study cards with spaced repetition", icon: markRaw(BookOpen) },
-  { id: "browse", title: "Browse", description: "Search and explore your cards", icon: markRaw(Search) },
-  { id: "create", title: "Create Deck", description: "Build a new deck from scratch", icon: markRaw(FolderPlus) },
-  { id: "sync", title: "Sync", description: "Sync with AnkiWeb or import collections", icon: markRaw(RefreshCcw) },
+  {
+    id: "review",
+    title: "Review",
+    description: "Study cards with spaced repetition",
+    icon: markRaw(BookOpen),
+  },
+  {
+    id: "browse",
+    title: "Browse",
+    description: "Search and explore your cards",
+    icon: markRaw(Search),
+  },
+  {
+    id: "create",
+    title: "Create Deck",
+    description: "Build a new deck from scratch",
+    icon: markRaw(FolderPlus),
+  },
+  {
+    id: "sync",
+    title: "Sync",
+    description: "Sync with AnkiWeb or import collections",
+    icon: markRaw(RefreshCcw),
+  },
 ];
 
 export function useCommands() {
@@ -51,9 +71,8 @@ export function useCommands() {
     const ankiData = ankiDataSig.value;
     const currentView = activeViewSig.value;
 
-    const tabCommands: Command[] = TAB_DEFINITIONS
-      .filter((tab) => tab.id !== currentView)
-      .map((tab) => ({
+    const tabCommands: Command[] = TAB_DEFINITIONS.filter((tab) => tab.id !== currentView).map(
+      (tab) => ({
         id: `go-to-${tab.id}`,
         title: `Go to ${tab.title}`,
         description: tab.description,
@@ -65,7 +84,8 @@ export function useCommands() {
             activeViewSig.value = tab.id;
           }
         },
-      }));
+      }),
+    );
 
     const commands: Command[] = [
       ...tabCommands,
@@ -128,7 +148,8 @@ const FLAG_COLORS: { flag: number; label: string; color: string }[] = [
 
 function buildCardActionCommands(ankiData: AnkiData | null): Command[] {
   const reviewCard = currentReviewCardSig.value;
-  if (!reviewCard || activeViewSig.value !== "review" || reviewModeSig.value !== "studying") return [];
+  if (!reviewCard || activeViewSig.value !== "review" || reviewModeSig.value !== "studying")
+    return [];
 
   const queue = reviewQueueSig.value;
   const noteCard = ankiData?.cards[reviewCard.cardIndex];
@@ -142,7 +163,9 @@ function buildCardActionCommands(ankiData: AnkiData | null): Command[] {
       description: "Hide this card until tomorrow's review session",
       icon: icon(EyeOff),
       hotkey: "-",
-      handler: () => { buryCurrentCard(); },
+      handler: () => {
+        buryCurrentCard();
+      },
     },
     {
       id: "suspend-card",
@@ -150,7 +173,9 @@ function buildCardActionCommands(ankiData: AnkiData | null): Command[] {
       description: "Remove this card from all future reviews until manually unsuspended",
       icon: icon(Ban),
       hotkey: "@",
-      handler: () => { suspendCurrentCard(); },
+      handler: () => {
+        suspendCurrentCard();
+      },
     },
     {
       id: "flag-card",
@@ -164,7 +189,9 @@ function buildCardActionCommands(ankiData: AnkiData | null): Command[] {
           title: "No Flag",
           icon: icon(Flag),
           label: currentFlag === 0 ? "Current" : undefined,
-          handler: () => { flagCurrentCard(0); },
+          handler: () => {
+            flagCurrentCard(0);
+          },
         },
         ...FLAG_COLORS.map(({ flag, label, color }) => ({
           id: `flag-${flag}`,
@@ -172,7 +199,9 @@ function buildCardActionCommands(ankiData: AnkiData | null): Command[] {
           icon: icon(Flag),
           label: currentFlag === flag ? "Current" : undefined,
           metadata: [{ label: "Color", value: color }],
-          handler: () => { flagCurrentCard(flag); },
+          handler: () => {
+            flagCurrentCard(flag);
+          },
         })),
       ],
     },
@@ -191,11 +220,15 @@ function buildCardActionCommands(ankiData: AnkiData | null): Command[] {
     commands.push({
       id: "mark-note",
       title: isMarked ? "Unmark Note" : "Mark Note",
-      description: isMarked ? "Remove the \"marked\" tag from this note" : "Tag this note as \"marked\" for easy filtering",
+      description: isMarked
+        ? 'Remove the "marked" tag from this note'
+        : 'Tag this note as "marked" for easy filtering',
       icon: icon(Star),
       hotkey: "*",
       label: isMarked ? "Marked" : undefined,
-      handler: () => { markCurrentNote(); },
+      handler: () => {
+        markCurrentNote();
+      },
     });
   }
 
@@ -213,7 +246,10 @@ function buildCardInfoMetadata(
   ];
 
   if (displayInfo.ease !== undefined) {
-    entries.push({ label: "Ease Factor", value: String(Math.round((displayInfo.ease as number) * 100)) + "%" });
+    entries.push({
+      label: "Ease Factor",
+      value: String(Math.round((displayInfo.ease as number) * 100)) + "%",
+    });
   }
   if (displayInfo.interval !== undefined) {
     entries.push({ label: "Interval", value: displayInfo.interval + " days" });
@@ -235,7 +271,10 @@ function buildCardInfoMetadata(
   }
 
   if (reviewCard.reviewState.lastReviewed) {
-    entries.push({ label: "Last Reviewed", value: new Date(reviewCard.reviewState.lastReviewed).toLocaleDateString() });
+    entries.push({
+      label: "Last Reviewed",
+      value: new Date(reviewCard.reviewState.lastReviewed).toLocaleDateString(),
+    });
   }
 
   return entries;

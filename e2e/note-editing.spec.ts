@@ -199,8 +199,6 @@ test.describe('Note Editing', () => {
 
     // Get the first row guid by selecting it and reading a field value
     await page.locator('.browse-table tbody tr').first().click();
-    const firstFieldValue = await page.locator('.detail-field-value').first().textContent();
-
     // Edit the first card's note
     await page.locator('.detail-pane button:has-text("Edit")').click();
     const firstTextarea = page.locator('.edit-form textarea.field-input').first();

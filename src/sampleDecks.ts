@@ -17,7 +17,7 @@ type SampleDeck = {
 const basicTemplate = {
   name: "Card 1",
   qfmt: "{{Front}}",
-  afmt: "{{FrontSide}}<hr id=\"answer\">{{Back}}",
+  afmt: '{{FrontSide}}<hr id="answer">{{Back}}',
 };
 
 const basicCss = ANKI_DEFAULT_CSS;

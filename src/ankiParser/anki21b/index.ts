@@ -243,7 +243,8 @@ export function getDataFromAnki21b(db: Database): AnkiDB21bData {
   const tagsTable = (() => {
     try {
       const rows = executeQueryAll<{ tag: string; collapsed: number }>(
-        db, "SELECT tag, collapsed FROM tags",
+        db,
+        "SELECT tag, collapsed FROM tags",
       );
       return rows.map((r) => ({ tag: r.tag, collapsed: r.collapsed !== 0 }));
     } catch {

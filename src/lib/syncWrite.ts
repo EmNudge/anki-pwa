@@ -1,5 +1,5 @@
 import { createDatabase } from "~/utils/sql";
-import type { CardReviewState, StoredReviewLog } from "../scheduler/types";
+import type { CardReviewState } from "../scheduler/types";
 import { MS_PER_DAY } from "../utils/constants";
 
 /**
@@ -17,8 +17,8 @@ interface SM2CardState {
 }
 
 /** Queue constants matching official Anki desktop. */
-const QUEUE_SUSPENDED = -1;
-const QUEUE_SCHED_BURIED = -2;
+export const QUEUE_SUSPENDED = -1;
+export const QUEUE_SCHED_BURIED = -2;
 export const QUEUE_USER_BURIED = -3;
 
 /** SQL used to update card rows during sync write-back. */
@@ -26,18 +26,21 @@ export const CARD_UPDATE_SQL =
   "UPDATE cards SET type=?, queue=?, due=?, ivl=?, factor=?, reps=?, lapses=?, left=?, flags=?, mod=?, data=?, odue=?, odid=?, usn=? WHERE id=?";
 
 /** SQL used to insert graves (deleted objects) during sync write-back. */
-export const GRAVES_INSERT_SQL =
-  "INSERT INTO graves (usn, oid, type) VALUES (?, ?, ?)";
+export const GRAVES_INSERT_SQL = "INSERT INTO graves (usn, oid, type) VALUES (?, ?, ?)";
 
 /**
  * Map SM-2 phase to Anki card.type column.
  */
 function phaseToType(phase: SM2CardState["phase"]): number {
   switch (phase) {
-    case "new": return 0;
-    case "learning": return 1;
-    case "review": return 2;
-    case "relearning": return 3;
+    case "new":
+      return 0;
+    case "learning":
+      return 1;
+    case "review":
+      return 2;
+    case "relearning":
+      return 3;
   }
 }
 
@@ -47,11 +50,13 @@ function phaseToType(phase: SM2CardState["phase"]): number {
  */
 function phaseToQueue(phase: SM2CardState["phase"], interval?: number): number {
   switch (phase) {
-    case "new": return 0;
+    case "new":
+      return 0;
     case "learning":
     case "relearning":
       return (interval ?? 0) >= 1 ? 3 : 1;
-    case "review": return 2;
+    case "review":
+      return 2;
   }
 }
 
@@ -105,11 +110,16 @@ export function encodeLeft(
  */
 export function phaseToRevlogType(phase: string, daysLate?: number): number {
   switch (phase) {
-    case "new": return 0;
-    case "learning": return 0;
-    case "review": return (daysLate !== undefined && daysLate < 0) ? 3 : 1;
-    case "relearning": return 2;
-    default: return 1;
+    case "new":
+      return 0;
+    case "learning":
+      return 0;
+    case "review":
+      return daysLate !== undefined && daysLate < 0 ? 3 : 1;
+    case "relearning":
+      return 2;
+    default:
+      return 1;
   }
 }
 
@@ -148,8 +158,7 @@ export async function mergeIndexedDBToSqlite(
 ): Promise<void> {
   // Get collection creation time for due-date conversion
   const crtResult = db.exec("SELECT crt FROM col");
-  const collectionCreationSecs =
-    (crtResult[0]?.values[0]?.[0] as number | undefined) ?? 0;
+  const collectionCreationSecs = (crtResult[0]?.values[0]?.[0] as number | undefined) ?? 0;
 
   // Read all reviewed cards from IndexedDB
   const { reviewDB } = await import("../scheduler/db");
@@ -183,19 +192,34 @@ export async function mergeIndexedDBToSqlite(
     const due = convertDue(state, collectionCreationSecs);
     const ivl = Math.max(0, Math.round(state.interval));
     const factor = encodeFactor(state.ease, card.algorithm);
-    const totalSteps =
-      state.phase === "relearning" ? defaultRelearnSteps : defaultLearnSteps;
+    const totalSteps = state.phase === "relearning" ? defaultRelearnSteps : defaultLearnSteps;
     const stepsRemaining = Math.max(0, totalSteps - state.step);
     const left = encodeLeft(state, totalSteps, stepsRemaining);
     const flags = card.flags ?? 0;
     const data = serializeCardData(card);
 
-    updateStmt.run([type, queue, due, ivl, factor, state.reps, state.lapses, left, flags, nowSecs, data, 0, 0, -1, ankiCardId]);
+    updateStmt.run([
+      type,
+      queue,
+      due,
+      ivl,
+      factor,
+      state.reps,
+      state.lapses,
+      left,
+      flags,
+      nowSecs,
+      data,
+      0,
+      0,
+      -1,
+      ankiCardId,
+    ]);
   }
   updateStmt.free();
 
   // Insert review logs into revlog table
-  await insertRevlogs(db, deckId, reviewedCards);
+  await insertRevlogs(db, reviewedCards);
 
   // Insert graves for deleted cards
   await insertGraves(db, deckId);
@@ -270,16 +294,10 @@ export function serializeCardData(card: CardReviewState): string {
  */
 async function insertRevlogs(
   db: import("sql.js").Database,
-  _deckId: string,
   reviewedCards: CardReviewState[],
 ): Promise<void> {
-  const allLogs: StoredReviewLog[] = [];
-
   const { reviewDB } = await import("../scheduler/db");
-  for (const card of reviewedCards) {
-    const logs = await reviewDB.getReviewLogsForCard(card.cardId);
-    allLogs.push(...logs);
-  }
+  const allLogs = await reviewDB.getReviewLogsForCards(reviewedCards.map((c) => c.cardId));
 
   if (allLogs.length === 0) return;
 
@@ -307,9 +325,7 @@ async function insertRevlogs(
     const ankiCardId = Number(log.cardId);
     if (isNaN(ankiCardId)) continue;
 
-    const ease = typeof log.rating === "number"
-      ? log.rating
-      : (ANSWER_TO_EASE[log.rating] ?? 3);
+    const ease = typeof log.rating === "number" ? log.rating : (ANSWER_TO_EASE[log.rating] ?? 3);
 
     // Extract interval and factor from the review log if available
     const reviewLog = log.reviewLog as {
@@ -326,14 +342,16 @@ async function insertRevlogs(
     // Encode factor based on algorithm
     const cardState = cardStateMap.get(log.cardId);
     const algorithm = cardState?.algorithm ?? "sm2";
-    const factor = algorithm === "fsrs"
-      ? encodeFactor(0, "fsrs", reviewLog?.ease ?? 5.0)
-      : Math.round((reviewLog?.ease ?? 2.5) * 1000);
+    const factor =
+      algorithm === "fsrs"
+        ? encodeFactor(0, "fsrs", reviewLog?.ease ?? 5.0)
+        : Math.round((reviewLog?.ease ?? 2.5) * 1000);
 
     const time = reviewLog?.reviewTime ?? 0; // ms
 
     // Determine revlog type from card phase (0=learning, 1=review, 2=relearning)
-    const phase = reviewLog?.phase ?? (cardState?.cardState as SM2CardState | undefined)?.phase ?? "review";
+    const phase =
+      reviewLog?.phase ?? (cardState?.cardState as SM2CardState | undefined)?.phase ?? "review";
     const type = phaseToRevlogType(phase);
 
     insertStmt.run([id, ankiCardId, -1, ease, ivl, lastIvl, factor, time, type]);
@@ -345,13 +363,12 @@ async function insertRevlogs(
 /**
  * Insert graves entries for any deleted cards in this deck.
  */
-async function insertGraves(
-  db: import("sql.js").Database,
-  deckId: string,
-): Promise<void> {
+async function insertGraves(db: import("sql.js").Database, deckId: string): Promise<void> {
   const { reviewDB } = await import("../scheduler/db");
-  const db_ = reviewDB as unknown as { getDeletedCardsForDeck?: (deckId: string) => Promise<{ cardId: string }[]> };
-  const deletedCards = await db_.getDeletedCardsForDeck?.(deckId) ?? [];
+  const db_ = reviewDB as unknown as {
+    getDeletedCardsForDeck?: (deckId: string) => Promise<{ cardId: string }[]>;
+  };
+  const deletedCards = (await db_.getDeletedCardsForDeck?.(deckId)) ?? [];
   if (deletedCards.length === 0) return;
 
   const insertStmt = db.prepare(GRAVES_INSERT_SQL);

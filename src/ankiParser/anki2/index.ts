@@ -169,7 +169,10 @@ export function getDataFromAnki2(db: Database): AnkiDB2Data {
       data: string;
       sfld: string;
       csum: number;
-    }>(db, "SELECT id, guid, cast(mid as text) as modelId, tags, flds as fields, data, sfld, csum FROM notes");
+    }>(
+      db,
+      "SELECT id, guid, cast(mid as text) as modelId, tags, flds as fields, data, sfld, csum FROM notes",
+    );
 
     const notesMap = new Map(notes.map((n) => [n.id, n]));
 
@@ -270,7 +273,8 @@ export function getDataFromAnki2(db: Database): AnkiDB2Data {
   const graves = (() => {
     try {
       return executeQueryAll<{ usn: number; oid: number; type: number }>(
-        db, "SELECT usn, oid, type FROM graves",
+        db,
+        "SELECT usn, oid, type FROM graves",
       );
     } catch {
       return [];
@@ -290,16 +294,23 @@ export function getDataFromAnki2(db: Database): AnkiDB2Data {
     };
   });
 
-  return { cards, notesTypes, deckName, decks, revlog, collectionCreationTime, deckConfigs, graves };
+  return {
+    cards,
+    notesTypes,
+    deckName,
+    decks,
+    revlog,
+    collectionCreationTime,
+    deckConfigs,
+    graves,
+  };
 }
 
 /**
  * Parse FSRS memory state from card.data.
  * Supports both JSON format ({s, d, dr}) and protobuf format (FSRSMemoryState).
  */
-export function parseFsrsData(
-  data: string | Uint8Array,
-): CardScheduling["fsrs"] {
+export function parseFsrsData(data: string | Uint8Array): CardScheduling["fsrs"] {
   if (!data) return null;
 
   // If it's a Uint8Array (binary), try protobuf parsing
@@ -328,9 +339,7 @@ export function parseFsrsData(
  * Parse protobuf-encoded FSRSMemoryState.
  * Message: { stability: float (field 1), difficulty: float (field 2) }
  */
-function parseFsrsProtobuf(
-  data: Uint8Array,
-): CardScheduling["fsrs"] {
+function parseFsrsProtobuf(data: Uint8Array): CardScheduling["fsrs"] {
   if (data.length < 5) return null;
 
   let stability: number | null = null;

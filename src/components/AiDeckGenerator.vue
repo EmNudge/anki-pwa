@@ -97,7 +97,11 @@ async function handleGenerate() {
   activeName.value = null;
 
   try {
-    const spec = await generateAnkiDeck(documentText.value, instructions.value, selectedModel.value);
+    const spec = await generateAnkiDeck(
+      documentText.value,
+      instructions.value,
+      selectedModel.value,
+    );
     generatedSpec.value = spec;
 
     status.value = "building";
@@ -114,7 +118,10 @@ async function handleGenerate() {
 
 function handleDownload() {
   if (!generatedBlob.value || !generatedSpec.value) return;
-  downloadBlob(generatedBlob.value, `${generatedSpec.value.deckName.replace(/[^a-zA-Z0-9 _-]/g, "")}.apkg`);
+  downloadBlob(
+    generatedBlob.value,
+    `${generatedSpec.value.deckName.replace(/[^a-zA-Z0-9 _-]/g, "")}.apkg`,
+  );
 }
 
 async function handleDownloadEntry(entry: GeneratedEntry) {
@@ -164,7 +171,9 @@ function formatDate(timestamp: number): string {
 
 <template>
   <div class="ai-generator">
-    <div v-if="ollamaAvailable === null" class="status-message">Checking Ollama availability...</div>
+    <div v-if="ollamaAvailable === null" class="status-message">
+      Checking Ollama availability...
+    </div>
 
     <div v-else-if="!ollamaAvailable" class="status-message status-message--error">
       <p>
@@ -192,7 +201,12 @@ function formatDate(timestamp: number): string {
         </label>
 
         <label class="control-label">
-          <input type="file" accept=".txt,.md,.html,.csv,.json" class="file-input" @change="handleFileUpload" />
+          <input
+            type="file"
+            accept=".txt,.md,.html,.csv,.json"
+            class="file-input"
+            @change="handleFileUpload"
+          />
           <span class="file-btn">Upload document</span>
         </label>
       </div>
@@ -218,7 +232,13 @@ function formatDate(timestamp: number): string {
           :disabled="!documentText.trim() || status === 'generating' || status === 'building'"
           @click="handleGenerate"
         >
-          {{ status === "generating" ? "Generating cards..." : status === "building" ? "Building .apkg..." : "Generate Deck" }}
+          {{
+            status === "generating"
+              ? "Generating cards..."
+              : status === "building"
+                ? "Building .apkg..."
+                : "Generate Deck"
+          }}
         </Button>
       </div>
 
@@ -269,12 +289,19 @@ function formatDate(timestamp: number): string {
           >
             <div class="history-info">
               <span class="history-name">{{ entry.deckName }}</span>
-              <span class="history-meta">{{ entry.cardCount }} cards · {{ formatDate(entry.createdAt) }}</span>
+              <span class="history-meta"
+                >{{ entry.cardCount }} cards · {{ formatDate(entry.createdAt) }}</span
+              >
             </div>
             <div class="history-actions">
               <button class="history-btn" @click="handleDownloadEntry(entry)">Download</button>
               <button class="history-btn" @click="handleLoadEntryInApp(entry)">Load</button>
-              <button class="history-btn history-btn--danger" @click="deleteGeneratedEntry(entry.name)">Delete</button>
+              <button
+                class="history-btn history-btn--danger"
+                @click="deleteGeneratedEntry(entry.name)"
+              >
+                Delete
+              </button>
             </div>
           </li>
         </ul>

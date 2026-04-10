@@ -28,6 +28,7 @@ import {
   clearMediaCache,
   filterMediaKeys,
 } from "./utils/mediaCache";
+import { QUEUE_USER_BURIED, QUEUE_SUSPENDED } from "./lib/syncWrite";
 
 /** Revoke object URLs from the previous media map to prevent memory leaks. */
 function revokeOldMediaUrls() {
@@ -203,16 +204,10 @@ export async function deleteCachedFile(name: string) {
 
 const SYNC_COLLECTION_ID = "sync-collection";
 
-export async function loadSyncedCollection(
-  bytes: Uint8Array,
-  mediaBlobs?: Map<string, Blob>,
-) {
+export async function loadSyncedCollection(bytes: Uint8Array, mediaBlobs?: Map<string, Blob>) {
   // Cache SQLite bytes and media blobs so they survive page reloads
   const cache = await ankiCachePromise;
-  await cache.put(
-    "/sync/collection.sqlite",
-    new Response(new Blob([bytes as BlobPart])),
-  );
+  await cache.put("/sync/collection.sqlite", new Response(new Blob([bytes as BlobPart])));
 
   // Revoke old object URLs before clearing
   revokeOldMediaUrls();
@@ -234,9 +229,7 @@ export async function loadSyncedCollection(
 
   // Clear old media entries that weren't replaced by new ones
   const oldMediaKeys = filterMediaKeys(await cache.keys());
-  const deletes = oldMediaKeys.filter(
-    (req) => !newMediaFilenames.has(mediaKeyToFilename(req)),
-  );
+  const deletes = oldMediaKeys.filter((req) => !newMediaFilenames.has(mediaKeyToFilename(req)));
   await Promise.all(deletes.map((req) => cache.delete(req)));
 
   persistActiveDeckSourceId(SYNC_COLLECTION_ID);
@@ -261,15 +254,11 @@ export async function getCachedSqlite(): Promise<Uint8Array | null> {
  */
 export async function refreshSyncedCollection(bytes: Uint8Array) {
   const cache = await ankiCachePromise;
-  await cache.put(
-    "/sync/collection.sqlite",
-    new Response(new Blob([bytes as BlobPart])),
-  );
+  await cache.put("/sync/collection.sqlite", new Response(new Blob([bytes as BlobPart])));
 
   // Recover existing media object URLs from the current activeDeckInputSig
   const currentInput = activeDeckInputSig.value;
-  const existingMedia =
-    currentInput?.kind === "sqlite" ? currentInput.mediaFiles : undefined;
+  const existingMedia = currentInput?.kind === "sqlite" ? currentInput.mediaFiles : undefined;
 
   persistActiveDeckSourceId(SYNC_COLLECTION_ID);
   activeDeckInputSig.value = { kind: "sqlite", bytes, mediaFiles: existingMedia };
@@ -289,8 +278,7 @@ export async function addMediaToCache(mediaBlobs: Map<string, Blob>) {
   const currentInput = activeDeckInputSig.value;
 
   // Get or create the media files map
-  const existingMedia =
-    currentInput?.kind === "sqlite" ? currentInput.mediaFiles : undefined;
+  const existingMedia = currentInput?.kind === "sqlite" ? currentInput.mediaFiles : undefined;
   const mediaFiles = existingMedia ? new Map(existingMedia) : new Map<string, string>();
 
   for (const [filename, blob] of mediaBlobs) {
@@ -552,9 +540,7 @@ export function moveToNextReviewCard() {
       if (card.cardId === currentId) continue;
       if (!queue.isCardInLearning(card)) continue;
       try {
-        const dueMs = new Date(
-          (card.reviewState.cardState as { due: number }).due,
-        ).getTime();
+        const dueMs = new Date((card.reviewState.cardState as { due: number }).due).getTime();
         if (dueMs <= nowMs) {
           currentReviewCardSig.value = card;
           return;
@@ -624,8 +610,8 @@ function removeCurrentCardAndAdvance() {
 export async function buryCurrentCard() {
   const card = currentReviewCardSig.value;
   if (!card) return;
-  await reviewDB.patchCard(card.cardId, { queueOverride: -3 });
-  card.reviewState.queueOverride = -3;
+  await reviewDB.patchCard(card.cardId, { queueOverride: QUEUE_USER_BURIED });
+  card.reviewState.queueOverride = QUEUE_USER_BURIED;
   removeCurrentCardAndAdvance();
 }
 
@@ -635,8 +621,8 @@ export async function buryCurrentCard() {
 export async function suspendCurrentCard() {
   const card = currentReviewCardSig.value;
   if (!card) return;
-  await reviewDB.patchCard(card.cardId, { queueOverride: -1 });
-  card.reviewState.queueOverride = -1;
+  await reviewDB.patchCard(card.cardId, { queueOverride: QUEUE_SUSPENDED });
+  card.reviewState.queueOverride = QUEUE_SUSPENDED;
   removeCurrentCardAndAdvance();
 }
 
@@ -722,19 +708,20 @@ export async function updateNote(
     const mod = Math.floor(Date.now() / 1000);
     const tagsStr = newTags.length > 0 ? ` ${newTags.join(" ")} ` : "";
 
-    db.run(
-      "UPDATE notes SET flds=?, sfld=?, csum=?, mod=?, usn=-1, tags=? WHERE id=?",
-      [flds, sfld, csum, mod, tagsStr, noteId],
-    );
+    db.run("UPDATE notes SET flds=?, sfld=?, csum=?, mod=?, usn=-1, tags=? WHERE id=?", [
+      flds,
+      sfld,
+      csum,
+      mod,
+      tagsStr,
+      noteId,
+    ]);
 
     const newBytes = new Uint8Array(db.export());
 
     // Write to cache for sync
     const cache = await caches.open("anki-cache");
-    await cache.put(
-      "/sync/collection.sqlite",
-      new Response(new Blob([newBytes as BlobPart])),
-    );
+    await cache.put("/sync/collection.sqlite", new Response(new Blob([newBytes as BlobPart])));
 
     // Update in-place without triggering re-parse
     (input as { bytes: Uint8Array }).bytes = newBytes;
