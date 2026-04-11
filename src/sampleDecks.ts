@@ -150,3 +150,15 @@ export const sampleDecks: SampleDeck[] = [
 ];
 
 export const sampleDeckMap = new Map(sampleDecks.map((deck) => [deck.id, deck] as const));
+
+/** All sample decks merged into a single AnkiData, used as the default collection when no sync is configured. */
+export const mergedSampleDeckData = {
+  files: new Map(),
+  cards: sampleDecks.flatMap((d) => [...d.data.cards]),
+  deckName: "Sample Decks",
+  decks: Object.fromEntries(sampleDecks.flatMap((d) => Object.entries(d.data.decks))),
+  notesTypes: [],
+  collectionCreationTime: 0,
+  deckConfigs: {},
+  colConf: null,
+} as AnkiData;

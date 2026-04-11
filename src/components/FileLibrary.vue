@@ -18,6 +18,7 @@ import {
   adoptedSampleIdsSig,
   adoptSampleDeck,
   removeAdoptedSample,
+  SAMPLE_COLLECTION_ID,
 } from "../stores";
 import type { DeckTreeNode } from "../types";
 
@@ -25,14 +26,10 @@ const fileInput = ref<HTMLInputElement>();
 
 const adoptedIds = computed(() => new Set(adoptedSampleIdsSig.value));
 const sampleDecks = computed(() =>
-  sampleDeckData
-    .filter((d) => !adoptedIds.value.has(d.id))
-    .map(createSampleDeckLibraryItem),
+  sampleDeckData.filter((d) => !adoptedIds.value.has(d.id)).map(createSampleDeckLibraryItem),
 );
 const adoptedSampleDecks = computed(() =>
-  sampleDeckData
-    .filter((d) => adoptedIds.value.has(d.id))
-    .map(createSampleDeckLibraryItem),
+  sampleDeckData.filter((d) => adoptedIds.value.has(d.id)).map(createSampleDeckLibraryItem),
 );
 const uploadedDecks = computed(() =>
   [...cachedFilesSig.value].sort((a, b) => b.addedAt - a.addedAt).map(createCachedDeckLibraryItem),
@@ -77,6 +74,11 @@ function flattenTree(nodes: DeckTreeNode[]): DeckTreeNode[] {
 
 const flatTree = computed(() => (deckInfoSig.value ? flattenTree(deckInfoSig.value.tree) : []));
 
+/** Whether the sample collection is the active deck (no sync configured) */
+const isSampleCollectionActive = computed(
+  () => !syncActiveSig.value && activeDeckSourceIdSig.value === SAMPLE_COLLECTION_ID,
+);
+
 /** Whether the active deck belongs to "Your Decks" (adopted sample or uploaded file) */
 const isYourDeckActive = computed(() => {
   const id = activeDeckSourceIdSig.value;
@@ -105,32 +107,12 @@ function handleOpenSettings(node: DeckTreeNode, event: Event) {
       <Button variant="primary" size="sm" @click="fileInput?.click()"> Add File </Button>
     </div>
 
-    <section v-if="!syncActiveSig && sampleDecks.length > 0" class="library-section">
+    <section
+      v-if="(syncActiveSig || isSampleCollectionActive) && deckInfoSig"
+      class="library-section"
+    >
       <div class="section-header">
-        <h3 class="section-title">Sample Decks</h3>
-        <span class="section-count">{{ sampleDecks.length }}</span>
-      </div>
-      <div class="file-grid">
-        <div
-          v-for="sampleDeck in sampleDecks"
-          :key="sampleDeck.id"
-          class="file-card file-card--static"
-        >
-          <div class="file-info">
-            <span class="file-name">{{ sampleDeck.title }}</span>
-            <span class="file-meta">{{ sampleDeck.detail }}</span>
-            <span class="file-meta">{{ sampleDeck.meta }}</span>
-          </div>
-          <Button variant="secondary" size="sm" @click="adoptSampleDeck(sampleDeck.id)">
-            Add
-          </Button>
-        </div>
-      </div>
-    </section>
-
-    <section v-if="syncActiveSig && deckInfoSig" class="library-section">
-      <div class="section-header">
-        <h3 class="section-title">Synced Decks</h3>
+        <h3 class="section-title">{{ syncActiveSig ? "Synced Decks" : "Sample Decks" }}</h3>
         <span class="section-count">{{ deckInfoSig.subdecks.length }}</span>
       </div>
       <div v-if="deckInfoSig.subdecks.length === 0" class="empty-state">
@@ -211,9 +193,7 @@ function handleOpenSettings(node: DeckTreeNode, event: Event) {
       </div>
 
       <div v-if="uploadedDecks.length === 0 && adoptedSampleDecks.length === 0" class="empty-state">
-        <p class="empty-text">
-          No decks yet. Add an .apkg file or a sample deck to get started.
-        </p>
+        <p class="empty-text">No decks yet. Add an .apkg file or a sample deck to get started.</p>
         <Button variant="secondary" @click="fileInput?.click()"> Choose a Deck File </Button>
       </div>
 
@@ -258,7 +238,10 @@ function handleOpenSettings(node: DeckTreeNode, event: Event) {
         </div>
 
         <!-- Deck tree for active your-deck -->
-        <div v-if="!syncActiveSig && isYourDeckActive && deckInfoSig" class="deck-tree your-deck-tree">
+        <div
+          v-if="!syncActiveSig && isYourDeckActive && deckInfoSig"
+          class="deck-tree your-deck-tree"
+        >
           <div
             v-for="node in flatTree"
             :key="node.fullName"
