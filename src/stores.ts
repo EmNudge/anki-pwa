@@ -2,7 +2,7 @@ import { ref, computed, watch, shallowRef, triggerRef } from "vue";
 import { getAnkiDataFromBlob, getAnkiDataFromSqlite } from "./ankiParser";
 import type { AnkiData } from "./ankiParser";
 import { createDatabase } from "./utils/sql";
-import type { SqlValue } from "sql.js";
+
 import { stringHash } from "./utils/constants";
 import { ReviewQueue, type ReviewCard } from "./scheduler/queue";
 import { DEFAULT_SCHEDULER_SETTINGS, type SchedulerSettings } from "./scheduler/types";
@@ -487,7 +487,7 @@ export async function renameDeckInCollection(
   const db = await createDatabase(input.bytes);
   try {
     const tables = db.exec("SELECT name FROM sqlite_master WHERE type='table'");
-    const tableNames = new Set((tables[0]?.values ?? []).map((row) => row[0] as string));
+    const tableNames = new Set((tables[0]?.values ?? []).map((row) => String(row[0])));
     const anki21b = tableNames.has("notetypes");
 
     // Compute new full name: replace the last segment of oldFullName
@@ -510,8 +510,8 @@ export async function renameDeckInCollection(
       ]);
       if (children[0]) {
         for (const row of children[0].values) {
-          const childId = row[0] as number;
-          const childName = row[1] as string;
+          const childId = Number(row[0]);
+          const childName = String(row[1]);
           const updatedName = newFullName + childName.slice(oldFullName.length);
           db.run("UPDATE decks SET name=?, mtime_secs=?, usn=-1 WHERE id=?", [
             updatedName,
@@ -523,7 +523,7 @@ export async function renameDeckInCollection(
     } else {
       // anki2: decks stored as JSON in col.decks
       const result = db.exec("SELECT decks FROM col");
-      const decksJson = JSON.parse((result[0]?.values[0]?.[0] as string) ?? "{}");
+      const decksJson = JSON.parse(String(result[0]?.values[0]?.[0] ?? "{}"));
       const deck = decksJson[String(deckId)];
       if (deck) {
         deck.name = newFullName;
@@ -531,7 +531,7 @@ export async function renameDeckInCollection(
         deck.usn = -1;
       }
       // Update children
-      for (const d of Object.values(decksJson) as { name: string; mod: number; usn: number }[]) {
+      for (const d of Object.values(decksJson) as Array<{ name: string; mod: number; usn: number }>) {
         if (d.name.startsWith(oldFullName + "::")) {
           d.name = newFullName + d.name.slice(oldFullName.length);
           d.mod = mod;
@@ -548,7 +548,7 @@ export async function renameDeckInCollection(
     await cache.put("/sync/collection.sqlite", new Response(new Blob([newBytes as BlobPart])));
 
     // Update in-place and re-parse
-    (input as { bytes: Uint8Array }).bytes = newBytes;
+    activeDeckInputSig.value = { ...input, bytes: newBytes };
     const { getAnkiDataFromSqlite } = await import("./ankiParser");
     ankiDataSig.value = await getAnkiDataFromSqlite(newBytes, input.mediaFiles);
     markDataChanged();
@@ -571,7 +571,7 @@ export async function deleteDeckFromCollection(
   const db = await createDatabase(input.bytes);
   try {
     const tables = db.exec("SELECT name FROM sqlite_master WHERE type='table'");
-    const tableNames = new Set((tables[0]?.values ?? []).map((row) => row[0] as string));
+    const tableNames = new Set((tables[0]?.values ?? []).map((row) => String(row[0])));
     const anki21b = tableNames.has("notetypes");
 
     // Collect all deck IDs to delete (this deck + children)
@@ -583,12 +583,12 @@ export async function deleteDeckFromCollection(
         [deckId, fullName + "::%"],
       );
       if (rows[0]) {
-        for (const row of rows[0].values) deckIdsToDelete.push(row[0] as number);
+        for (const row of rows[0].values) deckIdsToDelete.push(Number(row[0]));
       }
     } else {
       const result = db.exec("SELECT decks FROM col");
-      const decksJson = JSON.parse((result[0]?.values[0]?.[0] as string) ?? "{}");
-      for (const [id, d] of Object.entries(decksJson) as [string, { name: string }][]) {
+      const decksJson = JSON.parse(String(result[0]?.values[0]?.[0] ?? "{}")) as Record<string, { name: string }>;
+      for (const [id, d] of Object.entries(decksJson)) {
         if (id === String(deckId) || d.name.startsWith(fullName + "::")) {
           deckIdsToDelete.push(Number(id));
         }
@@ -600,15 +600,15 @@ export async function deleteDeckFromCollection(
       const cardRows = db.exec("SELECT id, nid FROM cards WHERE did=?", [did]);
       if (cardRows[0]) {
         for (const row of cardRows[0].values) {
-          const cardId = row[0] as number;
-          const noteId = row[1] as number;
+          const cardId = Number(row[0]);
+          const noteId = Number(row[1]);
           db.run("DELETE FROM cards WHERE id=?", [cardId]);
           await reviewDB.deleteCard(String(cardId));
           await reviewDB.deleteReviewLogsForCard(String(cardId));
 
           // Delete note if no more cards reference it
           const remaining = db.exec("SELECT COUNT(*) FROM cards WHERE nid=?", [noteId]);
-          if ((remaining[0]?.values[0]?.[0] as number) === 0) {
+          if (Number(remaining[0]?.values[0]?.[0] ?? -1) === 0) {
             db.run("DELETE FROM notes WHERE id=?", [noteId]);
           }
         }
@@ -626,7 +626,7 @@ export async function deleteDeckFromCollection(
     if (!anki21b) {
       // anki2: remove from JSON
       const result = db.exec("SELECT decks FROM col");
-      const decksJson = JSON.parse((result[0]?.values[0]?.[0] as string) ?? "{}");
+      const decksJson = JSON.parse(String(result[0]?.values[0]?.[0] ?? "{}"));
       for (const did of deckIdsToDelete) delete decksJson[String(did)];
       db.run("UPDATE col SET decks=?", [JSON.stringify(decksJson)]);
     }
@@ -638,7 +638,7 @@ export async function deleteDeckFromCollection(
     await cache.put("/sync/collection.sqlite", new Response(new Blob([newBytes as BlobPart])));
 
     // Update in-place and re-parse
-    (input as { bytes: Uint8Array }).bytes = newBytes;
+    activeDeckInputSig.value = { ...input, bytes: newBytes };
     const { getAnkiDataFromSqlite } = await import("./ankiParser");
     ankiDataSig.value = await getAnkiDataFromSqlite(newBytes, input.mediaFiles);
 
@@ -666,7 +666,7 @@ export async function exportDeckFromCollection(fullName: string): Promise<void> 
 
   try {
     const tables = srcDb.exec("SELECT name FROM sqlite_master WHERE type='table'");
-    const tableNames = new Set((tables[0]?.values ?? []).map((row) => row[0] as string));
+    const tableNames = new Set((tables[0]?.values ?? []).map((row) => String(row[0])));
     const anki21b = tableNames.has("notetypes");
 
     // Get the full schema from source and create in destination
@@ -675,8 +675,8 @@ export async function exportDeckFromCollection(fullName: string): Promise<void> 
     );
     if (schemaRows[0]) {
       for (const row of schemaRows[0].values) {
-        const sql = row[0] as string | null;
-        if (sql) destDb.run(sql);
+        const sql = row[0];
+        if (typeof sql === "string") destDb.run(sql);
       }
     }
 
@@ -688,7 +688,7 @@ export async function exportDeckFromCollection(fullName: string): Promise<void> 
         fullName + "::%",
       ]);
       if (rows[0]) {
-        for (const row of rows[0].values) deckIds.push(row[0] as number);
+        for (const row of rows[0].values) deckIds.push(Number(row[0]));
       }
 
       // Copy matching decks
@@ -696,14 +696,15 @@ export async function exportDeckFromCollection(fullName: string): Promise<void> 
         const deckData = srcDb.exec("SELECT * FROM decks WHERE id=?", [did]);
         if (deckData[0] && deckData[0].values.length > 0) {
           const cols = deckData[0].columns.map(() => "?").join(",");
-          destDb.run(`INSERT INTO decks VALUES (${cols})`, deckData[0].values[0] as SqlValue[]);
+          const row = deckData[0].values[0];
+          if (row) destDb.run(`INSERT INTO decks VALUES (${cols})`, [...row]);
         }
       }
     } else {
       const result = srcDb.exec("SELECT decks FROM col");
-      const decksJson = JSON.parse((result[0]?.values[0]?.[0] as string) ?? "{}");
+      const decksJson = JSON.parse(String(result[0]?.values[0]?.[0] ?? "{}")) as Record<string, { name: string }>;
       const exportDecks: Record<string, unknown> = {};
-      for (const [id, d] of Object.entries(decksJson) as [string, { name: string }][]) {
+      for (const [id, d] of Object.entries(decksJson)) {
         if (d.name === fullName || d.name.startsWith(fullName + "::")) {
           exportDecks[id] = d;
           deckIds.push(Number(id));
@@ -716,7 +717,7 @@ export async function exportDeckFromCollection(fullName: string): Promise<void> 
       const colRow = srcDb.exec("SELECT * FROM col");
       const colValues = colRow[0]?.values[0];
       if (colRow[0] && colValues) {
-        const row = [...colValues] as SqlValue[];
+        const row = [...colValues];
         const decksIdx = colRow[0].columns.indexOf("decks");
         if (decksIdx !== -1) row[decksIdx] = JSON.stringify(exportDecks);
         const cols = colRow[0].columns.map(() => "?").join(",");
@@ -732,8 +733,8 @@ export async function exportDeckFromCollection(fullName: string): Promise<void> 
       const nidIdx = cardRows[0].columns.indexOf("nid");
       const cols = cardRows[0].columns.map(() => "?").join(",");
       for (const row of cardRows[0].values) {
-        destDb.run(`INSERT INTO cards VALUES (${cols})`, row as SqlValue[]);
-        noteIds.add(row[nidIdx] as number);
+        destDb.run(`INSERT INTO cards VALUES (${cols})`, [...row]);
+        noteIds.add(Number(row[nidIdx]));
       }
     }
 
@@ -748,7 +749,7 @@ export async function exportDeckFromCollection(fullName: string): Promise<void> 
       if (noteRows[0]) {
         const cols = noteRows[0].columns.map(() => "?").join(",");
         for (const row of noteRows[0].values) {
-          destDb.run(`INSERT INTO notes VALUES (${cols})`, row as SqlValue[]);
+          destDb.run(`INSERT INTO notes VALUES (${cols})`, [...row]);
         }
       }
     }
@@ -756,7 +757,7 @@ export async function exportDeckFromCollection(fullName: string): Promise<void> 
     // Copy revlog for exported cards
     if (cardRows[0]) {
       const cidIdx = cardRows[0].columns.indexOf("id");
-      const cardIdArr = cardRows[0].values.map((r) => r[cidIdx] as number);
+      const cardIdArr = cardRows[0].values.map((r) => Number(r[cidIdx]));
       if (cardIdArr.length > 0) {
         const revPlaceholders = cardIdArr.map(() => "?").join(",");
         const revRows = srcDb.exec(
@@ -766,7 +767,7 @@ export async function exportDeckFromCollection(fullName: string): Promise<void> 
         if (revRows[0]) {
           const cols = revRows[0].columns.map(() => "?").join(",");
           for (const row of revRows[0].values) {
-            destDb.run(`INSERT INTO revlog VALUES (${cols})`, row as SqlValue[]);
+            destDb.run(`INSERT INTO revlog VALUES (${cols})`, [...row]);
           }
         }
       }
@@ -784,22 +785,24 @@ export async function exportDeckFromCollection(fullName: string): Promise<void> 
           noteIdArr,
         );
         if (midRows[0]) {
-          for (const row of midRows[0].values) midSet.add(row[0] as number);
+          for (const row of midRows[0].values) midSet.add(Number(row[0]));
         }
         for (const mid of midSet) {
           const ntRows = srcDb.exec("SELECT * FROM notetypes WHERE id=?", [mid]);
-          if (ntRows[0] && ntRows[0].values.length > 0) {
+          const ntRow = ntRows[0]?.values[0];
+          if (ntRows[0] && ntRow) {
             const cols = ntRows[0].columns.map(() => "?").join(",");
-            destDb.run(`INSERT INTO notetypes VALUES (${cols})`, ntRows[0].values[0] as SqlValue[]);
+            destDb.run(`INSERT INTO notetypes VALUES (${cols})`, [...ntRow]);
           }
         }
       }
 
       // Copy col row for anki21b
       const colRow = srcDb.exec("SELECT * FROM col");
-      if (colRow[0] && colRow[0].values.length > 0) {
+      const colValues = colRow[0]?.values[0];
+      if (colRow[0] && colValues) {
         const cols = colRow[0].columns.map(() => "?").join(",");
-        destDb.run(`INSERT INTO col VALUES (${cols})`, colRow[0].values[0] as SqlValue[]);
+        destDb.run(`INSERT INTO col VALUES (${cols})`, [...colValues]);
       }
     }
 
@@ -868,8 +871,9 @@ export async function initializeReviewQueue() {
   const queue = new ReviewQueue(deckId, settings);
   await queue.init();
 
-  const ankiCardIds = cards.every((c) => c.ankiCardId != null)
-    ? cards.map((c) => c.ankiCardId!)
+  const mappedIds = cards.map((c) => c.ankiCardId);
+  const ankiCardIds = mappedIds.every((id): id is number => id != null)
+    ? mappedIds
     : undefined;
   const fullQueue = await queue.buildQueue(cards.length, templates.length, ankiCardIds);
   const dueCards = queue.getDueCards(fullQueue);
@@ -1091,8 +1095,9 @@ export async function updateNote(
   try {
     // Look up the note by guid
     const result = db.exec("SELECT id FROM notes WHERE guid=?", [guid]);
-    const noteId = result[0]?.values[0]?.[0] as number | undefined;
-    if (noteId === undefined) return;
+    const rawNoteId = result[0]?.values[0]?.[0];
+    if (rawNoteId == null) return;
+    const noteId = Number(rawNoteId);
 
     // Build flds (field values joined by \x1F in field order)
     const fieldValues = Object.values(newFields);
@@ -1125,7 +1130,7 @@ export async function updateNote(
     await cache.put("/sync/collection.sqlite", new Response(new Blob([newBytes as BlobPart])));
 
     // Update in-place without triggering re-parse
-    (input as { bytes: Uint8Array }).bytes = newBytes;
+    activeDeckInputSig.value = { ...input, bytes: newBytes };
     markDataChanged();
   } finally {
     db.close();

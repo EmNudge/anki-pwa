@@ -30,8 +30,9 @@ class ReviewDB {
       };
 
       request.onupgradeneeded = (event) => {
-        const db = (event.target as IDBOpenDBRequest).result;
-        const transaction = (event.target as IDBOpenDBRequest).transaction!;
+        const db = request.result;
+        const transaction = request.transaction;
+        if (!transaction) throw new Error("Missing versionchange transaction");
         const oldVersion = event.oldVersion;
 
         // Store for card review states

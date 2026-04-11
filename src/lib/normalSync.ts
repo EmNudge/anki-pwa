@@ -5,6 +5,7 @@
  * meta → start → applyGraves → applyChanges → chunk → applyChunk → sanityCheck2 → finish
  * with abort on error.
  */
+import { z } from "zod";
 import { createDatabase } from "~/utils/sql";
 import {
   normalizeUrl,
@@ -26,14 +27,60 @@ import {
   finalizeUsn,
   isAnki21bFormat,
   type Graves,
-  type Chunk,
   type UnchunkedChanges,
   type SanityCheckCounts,
-  type SyncModel,
-  type SyncDeck,
-  type SyncDeckConfig,
   NotetypeSchemaMismatchError,
+  chunkSchema,
 } from "./syncMerge";
+
+// ── Zod Schemas ───────────────────────────────────────────────────
+
+const rawMetaResponseSchema = z.object({
+  mod: z.number().optional(),
+  modified: z.number().optional(),
+  scm: z.number().optional(),
+  schema: z.number().optional(),
+  usn: z.number().optional(),
+  ts: z.number().optional(),
+  current_time: z.number().optional(),
+  msg: z.string().optional(),
+  server_message: z.string().optional(),
+  cont: z.boolean().optional(),
+  should_continue: z.boolean().optional(),
+  hostNum: z.number().optional(),
+  host_number: z.number().optional(),
+  empty: z.boolean().optional(),
+  mediaUsn: z.number().optional(),
+  media_usn: z.number().optional(),
+  v: z.number().optional(),
+  server_version: z.number().optional(),
+}).passthrough();
+
+const rawStartResponseSchema = z.object({
+  cards: z.array(z.number()).optional(),
+  notes: z.array(z.number()).optional(),
+  decks: z.array(z.number()).optional(),
+}).passthrough();
+
+const syncModelSchema = z.object({ id: z.number() }).passthrough();
+const syncDeckSchema = z.object({ id: z.number() }).passthrough();
+const syncDeckConfigSchema = z.object({ id: z.number() }).passthrough();
+
+const rawApplyChangesResponseSchema = z.object({
+  models: z.array(syncModelSchema).optional(),
+  decks: z.tuple([z.array(syncDeckSchema), z.array(syncDeckConfigSchema)]).optional(),
+  tags: z.array(z.string()).optional(),
+  conf: z.record(z.unknown()).optional(),
+  crt: z.number().optional(),
+}).passthrough();
+
+const rawSanityCheckResponseSchema = z.object({
+  status: z.string().optional(),
+}).passthrough();
+
+const rawFinishResponseSchema = z.object({
+  mod: z.number().optional(),
+}).passthrough();
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -49,54 +96,6 @@ interface SyncMeta {
   mediaUsn: number;
   /** Server's maximum supported protocol version (undefined = legacy v10) */
   serverVersion: number | undefined;
-}
-
-/** Raw meta response from the sync server. */
-interface RawMetaResponse {
-  mod?: number;
-  modified?: number;
-  scm?: number;
-  schema?: number;
-  usn?: number;
-  ts?: number;
-  current_time?: number;
-  msg?: string;
-  server_message?: string;
-  cont?: boolean;
-  should_continue?: boolean;
-  hostNum?: number;
-  host_number?: number;
-  empty?: boolean;
-  mediaUsn?: number;
-  media_usn?: number;
-  v?: number;
-  server_version?: number;
-}
-
-/** Raw start response from the sync server (remote graves). */
-interface RawStartResponse {
-  cards?: number[];
-  notes?: number[];
-  decks?: number[];
-}
-
-/** Raw applyChanges response from the sync server. */
-interface RawApplyChangesResponse {
-  models?: SyncModel[];
-  decks?: [SyncDeck[], SyncDeckConfig[]];
-  tags?: string[];
-  conf?: Record<string, unknown>;
-  crt?: number;
-}
-
-/** Raw sanityCheck2 response from the sync server. */
-interface RawSanityCheckResponse {
-  status?: string;
-}
-
-/** Raw finish response from the sync server. */
-interface RawFinishResponse {
-  mod?: number;
 }
 
 interface LocalMeta {
@@ -155,6 +154,14 @@ const CHUNK_SIZE = 250;
 /** Use v11 zstd transport when server supports it, otherwise legacy multipart. */
 type ProtoVersion = 10 | 11;
 
+function safeJsonParse(str: string): unknown {
+  try {
+    return JSON.parse(str);
+  } catch {
+    return undefined;
+  }
+}
+
 // ── Protocol helpers ───────────────────────────────────────────────
 
 async function syncEndpoint(
@@ -191,10 +198,10 @@ async function syncEndpoint(
 
 async function fetchMeta(serverUrl: string, hkey: string): Promise<SyncMeta> {
   // Request v11 — server will respond with its max supported version
-  const r = (await syncEndpoint(serverUrl, "meta", hkey, {
+  const r = rawMetaResponseSchema.parse(await syncEndpoint(serverUrl, "meta", hkey, {
     v: 11,
     cv: "anki-pwa,0.1,web",
-  })) as RawMetaResponse;
+  }));
 
   // Detect server version from response.
   // v11 servers include a "v" or "server_version" field.
@@ -226,7 +233,11 @@ function readLocalMeta(db: import("sql.js").Database): LocalMeta {
   if (!result[0]?.values[0]) {
     return { mod: 0, scm: 0, usn: -1, ls: 0 };
   }
-  const [mod, scm, usn, ls] = result[0].values[0] as [number, number, number, number];
+  const row = result[0].values[0];
+  const mod = Number(row[0]);
+  const scm = Number(row[1]);
+  const usn = Number(row[2]);
+  const ls = Number(row[3]);
   return { mod, scm, usn, ls };
 }
 
@@ -238,7 +249,7 @@ async function startSync(
   proto: ProtoVersion = 10,
   sessionKey?: string,
 ): Promise<Graves> {
-  const r = (await syncEndpoint(
+  const r = rawStartResponseSchema.parse(await syncEndpoint(
     serverUrl,
     "start",
     hkey,
@@ -248,7 +259,7 @@ async function startSync(
     },
     proto,
     sessionKey,
-  )) as RawStartResponse;
+  ));
   return {
     cards: r.cards ?? [],
     notes: r.notes ?? [],
@@ -301,7 +312,7 @@ async function exchangeChanges(
   proto: ProtoVersion = 10,
   sessionKey?: string,
 ): Promise<UnchunkedChanges> {
-  const r = (await syncEndpoint(
+  const r = rawApplyChangesResponseSchema.parse(await syncEndpoint(
     serverUrl,
     "applyChanges",
     hkey,
@@ -310,7 +321,7 @@ async function exchangeChanges(
     },
     proto,
     sessionKey,
-  )) as RawApplyChangesResponse;
+  ));
   return {
     models: r.models ?? [],
     decks: r.decks ?? [[], []],
@@ -334,7 +345,7 @@ async function receiveChunks(
     chunkNum++;
     onProgress(`Receiving server changes (chunk ${chunkNum})...`);
     const result = await syncEndpoint(serverUrl, "chunk", hkey, {}, proto, sessionKey);
-    const chunk = result as Chunk;
+    const chunk = chunkSchema.parse(result);
     await applyRemoteChunk(db, chunk, pendingUsn);
     if (chunk.done) break;
   }
@@ -363,7 +374,7 @@ async function sanityCheck(
   proto: ProtoVersion = 10,
   sessionKey?: string,
 ): Promise<void> {
-  const r = (await syncEndpoint(
+  const r = rawSanityCheckResponseSchema.parse(await syncEndpoint(
     serverUrl,
     "sanityCheck2",
     hkey,
@@ -372,7 +383,7 @@ async function sanityCheck(
     },
     proto,
     sessionKey,
-  )) as RawSanityCheckResponse;
+  ));
   if (r.status === "bad") {
     throw new FullSyncRequiredError(
       "Sync sanity check failed: client and server counts do not match. A full sync is required.",
@@ -390,7 +401,8 @@ async function finishSync(
   // Server returns the new mod time (number)
   if (typeof result === "number") return result;
   // Some servers wrap in an object
-  return (result as RawFinishResponse).mod ?? Date.now();
+  const parsed = rawFinishResponseSchema.parse(result);
+  return parsed.mod ?? Date.now();
 }
 
 async function abortSync(
@@ -427,12 +439,14 @@ async function applyDeckConfigsToScheduler(
   const isAnki21b = (hasNotetypes[0]?.values.length ?? 0) > 0;
 
   // Collect all deck configs
-  type RawDconf = {
-    new?: { delays?: number[]; perDay?: number; order?: number };
-    lapse?: { delays?: number[]; minInt?: number; mult?: number; leechFails?: number };
-    rev?: { perDay?: number; ease4?: number; hardFactor?: number; ivlFct?: number; maxIvl?: number; fuzz?: boolean };
-    maxTaken?: number;
-  };
+  const rawDconfSchema = z.object({
+    new: z.object({ delays: z.array(z.number()).optional(), perDay: z.number().optional(), order: z.number().optional() }).optional(),
+    lapse: z.object({ delays: z.array(z.number()).optional(), minInt: z.number().optional(), mult: z.number().optional(), leechFails: z.number().optional() }).optional(),
+    rev: z.object({ perDay: z.number().optional(), ease4: z.number().optional(), hardFactor: z.number().optional(), ivlFct: z.number().optional(), maxIvl: z.number().optional(), fuzz: z.boolean().optional() }).optional(),
+    maxTaken: z.number().optional(),
+  }).passthrough();
+
+  type RawDconf = z.infer<typeof rawDconfSchema>;
 
   const configs = new Map<string, RawDconf>();
 
@@ -440,20 +454,22 @@ async function applyDeckConfigsToScheduler(
     const dcResult = db.exec("SELECT id, config FROM deck_config");
     if (dcResult[0]) {
       for (const row of dcResult[0].values) {
-        try {
-          configs.set(String(row[0]), JSON.parse(row[1] as string));
-        } catch { /* skip */ }
+        const parsed = rawDconfSchema.safeParse(safeJsonParse(String(row[1] ?? "")));
+        if (parsed.success) {
+          configs.set(String(row[0]), parsed.data);
+        }
       }
     }
   } else {
     const dconfRaw = db.exec("SELECT dconf FROM col");
     if (dconfRaw[0]?.values[0]) {
-      try {
-        const parsed = JSON.parse(dconfRaw[0].values[0][0] as string) as Record<string, RawDconf>;
-        for (const [id, cfg] of Object.entries(parsed)) {
-          configs.set(id, cfg);
+      const outer = safeJsonParse(String(dconfRaw[0].values[0][0] ?? ""));
+      if (outer && typeof outer === "object") {
+        for (const [id, raw] of Object.entries(outer)) {
+          const parsed = rawDconfSchema.safeParse(raw);
+          if (parsed.success) configs.set(id, parsed.data);
         }
-      } catch { /* skip */ }
+      }
     }
   }
 
@@ -461,7 +477,7 @@ async function applyDeckConfigsToScheduler(
 
   // For now, apply the first config (deck 1 / default) to the scheduler deckId.
   // A more complete implementation would map each deck to its config.
-  const cfg = configs.values().next().value as RawDconf | undefined;
+  const cfg = configs.values().next().value;
   if (!cfg) return;
 
   const existing = await reviewDB.getSettings(deckId);
