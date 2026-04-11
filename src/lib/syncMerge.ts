@@ -84,7 +84,20 @@ export interface SyncModel {
   mod?: number;
   name?: string;
   usn?: number;
+  flds?: Array<{ name?: string; ord?: number; [key: string]: unknown }>;
+  tmpls?: Array<{ name?: string; ord?: number; [key: string]: unknown }>;
   [key: string]: unknown;
+}
+
+/**
+ * Error thrown when a notetype schema change is detected during sync merge.
+ * This means field or template counts differ, requiring a full sync.
+ */
+export class NotetypeSchemaMismatchError extends Error {
+  constructor(notetypeId: number, detail: string) {
+    super(`Notetype ${notetypeId} schema changed: ${detail}. Full sync required.`);
+    this.name = "NotetypeSchemaMismatchError";
+  }
 }
 
 /** Deck object from sync. */
@@ -166,6 +179,35 @@ function mergeColJsonField<T extends { id: number; mod?: number }>(
   db.run(`UPDATE col SET ${column}=?`, [JSON.stringify(local)]);
 }
 
+/**
+ * Validate that a remote notetype doesn't change the field or template count
+ * compared to the local version. A mismatch means cards could become corrupt
+ * and a full sync is required (matching desktop Anki's ResyncRequired behavior).
+ */
+function validateNotetypeSchema(
+  localModel: SyncModel,
+  remoteModel: SyncModel,
+): void {
+  const localFlds = Array.isArray(localModel.flds) ? localModel.flds.length : -1;
+  const remoteFlds = Array.isArray(remoteModel.flds) ? remoteModel.flds.length : -1;
+  const localTmpls = Array.isArray(localModel.tmpls) ? localModel.tmpls.length : -1;
+  const remoteTmpls = Array.isArray(remoteModel.tmpls) ? remoteModel.tmpls.length : -1;
+
+  // Only validate if both sides have the structural data
+  if (localFlds >= 0 && remoteFlds >= 0 && localFlds !== remoteFlds) {
+    throw new NotetypeSchemaMismatchError(
+      remoteModel.id,
+      `field count changed from ${localFlds} to ${remoteFlds}`,
+    );
+  }
+  if (localTmpls >= 0 && remoteTmpls >= 0 && localTmpls !== remoteTmpls) {
+    throw new NotetypeSchemaMismatchError(
+      remoteModel.id,
+      `template count changed from ${localTmpls} to ${remoteTmpls}`,
+    );
+  }
+}
+
 /** Returns true if the DB uses the anki21b format (separate notetypes table). */
 export function isAnki21bFormat(db: Database): boolean {
   const result = db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='notetypes'");
@@ -220,12 +262,24 @@ export async function applyRemoteGraves(db: Database, graves: Graves): Promise<v
   }
 }
 
+/**
+ * Check if a local item is pending sync, matching desktop Anki's is_pending_sync.
+ * If pendingUsn is -1 (first sync), only usn=-1 items are pending.
+ * Otherwise, items with usn >= pendingUsn are pending (modified since last sync).
+ */
+export function isPendingSync(localUsn: number, pendingUsn: number): boolean {
+  if (pendingUsn === -1) {
+    return localUsn === -1;
+  }
+  return localUsn >= pendingUsn;
+}
+
 /** Apply a chunk of incoming cards/notes/revlog from the server. */
-export async function applyRemoteChunk(db: Database, chunk: Chunk): Promise<void> {
-  // Apply revlog entries (always merge, no conflict)
+export async function applyRemoteChunk(db: Database, chunk: Chunk, pendingUsn = -1): Promise<void> {
+  // Apply revlog entries (append-only, skip duplicates)
   for (const [id, cid, usn, ease, ivl, lastIvl, factor, time, type] of chunk.revlog ?? []) {
     db.run(
-      "INSERT OR REPLACE INTO revlog (id, cid, usn, ease, ivl, lastIvl, factor, time, type) VALUES (?,?,?,?,?,?,?,?,?)",
+      "INSERT OR IGNORE INTO revlog (id, cid, usn, ease, ivl, lastIvl, factor, time, type) VALUES (?,?,?,?,?,?,?,?,?)",
       [id, cid, usn, ease, ivl, lastIvl, factor, time, type],
     );
   }
@@ -237,8 +291,8 @@ export async function applyRemoteChunk(db: Database, chunk: Chunk): Promise<void
     if (existing[0]?.values[0]) {
       const localMod = existing[0].values[0][0] as number;
       const localUsn = existing[0].values[0][1] as number;
-      // If local has pending changes (usn=-1) and local is newer, skip
-      if (localUsn === -1 && localMod >= mod) continue;
+      // If local has pending changes and local is newer, skip (remote loses)
+      if (isPendingSync(localUsn, pendingUsn) && localMod >= mod) continue;
     }
     db.run(
       "INSERT OR REPLACE INTO notes (id, guid, mid, mod, usn, tags, flds, sfld, csum, flags, data) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
@@ -273,8 +327,8 @@ export async function applyRemoteChunk(db: Database, chunk: Chunk): Promise<void
     if (existing[0]?.values[0]) {
       const localMod = existing[0].values[0][0] as number;
       const localUsn = existing[0].values[0][1] as number;
-      // If local has pending changes (usn=-1) and local is newer, skip
-      if (localUsn === -1 && localMod >= mod) continue;
+      // If local has pending changes and local is newer, skip (remote loses)
+      if (isPendingSync(localUsn, pendingUsn) && localMod >= mod) continue;
     }
     db.run(
       "INSERT OR REPLACE INTO cards (id, nid, did, ord, mod, usn, type, queue, due, ivl, factor, reps, lapses, left, odue, odid, flags, data) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
@@ -309,34 +363,50 @@ export function applyRemoteUnchunkedChanges(
   db: Database,
   changes: UnchunkedChanges,
   anki21b: boolean,
+  localIsNewer = false,
 ): void {
   if (anki21b) {
-    applyRemoteUnchunkedAnki21b(db, changes);
+    applyRemoteUnchunkedAnki21b(db, changes, localIsNewer);
   } else {
-    applyRemoteUnchunkedAnki2(db, changes);
+    applyRemoteUnchunkedAnki2(db, changes, localIsNewer);
   }
 }
 
-function applyRemoteUnchunkedAnki2(db: Database, changes: UnchunkedChanges): void {
-  // Models, decks, deck configs — merge with mod-time conflict resolution
-  mergeColJsonField(db, "models", changes.models);
+function applyRemoteUnchunkedAnki2(db: Database, changes: UnchunkedChanges, localIsNewer: boolean): void {
+  // Models — merge with mod-time conflict resolution + schema validation
+  if (changes.models.length > 0) {
+    const local = getColJson<Record<string, SyncModel>>(db, "models", {});
+    for (const item of changes.models) {
+      const existing = local[String(item.id)];
+      if (existing && (item.mod ?? 0) >= (existing.mod ?? 0)) {
+        validateNotetypeSchema(existing, item);
+      }
+      if (!existing || (item.mod ?? 0) >= (existing.mod ?? 0)) {
+        local[String(item.id)] = item;
+      }
+    }
+    db.run("UPDATE col SET models=?", [JSON.stringify(local)]);
+  }
+
   const [remoteDecks, remoteDconf] = changes.decks;
   mergeColJsonField(db, "decks", remoteDecks);
   mergeColJsonField(db, "dconf", remoteDconf);
 
-  // Tags — merge (union)
+  // Tags — merge with USN awareness: remote tags win over non-pending local tags
   if (changes.tags.length > 0) {
     const localTags = getColJson<Record<string, number>>(db, "tags", {});
     for (const tag of changes.tags) {
-      if (!localTags[tag]) {
-        localTags[tag] = 0;
+      const localUsn = localTags[tag];
+      // Accept remote tag if: not present locally, or local isn't pending sync
+      if (localUsn === undefined || localUsn !== -1) {
+        localTags[tag] = 0; // Mark as synced
       }
     }
     db.run("UPDATE col SET tags=?", [JSON.stringify(localTags)]);
   }
 
-  // Config — server wins if provided
-  if (changes.conf !== undefined) {
+  // Config — only accept server config if local is not newer (matching desktop Anki)
+  if (changes.conf !== undefined && !localIsNewer) {
     db.run("UPDATE col SET conf=?", [JSON.stringify(changes.conf)]);
   }
 
@@ -346,14 +416,22 @@ function applyRemoteUnchunkedAnki2(db: Database, changes: UnchunkedChanges): voi
   }
 }
 
-function applyRemoteUnchunkedAnki21b(db: Database, changes: UnchunkedChanges): void {
-  // Models (notetypes) — stored in notetypes table
+function applyRemoteUnchunkedAnki21b(db: Database, changes: UnchunkedChanges, localIsNewer: boolean): void {
+  // Models (notetypes) — stored in notetypes table, with schema validation
   for (const m of changes.models) {
     const mtimeSecs = (m as SyncModel & { mtime_secs?: number }).mtime_secs;
-    const existing = db.exec("SELECT mtime_secs FROM notetypes WHERE id=?", [m.id]);
+    const existing = db.exec("SELECT mtime_secs, config FROM notetypes WHERE id=?", [m.id]);
     if (existing[0]?.values[0]) {
       const localMtime = existing[0].values[0][0] as number;
       if ((mtimeSecs ?? 0) < localMtime) continue;
+      // Parse local config to validate schema compatibility
+      try {
+        const localConfig = JSON.parse(existing[0].values[0][1] as string) as SyncModel;
+        validateNotetypeSchema(localConfig, m);
+      } catch (e) {
+        if (e instanceof NotetypeSchemaMismatchError) throw e;
+        // If config parsing fails, skip validation
+      }
     }
     db.run(
       "INSERT OR REPLACE INTO notetypes (id, name, mtime_secs, usn, config) VALUES (?,?,?,?,?)",
@@ -394,13 +472,22 @@ function applyRemoteUnchunkedAnki21b(db: Database, changes: UnchunkedChanges): v
     ]);
   }
 
-  // Tags
+  // Tags — merge with USN awareness: insert new tags, update non-pending local tags
   for (const tag of changes.tags) {
-    db.run("INSERT OR IGNORE INTO tags (tag, usn) VALUES (?, 0)", [tag]);
+    const existing = db.exec("SELECT usn FROM tags WHERE tag=?", [tag]);
+    if (!existing[0]?.values[0]) {
+      db.run("INSERT INTO tags (tag, usn) VALUES (?, 0)", [tag]);
+    } else {
+      const localUsn = existing[0].values[0][0] as number;
+      // Only overwrite if local isn't pending sync
+      if (localUsn !== -1) {
+        db.run("UPDATE tags SET usn=0 WHERE tag=?", [tag]);
+      }
+    }
   }
 
-  // Config
-  if (changes.conf !== undefined) {
+  // Config — only accept server config if local is not newer (matching desktop Anki)
+  if (changes.conf !== undefined && !localIsNewer) {
     db.run("UPDATE col SET conf=?", [JSON.stringify(changes.conf)]);
   }
 

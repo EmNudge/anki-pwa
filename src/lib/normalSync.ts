@@ -32,6 +32,7 @@ import {
   type SyncModel,
   type SyncDeck,
   type SyncDeckConfig,
+  NotetypeSchemaMismatchError,
 } from "./syncMerge";
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -121,6 +122,15 @@ export class SyncAbortedError extends Error {
   }
 }
 
+export class ConcurrentSyncError extends Error {
+  constructor() {
+    super(
+      "Another device is syncing with the server right now. Please wait and try again in a moment.",
+    );
+    this.name = "ConcurrentSyncError";
+  }
+}
+
 export class ClockSkewError extends Error {
   constructor(skewMinutes: number) {
     super(
@@ -163,6 +173,9 @@ async function syncEndpoint(
 
   if (response.status === 401 || response.status === 403) {
     throw new Error("Authentication expired. Please log in again.");
+  }
+  if (response.status === 409) {
+    throw new ConcurrentSyncError();
   }
   if (!response.ok) {
     const body = await response.text().catch(() => "(unreadable)");
@@ -310,6 +323,7 @@ async function receiveChunks(
   hkey: string,
   db: import("sql.js").Database,
   onProgress: ProgressCallback,
+  pendingUsn: number,
   proto: ProtoVersion = 10,
   sessionKey?: string,
 ): Promise<void> {
@@ -319,7 +333,7 @@ async function receiveChunks(
     onProgress(`Receiving server changes (chunk ${chunkNum})...`);
     const result = await syncEndpoint(serverUrl, "chunk", hkey, {}, proto, sessionKey);
     const chunk = result as Chunk;
-    await applyRemoteChunk(db, chunk);
+    await applyRemoteChunk(db, chunk, pendingUsn);
     if (chunk.done) break;
   }
 }
@@ -582,10 +596,17 @@ export async function normalSync(
       `Exchanging metadata (${localUnchunkedCount} local change${localUnchunkedCount !== 1 ? "s" : ""})...`,
     );
     const remoteChanges = await exchangeChanges(serverUrl, hkey, localChanges, proto, sessionKey);
-    applyRemoteUnchunkedChanges(db, remoteChanges, anki21b);
+    try {
+      applyRemoteUnchunkedChanges(db, remoteChanges, anki21b, localIsNewer);
+    } catch (e) {
+      if (e instanceof NotetypeSchemaMismatchError) {
+        throw new FullSyncRequiredError(e.message);
+      }
+      throw e;
+    }
 
     // Step 6: Receive server chunks (cards, notes, revlog)
-    await receiveChunks(serverUrl, hkey, db, onProgress, proto, sessionKey);
+    await receiveChunks(serverUrl, hkey, db, onProgress, localMeta.usn, proto, sessionKey);
 
     // Step 7: Send local chunks
     await sendChunks(serverUrl, hkey, db, onProgress, proto, sessionKey);

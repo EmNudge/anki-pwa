@@ -226,7 +226,7 @@ export async function downloadCollection(
   return decompressIfNeeded(bytes);
 }
 
-const DOWNLOAD_BATCH_SIZE = 25;
+const DOWNLOAD_BATCH_SIZE = 30;
 
 const mediaSyncBeginSchema = z.object({
   usn: z.number(),
@@ -365,7 +365,7 @@ export async function downloadMedia(
   return mediaFiles;
 }
 
-const UPLOAD_BATCH_SIZE = 25;
+const UPLOAD_BATCH_SIZE = 30;
 
 /**
  * Upload locally-cached media files to the sync server.
