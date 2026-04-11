@@ -146,6 +146,8 @@ interface NormalSyncResult {
   action: SyncAction;
   sqliteBytes?: Uint8Array;
   newState?: Partial<SyncState>;
+  /** Protocol version negotiated with the server (10 = legacy multipart, 11 = zstd). */
+  proto?: 10 | 11;
 }
 
 const CHUNK_SIZE = 250;
@@ -507,6 +509,26 @@ export async function normalSync(
   sqliteBytes: Uint8Array,
   onProgress: ProgressCallback = () => {},
 ): Promise<NormalSyncResult> {
+  try {
+    return await normalSyncInner(serverUrl, hkey, deckId, sqliteBytes, onProgress);
+  } catch (error) {
+    if (error instanceof ConcurrentSyncError) {
+      // A stale session is blocking us — abort it and retry once
+      onProgress("Clearing stale sync session...");
+      await abortSync(serverUrl, hkey);
+      return await normalSyncInner(serverUrl, hkey, deckId, sqliteBytes, onProgress);
+    }
+    throw error;
+  }
+}
+
+async function normalSyncInner(
+  serverUrl: string,
+  hkey: string,
+  deckId: string,
+  sqliteBytes: Uint8Array,
+  onProgress: ProgressCallback = () => {},
+): Promise<NormalSyncResult> {
   const db = await createDatabase(sqliteBytes);
   let sessionStarted = false;
   let proto: ProtoVersion = 10;
@@ -544,8 +566,9 @@ export async function normalSync(
 
     if (action === "noChanges") {
       onProgress("Already up to date.");
+      const noChangeProto: 10 | 11 = (remoteMeta.serverVersion ?? 0) >= 11 ? 11 : 10;
       db.close();
-      return { action: "noChanges" };
+      return { action: "noChanges", proto: noChangeProto };
     }
 
     if (action === "fullSyncRequired") {
@@ -640,6 +663,7 @@ export async function normalSync(
         usn: remoteMeta.usn,
         scm: remoteMeta.scm,
       },
+      proto,
     };
   } catch (error) {
     if (sessionStarted) {
