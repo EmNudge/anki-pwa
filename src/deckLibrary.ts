@@ -26,6 +26,7 @@ type DeckLibraryItem = {
 const activeDeckSourceStorageKey = "anki-active-deck";
 const cachedFilesStorageKey = "anki-cached-files";
 const legacyActiveFileStorageKey = "anki-active-file";
+const adoptedSamplesStorageKey = "anki-adopted-samples";
 export const importedDeckFileName = "imported-deck.apkg";
 
 export function readCachedFiles(): CachedFileEntry[] {
@@ -129,4 +130,19 @@ export function createSampleDeckLibraryItem(sampleDeck: {
     meta: `${sampleDeck.data.cards.length} cards · built in`,
     isRemovable: false,
   };
+}
+
+export function readAdoptedSampleIds(): string[] {
+  const stored = localStorage.getItem(adoptedSamplesStorageKey);
+  if (!stored) return [];
+  try {
+    const parsed = JSON.parse(stored);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+export function writeAdoptedSampleIds(ids: string[]) {
+  localStorage.setItem(adoptedSamplesStorageKey, JSON.stringify(ids));
 }

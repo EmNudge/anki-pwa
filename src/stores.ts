@@ -2,21 +2,24 @@ import { ref, computed, watch, shallowRef, triggerRef } from "vue";
 import { getAnkiDataFromBlob, getAnkiDataFromSqlite } from "./ankiParser";
 import type { AnkiData } from "./ankiParser";
 import { createDatabase } from "./utils/sql";
+import type { SqlValue } from "sql.js";
 import { stringHash } from "./utils/constants";
 import { ReviewQueue, type ReviewCard } from "./scheduler/queue";
 import { DEFAULT_SCHEDULER_SETTINGS, type SchedulerSettings } from "./scheduler/types";
 import { reviewDB } from "./scheduler/db";
-import type { DeckInfo } from "./types";
+import type { DeckInfo, DeckTreeNode } from "./types";
 import { sampleDeckMap, sampleDecks } from "./sampleDecks";
 import {
   importedDeckFileName,
   persistActiveDeckSourceId as persistStoredActiveDeckSourceId,
+  readAdoptedSampleIds,
   readCachedFiles,
   readStoredActiveDeckSourceId,
   removeCachedFileEntry,
   type CachedFileEntry,
   type DeckInput,
   upsertCachedFileEntry,
+  writeAdoptedSampleIds,
   writeCachedFiles,
 } from "./deckLibrary";
 import { readSyncState } from "./lib/ankiSync";
@@ -181,6 +184,36 @@ export function loadSampleDeck(id: string) {
   activeDeckInputSig.value = { kind: "sample", data: sampleDeck.data };
   activeViewSig.value = "review";
   reviewModeSig.value = "studying";
+}
+
+// Adopted sample decks — sample decks the user has added to "Your Decks"
+export const adoptedSampleIdsSig = ref<string[]>(readAdoptedSampleIds());
+
+export function adoptSampleDeck(id: string) {
+  if (adoptedSampleIdsSig.value.includes(id)) return;
+  adoptedSampleIdsSig.value = [...adoptedSampleIdsSig.value, id];
+  writeAdoptedSampleIds(adoptedSampleIdsSig.value);
+  loadSampleDeck(id);
+}
+
+export function removeAdoptedSample(id: string) {
+  adoptedSampleIdsSig.value = adoptedSampleIdsSig.value.filter((s) => s !== id);
+  writeAdoptedSampleIds(adoptedSampleIdsSig.value);
+
+  if (activeDeckSourceIdSig.value !== id) return;
+
+  // If the removed sample was active, load the next available deck or clear
+  const nextCached = cachedFilesSig.value[0];
+  if (nextCached) {
+    loadCachedFile(nextCached.name);
+  } else {
+    const nextAdopted = adoptedSampleIdsSig.value[0];
+    if (nextAdopted) {
+      loadSampleDeck(nextAdopted);
+    } else {
+      clearLoadedDeck();
+    }
+  }
 }
 
 export async function deleteCachedFile(name: string) {
@@ -416,16 +449,381 @@ export const currentReviewCardSig = shallowRef<ReviewCard | null>(null);
 export const schedulerSettingsModalOpenSig = ref(false);
 /** The deck ID whose settings are being edited in the modal */
 export const settingsTargetDeckIdSig = ref<string | null>(null);
+/** The deck tree node whose settings are being edited */
+export const settingsTargetDeckNodeSig = ref<DeckTreeNode | null>(null);
 
 /**
  * Open the scheduler settings modal for a specific deck.
  * Loads that deck's persisted settings into the form.
  */
-export async function openDeckSettings(deckId: string) {
+export async function openDeckSettings(deckId: string, node?: DeckTreeNode) {
   const settings = await reviewDB.getSettings(deckId);
   schedulerSettingsSig.value = settings;
   settingsTargetDeckIdSig.value = deckId;
+  settingsTargetDeckNodeSig.value = node ?? null;
   schedulerSettingsModalOpenSig.value = true;
+}
+
+/**
+ * Whether the active deck is a synced SQLite collection.
+ */
+export function isSyncedCollection(): boolean {
+  return activeDeckInputSig.value?.kind === "sqlite";
+}
+
+/**
+ * Rename a deck in the synced SQLite collection.
+ * Updates the deck name and all child deck name prefixes.
+ */
+export async function renameDeckInCollection(
+  deckId: string,
+  oldFullName: string,
+  newName: string,
+): Promise<void> {
+  const input = activeDeckInputSig.value;
+  if (input?.kind !== "sqlite") return;
+
+  const db = await createDatabase(input.bytes);
+  try {
+    const tables = db.exec("SELECT name FROM sqlite_master WHERE type='table'");
+    const tableNames = new Set((tables[0]?.values ?? []).map((row) => row[0] as string));
+    const anki21b = tableNames.has("notetypes");
+
+    // Compute new full name: replace the last segment of oldFullName
+    const parts = oldFullName.split("::");
+    parts[parts.length - 1] = newName;
+    const newFullName = parts.join("::");
+
+    const mod = Math.floor(Date.now() / 1000);
+
+    if (anki21b) {
+      // Update the deck itself
+      db.run("UPDATE decks SET name=?, mtime_secs=?, usn=-1 WHERE id=?", [
+        newFullName,
+        mod,
+        deckId,
+      ]);
+      // Update child decks: replace oldFullName:: prefix with newFullName::
+      const children = db.exec("SELECT id, name FROM decks WHERE name LIKE ?", [
+        oldFullName + "::%",
+      ]);
+      if (children[0]) {
+        for (const row of children[0].values) {
+          const childId = row[0] as number;
+          const childName = row[1] as string;
+          const updatedName = newFullName + childName.slice(oldFullName.length);
+          db.run("UPDATE decks SET name=?, mtime_secs=?, usn=-1 WHERE id=?", [
+            updatedName,
+            mod,
+            childId,
+          ]);
+        }
+      }
+    } else {
+      // anki2: decks stored as JSON in col.decks
+      const result = db.exec("SELECT decks FROM col");
+      const decksJson = JSON.parse((result[0]?.values[0]?.[0] as string) ?? "{}");
+      const deck = decksJson[String(deckId)];
+      if (deck) {
+        deck.name = newFullName;
+        deck.mod = mod;
+        deck.usn = -1;
+      }
+      // Update children
+      for (const d of Object.values(decksJson) as { name: string; mod: number; usn: number }[]) {
+        if (d.name.startsWith(oldFullName + "::")) {
+          d.name = newFullName + d.name.slice(oldFullName.length);
+          d.mod = mod;
+          d.usn = -1;
+        }
+      }
+      db.run("UPDATE col SET decks=?", [JSON.stringify(decksJson)]);
+    }
+
+    const newBytes = new Uint8Array(db.export());
+
+    // Update cache
+    const cache = await caches.open("anki-cache");
+    await cache.put("/sync/collection.sqlite", new Response(new Blob([newBytes as BlobPart])));
+
+    // Update in-place and re-parse
+    (input as { bytes: Uint8Array }).bytes = newBytes;
+    const { getAnkiDataFromSqlite } = await import("./ankiParser");
+    ankiDataSig.value = await getAnkiDataFromSqlite(newBytes, input.mediaFiles);
+  } finally {
+    db.close();
+  }
+}
+
+/**
+ * Delete a deck from the synced SQLite collection.
+ * Removes the deck, its cards, orphaned notes, and marks for sync.
+ */
+export async function deleteDeckFromCollection(
+  deckId: string,
+  fullName: string,
+): Promise<void> {
+  const input = activeDeckInputSig.value;
+  if (input?.kind !== "sqlite") return;
+
+  const db = await createDatabase(input.bytes);
+  try {
+    const tables = db.exec("SELECT name FROM sqlite_master WHERE type='table'");
+    const tableNames = new Set((tables[0]?.values ?? []).map((row) => row[0] as string));
+    const anki21b = tableNames.has("notetypes");
+
+    // Collect all deck IDs to delete (this deck + children)
+    const deckIdsToDelete: number[] = [];
+
+    if (anki21b) {
+      const rows = db.exec(
+        "SELECT id FROM decks WHERE id=? OR name LIKE ?",
+        [deckId, fullName + "::%"],
+      );
+      if (rows[0]) {
+        for (const row of rows[0].values) deckIdsToDelete.push(row[0] as number);
+      }
+    } else {
+      const result = db.exec("SELECT decks FROM col");
+      const decksJson = JSON.parse((result[0]?.values[0]?.[0] as string) ?? "{}");
+      for (const [id, d] of Object.entries(decksJson) as [string, { name: string }][]) {
+        if (id === String(deckId) || d.name.startsWith(fullName + "::")) {
+          deckIdsToDelete.push(Number(id));
+        }
+      }
+    }
+
+    // Delete cards in those decks and track orphaned notes
+    for (const did of deckIdsToDelete) {
+      const cardRows = db.exec("SELECT id, nid FROM cards WHERE did=?", [did]);
+      if (cardRows[0]) {
+        for (const row of cardRows[0].values) {
+          const cardId = row[0] as number;
+          const noteId = row[1] as number;
+          db.run("DELETE FROM cards WHERE id=?", [cardId]);
+          await reviewDB.deleteCard(String(cardId));
+          await reviewDB.deleteReviewLogsForCard(String(cardId));
+
+          // Delete note if no more cards reference it
+          const remaining = db.exec("SELECT COUNT(*) FROM cards WHERE nid=?", [noteId]);
+          if ((remaining[0]?.values[0]?.[0] as number) === 0) {
+            db.run("DELETE FROM notes WHERE id=?", [noteId]);
+          }
+        }
+      }
+
+      // Delete the deck and record graves for sync
+      if (anki21b) {
+        db.run("DELETE FROM decks WHERE id=?", [did]);
+      }
+      // Record in graves table for sync
+      db.run("INSERT INTO graves (usn, oid, type) VALUES (-1, ?, 2)", [did]);
+      await reviewDB.markDeckDeleted(String(did));
+    }
+
+    if (!anki21b) {
+      // anki2: remove from JSON
+      const result = db.exec("SELECT decks FROM col");
+      const decksJson = JSON.parse((result[0]?.values[0]?.[0] as string) ?? "{}");
+      for (const did of deckIdsToDelete) delete decksJson[String(did)];
+      db.run("UPDATE col SET decks=?", [JSON.stringify(decksJson)]);
+    }
+
+    const newBytes = new Uint8Array(db.export());
+
+    // Update cache
+    const cache = await caches.open("anki-cache");
+    await cache.put("/sync/collection.sqlite", new Response(new Blob([newBytes as BlobPart])));
+
+    // Update in-place and re-parse
+    (input as { bytes: Uint8Array }).bytes = newBytes;
+    const { getAnkiDataFromSqlite } = await import("./ankiParser");
+    ankiDataSig.value = await getAnkiDataFromSqlite(newBytes, input.mediaFiles);
+
+    // Clear selected deck if it was the deleted one
+    if (selectedDeckIdSig.value === deckId) {
+      selectedDeckIdSig.value = null;
+    }
+  } finally {
+    db.close();
+  }
+}
+
+/**
+ * Export a deck (and its subdecks) from the synced SQLite collection as an .apkg file.
+ */
+export async function exportDeckFromCollection(fullName: string): Promise<void> {
+  const input = activeDeckInputSig.value;
+  if (input?.kind !== "sqlite") return;
+
+  const { BlobWriter, ZipWriter, BlobReader } = await import("@zip-js/zip-js");
+
+  const srcDb = await createDatabase(input.bytes);
+  const destDb = await createDatabase();
+
+  try {
+    const tables = srcDb.exec("SELECT name FROM sqlite_master WHERE type='table'");
+    const tableNames = new Set((tables[0]?.values ?? []).map((row) => row[0] as string));
+    const anki21b = tableNames.has("notetypes");
+
+    // Get the full schema from source and create in destination
+    const schemaRows = srcDb.exec(
+      "SELECT sql FROM sqlite_master WHERE type='table' OR type='index'",
+    );
+    if (schemaRows[0]) {
+      for (const row of schemaRows[0].values) {
+        const sql = row[0] as string | null;
+        if (sql) destDb.run(sql);
+      }
+    }
+
+    // Collect deck IDs to export
+    const deckIds: number[] = [];
+    if (anki21b) {
+      const rows = srcDb.exec("SELECT id FROM decks WHERE name=? OR name LIKE ?", [
+        fullName,
+        fullName + "::%",
+      ]);
+      if (rows[0]) {
+        for (const row of rows[0].values) deckIds.push(row[0] as number);
+      }
+
+      // Copy matching decks
+      for (const did of deckIds) {
+        const deckData = srcDb.exec("SELECT * FROM decks WHERE id=?", [did]);
+        if (deckData[0] && deckData[0].values.length > 0) {
+          const cols = deckData[0].columns.map(() => "?").join(",");
+          destDb.run(`INSERT INTO decks VALUES (${cols})`, deckData[0].values[0] as SqlValue[]);
+        }
+      }
+    } else {
+      const result = srcDb.exec("SELECT decks FROM col");
+      const decksJson = JSON.parse((result[0]?.values[0]?.[0] as string) ?? "{}");
+      const exportDecks: Record<string, unknown> = {};
+      for (const [id, d] of Object.entries(decksJson) as [string, { name: string }][]) {
+        if (d.name === fullName || d.name.startsWith(fullName + "::")) {
+          exportDecks[id] = d;
+          deckIds.push(Number(id));
+        }
+      }
+      // Also include Default deck (id=1) as Anki requires it
+      if (decksJson["1"]) exportDecks["1"] = decksJson["1"];
+
+      // Copy col row with filtered decks
+      const colRow = srcDb.exec("SELECT * FROM col");
+      const colValues = colRow[0]?.values[0];
+      if (colRow[0] && colValues) {
+        const row = [...colValues] as SqlValue[];
+        const decksIdx = colRow[0].columns.indexOf("decks");
+        if (decksIdx !== -1) row[decksIdx] = JSON.stringify(exportDecks);
+        const cols = colRow[0].columns.map(() => "?").join(",");
+        destDb.run(`INSERT INTO col VALUES (${cols})`, row);
+      }
+    }
+
+    // Copy cards for those decks
+    const placeholders = deckIds.map(() => "?").join(",");
+    const cardRows = srcDb.exec(`SELECT * FROM cards WHERE did IN (${placeholders})`, deckIds);
+    const noteIds = new Set<number>();
+    if (cardRows[0]) {
+      const nidIdx = cardRows[0].columns.indexOf("nid");
+      const cols = cardRows[0].columns.map(() => "?").join(",");
+      for (const row of cardRows[0].values) {
+        destDb.run(`INSERT INTO cards VALUES (${cols})`, row as SqlValue[]);
+        noteIds.add(row[nidIdx] as number);
+      }
+    }
+
+    // Copy notes referenced by those cards
+    if (noteIds.size > 0) {
+      const noteIdArr = [...noteIds];
+      const notePlaceholders = noteIdArr.map(() => "?").join(",");
+      const noteRows = srcDb.exec(
+        `SELECT * FROM notes WHERE id IN (${notePlaceholders})`,
+        noteIdArr,
+      );
+      if (noteRows[0]) {
+        const cols = noteRows[0].columns.map(() => "?").join(",");
+        for (const row of noteRows[0].values) {
+          destDb.run(`INSERT INTO notes VALUES (${cols})`, row as SqlValue[]);
+        }
+      }
+    }
+
+    // Copy revlog for exported cards
+    if (cardRows[0]) {
+      const cidIdx = cardRows[0].columns.indexOf("id");
+      const cardIdArr = cardRows[0].values.map((r) => r[cidIdx] as number);
+      if (cardIdArr.length > 0) {
+        const revPlaceholders = cardIdArr.map(() => "?").join(",");
+        const revRows = srcDb.exec(
+          `SELECT * FROM revlog WHERE cid IN (${revPlaceholders})`,
+          cardIdArr,
+        );
+        if (revRows[0]) {
+          const cols = revRows[0].columns.map(() => "?").join(",");
+          for (const row of revRows[0].values) {
+            destDb.run(`INSERT INTO revlog VALUES (${cols})`, row as SqlValue[]);
+          }
+        }
+      }
+    }
+
+    // For anki21b, copy notetypes and deck_config referenced by notes/decks
+    if (anki21b) {
+      // Copy notetypes used by the notes
+      if (noteIds.size > 0) {
+        const midSet = new Set<number>();
+        const noteIdArr = [...noteIds];
+        const notePlaceholders = noteIdArr.map(() => "?").join(",");
+        const midRows = srcDb.exec(
+          `SELECT DISTINCT mid FROM notes WHERE id IN (${notePlaceholders})`,
+          noteIdArr,
+        );
+        if (midRows[0]) {
+          for (const row of midRows[0].values) midSet.add(row[0] as number);
+        }
+        for (const mid of midSet) {
+          const ntRows = srcDb.exec("SELECT * FROM notetypes WHERE id=?", [mid]);
+          if (ntRows[0] && ntRows[0].values.length > 0) {
+            const cols = ntRows[0].columns.map(() => "?").join(",");
+            destDb.run(`INSERT INTO notetypes VALUES (${cols})`, ntRows[0].values[0] as SqlValue[]);
+          }
+        }
+      }
+
+      // Copy col row for anki21b
+      const colRow = srcDb.exec("SELECT * FROM col");
+      if (colRow[0] && colRow[0].values.length > 0) {
+        const cols = colRow[0].columns.map(() => "?").join(",");
+        destDb.run(`INSERT INTO col VALUES (${cols})`, colRow[0].values[0] as SqlValue[]);
+      }
+    }
+
+    // Build the APKG zip
+    const dbData = destDb.export();
+    const zipWriter = new ZipWriter(new BlobWriter("application/zip"));
+    await zipWriter.add(
+      anki21b ? "collection.anki21b" : "collection.anki2",
+      new BlobReader(new Blob([new Uint8Array(dbData)])),
+    );
+    await zipWriter.add("media", new BlobReader(new Blob([JSON.stringify({})])));
+    const blob = await zipWriter.close();
+
+    // Download
+    const safeName = fullName.replace(/::/g, "_").replace(/[^a-zA-Z0-9_-]/g, "_");
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${safeName}.apkg`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } finally {
+    srcDb.close();
+    destDb.close();
+  }
 }
 
 /**

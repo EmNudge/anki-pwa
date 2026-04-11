@@ -15,12 +15,25 @@ import {
   selectedDeckIdSig,
   reviewModeSig,
   openDeckSettings,
+  adoptedSampleIdsSig,
+  adoptSampleDeck,
+  removeAdoptedSample,
 } from "../stores";
 import type { DeckTreeNode } from "../types";
 
 const fileInput = ref<HTMLInputElement>();
 
-const sampleDecks = computed(() => sampleDeckData.map(createSampleDeckLibraryItem));
+const adoptedIds = computed(() => new Set(adoptedSampleIdsSig.value));
+const sampleDecks = computed(() =>
+  sampleDeckData
+    .filter((d) => !adoptedIds.value.has(d.id))
+    .map(createSampleDeckLibraryItem),
+);
+const adoptedSampleDecks = computed(() =>
+  sampleDeckData
+    .filter((d) => adoptedIds.value.has(d.id))
+    .map(createSampleDeckLibraryItem),
+);
 const uploadedDecks = computed(() =>
   [...cachedFilesSig.value].sort((a, b) => b.addedAt - a.addedAt).map(createCachedDeckLibraryItem),
 );
@@ -64,10 +77,17 @@ function flattenTree(nodes: DeckTreeNode[]): DeckTreeNode[] {
 
 const flatTree = computed(() => (deckInfoSig.value ? flattenTree(deckInfoSig.value.tree) : []));
 
+/** Whether the active deck belongs to "Your Decks" (adopted sample or uploaded file) */
+const isYourDeckActive = computed(() => {
+  const id = activeDeckSourceIdSig.value;
+  if (!id) return false;
+  return adoptedIds.value.has(id) || cachedFilesSig.value.some((f) => f.name === id);
+});
+
 function handleOpenSettings(node: DeckTreeNode, event: Event) {
   event.stopPropagation();
   // Compute the card count for this deck to match the storage key used by initializeReviewQueue
-  openDeckSettings(`deck-${node.cardCount}`);
+  openDeckSettings(`deck-${node.cardCount}`, node);
 }
 </script>
 
@@ -85,7 +105,7 @@ function handleOpenSettings(node: DeckTreeNode, event: Event) {
       <Button variant="primary" size="sm" @click="fileInput?.click()"> Add File </Button>
     </div>
 
-    <section v-if="!syncActiveSig" class="library-section">
+    <section v-if="!syncActiveSig && sampleDecks.length > 0" class="library-section">
       <div class="section-header">
         <h3 class="section-title">Sample Decks</h3>
         <span class="section-count">{{ sampleDecks.length }}</span>
@@ -94,14 +114,16 @@ function handleOpenSettings(node: DeckTreeNode, event: Event) {
         <div
           v-for="sampleDeck in sampleDecks"
           :key="sampleDeck.id"
-          :class="['file-card', { 'file-card--active': activeDeckSourceIdSig === sampleDeck.id }]"
-          @click="loadSampleDeck(sampleDeck.id)"
+          class="file-card file-card--static"
         >
           <div class="file-info">
             <span class="file-name">{{ sampleDeck.title }}</span>
             <span class="file-meta">{{ sampleDeck.detail }}</span>
             <span class="file-meta">{{ sampleDeck.meta }}</span>
           </div>
+          <Button variant="secondary" size="sm" @click="adoptSampleDeck(sampleDeck.id)">
+            Add
+          </Button>
         </div>
       </div>
     </section>
@@ -185,37 +207,118 @@ function handleOpenSettings(node: DeckTreeNode, event: Event) {
     <section class="library-section">
       <div class="section-header">
         <h3 class="section-title">Your Decks</h3>
-        <span class="section-count">{{ uploadedDecks.length }}</span>
+        <span class="section-count">{{ adoptedSampleDecks.length + uploadedDecks.length }}</span>
       </div>
 
-      <div v-if="uploadedDecks.length === 0" class="empty-state">
+      <div v-if="uploadedDecks.length === 0 && adoptedSampleDecks.length === 0" class="empty-state">
         <p class="empty-text">
-          No uploaded decks yet. Add an .apkg file to keep your own deck here.
+          No decks yet. Add an .apkg file or a sample deck to get started.
         </p>
         <Button variant="secondary" @click="fileInput?.click()"> Choose a Deck File </Button>
       </div>
 
-      <div v-else class="file-grid">
-        <div
-          v-for="deck in uploadedDecks"
-          :key="deck.id"
-          :class="['file-card', { 'file-card--active': activeDeckSourceIdSig === deck.id }]"
-          @click="loadCachedFile(deck.id)"
-        >
-          <div class="file-info">
-            <span class="file-name">{{ deck.title }}</span>
-            <span class="file-meta">{{ deck.detail }}</span>
-            <span class="file-meta">{{ deck.meta }}</span>
-          </div>
-          <button
-            class="delete-btn"
-            title="Remove from library"
-            @click.stop="deleteCachedFile(deck.id)"
+      <template v-else>
+        <div class="file-grid">
+          <div
+            v-for="deck in adoptedSampleDecks"
+            :key="deck.id"
+            :class="['file-card', { 'file-card--active': activeDeckSourceIdSig === deck.id }]"
+            @click="loadSampleDeck(deck.id)"
           >
-            &times;
-          </button>
+            <div class="file-info">
+              <span class="file-name">{{ deck.title }}</span>
+              <span class="file-meta">{{ deck.detail }}</span>
+            </div>
+            <button
+              class="delete-btn"
+              title="Remove from library"
+              @click.stop="removeAdoptedSample(deck.id)"
+            >
+              &times;
+            </button>
+          </div>
+          <div
+            v-for="deck in uploadedDecks"
+            :key="deck.id"
+            :class="['file-card', { 'file-card--active': activeDeckSourceIdSig === deck.id }]"
+            @click="loadCachedFile(deck.id)"
+          >
+            <div class="file-info">
+              <span class="file-name">{{ deck.title }}</span>
+              <span class="file-meta">{{ deck.detail }}</span>
+            </div>
+            <button
+              class="delete-btn"
+              title="Remove from library"
+              @click.stop="deleteCachedFile(deck.id)"
+            >
+              &times;
+            </button>
+          </div>
         </div>
-      </div>
+
+        <!-- Deck tree for active your-deck -->
+        <div v-if="!syncActiveSig && isYourDeckActive && deckInfoSig" class="deck-tree your-deck-tree">
+          <div
+            v-for="node in flatTree"
+            :key="node.fullName"
+            :class="['deck-row', { 'deck-row--active': selectedDeckIdSig === node.id }]"
+            :style="{ paddingLeft: `${12 + node.depth * 20}px` }"
+            @click="selectSubdeck(node.id)"
+          >
+            <div class="deck-row-left">
+              <button
+                v-if="node.children.length > 0"
+                class="collapse-btn"
+                :title="collapsed.has(node.fullName) ? 'Expand' : 'Collapse'"
+                @click="toggleCollapse(node.fullName, $event)"
+              >
+                <span
+                  :class="[
+                    'collapse-icon',
+                    { 'collapse-icon--collapsed': collapsed.has(node.fullName) },
+                  ]"
+                  >&#9662;</span
+                >
+              </button>
+              <span v-else class="collapse-spacer" />
+              <span class="deck-name">{{ node.name }}</span>
+            </div>
+            <div class="deck-row-right">
+              <Tooltip text="New"
+                ><span class="stat stat--new">{{ node.newCount }}</span></Tooltip
+              >
+              <Tooltip text="Learning"
+                ><span class="stat stat--learn">{{ node.learnCount }}</span></Tooltip
+              >
+              <Tooltip text="Due"
+                ><span class="stat stat--due">{{ node.dueCount }}</span></Tooltip
+              >
+              <button
+                class="settings-btn"
+                title="Deck settings"
+                @click="handleOpenSettings(node, $event)"
+              >
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path
+                    d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"
+                  />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </template>
     </section>
   </div>
 </template>
@@ -310,6 +413,15 @@ function handleOpenSettings(node: DeckTreeNode, event: Event) {
   background: var(--color-surface-elevated);
 }
 
+.file-card--static {
+  cursor: default;
+}
+
+.file-card--static:hover {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+}
+
 .file-info {
   display: flex;
   flex-direction: column;
@@ -329,6 +441,10 @@ function handleOpenSettings(node: DeckTreeNode, event: Event) {
 .file-meta {
   font-size: var(--font-size-xs);
   color: var(--color-text-tertiary);
+}
+
+.your-deck-tree {
+  margin-top: var(--spacing-3);
 }
 
 /* Deck tree (synced decks with hierarchy) */
