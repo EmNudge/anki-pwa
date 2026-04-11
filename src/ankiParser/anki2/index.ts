@@ -1,6 +1,13 @@
 import { Database } from "sql.js";
 import { executeQuery, executeQueryAll } from "~/utils/sql";
-import { modelSchema, deckSchema, fsrsJsonSchema } from "./jsonParsers";
+import {
+  modelSchema,
+  deckSchema,
+  colConfSchema,
+  dconfSchema,
+  fsrsJsonSchema,
+  type DconfEntry,
+} from "./jsonParsers";
 import { z } from "zod";
 import { assertTruthy } from "~/utils/assert";
 import { buildScheduling, resolveCardDeckName, isBlankCard, parseRevlog } from "../shared";
@@ -88,6 +95,43 @@ export function getDueType(queue: number): CardScheduling["dueType"] {
   return DUE_TYPES[queue] ?? "position";
 }
 
+export type Anki2Deck = {
+  id: number;
+  name: string;
+  description?: string;
+  mod?: number;
+  usn?: number;
+  lrnToday?: [number, number];
+  revToday?: [number, number];
+  newToday?: [number, number];
+  timeToday?: [number, number];
+  collapsed?: boolean;
+  browserCollapsed?: boolean;
+  conf?: number;
+  dyn?: number;
+  extendNew?: number;
+  extendRev?: number;
+};
+
+export type Anki2DeckConfig = {
+  id?: number | string;
+  name?: string;
+  learnSteps?: number[];
+  relearnSteps?: number[];
+  new?: DconfEntry["new"];
+  rev?: DconfEntry["rev"];
+  lapse?: DconfEntry["lapse"];
+  maxTaken?: number;
+  autoplay?: boolean;
+  timer?: number;
+  replayq?: boolean;
+  dyn?: boolean;
+  mod?: number;
+  usn?: number;
+};
+
+export type ColConf = z.infer<typeof colConfSchema>;
+
 export type AnkiDB2Data = {
   cards: {
     ankiCardId?: number;
@@ -108,18 +152,24 @@ export type AnkiDB2Data = {
     noteData: string | null;
     csum: number | null;
     sfld: string | null;
+    noteMod?: number;
+    noteUsn?: number;
+    noteFlags?: number;
+    cardMod?: number;
+    cardUsn?: number;
   }[];
   notesTypes: { id: string | number; schemaHash: string; latexPre: string; latexSvg: boolean }[];
   deckName: string;
-  decks: Record<string, { id: number; name: string }>;
+  decks: Record<string, Anki2Deck>;
   revlog: RevlogEntry[];
   collectionCreationTime: number;
-  deckConfigs: Record<string, { learnSteps?: number[]; relearnSteps?: number[] }>;
+  deckConfigs: Record<string, Anki2DeckConfig>;
+  colConf: ColConf | null;
   graves: { usn: number; oid: number; type: number }[];
 };
 
 export function getDataFromAnki2(db: Database): AnkiDB2Data {
-  const { models, deckName, decks, collectionCreationTime } = (() => {
+  const { models, deckName, decks, colConf, collectionCreationTime } = (() => {
     // anki2 and anki21 only use the first row of the col table
     // models, decks, and dconf are JSON strings
     const colData = executeQuery<{
@@ -133,9 +183,17 @@ export function getDataFromAnki2(db: Database): AnkiDB2Data {
 
     const parsedModels = modelSchema.parse(JSON.parse(colData.models));
 
+    // Parse collection config
+    let colConf: ColConf | null = null;
+    try {
+      colConf = colConfSchema.parse(JSON.parse(colData.conf));
+    } catch {
+      // keep null
+    }
+
     // Parse decks JSON to extract all deck information
     let deckName = "Unknown";
-    let decks: Record<string, { id: number; name: string }> = {};
+    let decks: Record<string, Anki2Deck> = {};
     try {
       const parsedDecks = deckSchema.parse(JSON.parse(colData.decks));
 
@@ -143,7 +201,26 @@ export function getDataFromAnki2(db: Database): AnkiDB2Data {
       decks = Object.fromEntries(
         Object.entries(parsedDecks)
           .filter(([_, deck]) => deck.name)
-          .map(([id, deck]) => [id, { id: deck.id, name: deck.name! }]),
+          .map(([id, deck]) => [
+            id,
+            {
+              id: deck.id,
+              name: deck.name!,
+              description: deck.desc || undefined,
+              mod: deck.mod,
+              usn: deck.usn,
+              lrnToday: deck.lrnToday,
+              revToday: deck.revToday,
+              newToday: deck.newToday,
+              timeToday: deck.timeToday,
+              collapsed: deck.collapsed,
+              browserCollapsed: deck.browserCollapsed,
+              conf: deck.conf,
+              dyn: deck.dyn,
+              extendNew: deck.extendNew,
+              extendRev: deck.extendRev,
+            },
+          ]),
       );
 
       // Use the first deck's name for backwards compatibility
@@ -156,7 +233,13 @@ export function getDataFromAnki2(db: Database): AnkiDB2Data {
       console.warn("Failed to parse deck information from decks JSON:", e);
     }
 
-    return { models: parsedModels, deckName, decks, collectionCreationTime: colData.crt ?? 0 };
+    return {
+      models: parsedModels,
+      deckName,
+      decks,
+      colConf,
+      collectionCreationTime: colData.crt ?? 0,
+    };
   })();
 
   const cards = (() => {
@@ -169,9 +252,12 @@ export function getDataFromAnki2(db: Database): AnkiDB2Data {
       data: string;
       sfld: string;
       csum: number;
+      mod: number;
+      usn: number;
+      flags: number;
     }>(
       db,
-      "SELECT id, guid, cast(mid as text) as modelId, tags, flds as fields, data, sfld, csum FROM notes",
+      "SELECT id, guid, cast(mid as text) as modelId, tags, flds as fields, data, sfld, csum, mod, usn, flags FROM notes",
     );
 
     const notesMap = new Map(notes.map((n) => [n.id, n]));
@@ -194,9 +280,11 @@ export function getDataFromAnki2(db: Database): AnkiDB2Data {
       flags: number;
       left: number;
       data: string | Uint8Array;
+      mod: number;
+      usn: number;
     }>(
       db,
-      "SELECT id, nid, ord, did, odid, type, queue, due, ivl, factor, reps, lapses, odue, flags, left, data FROM cards",
+      "SELECT id, nid, ord, did, odid, type, queue, due, ivl, factor, reps, lapses, odue, flags, left, data, mod, usn FROM cards",
     );
 
     return cardRows
@@ -242,6 +330,11 @@ export function getDataFromAnki2(db: Database): AnkiDB2Data {
           csum: note.csum ?? null,
           sfld: note.sfld ?? null,
           scheduling: buildScheduling(cardRow),
+          noteMod: note.mod,
+          noteUsn: note.usn,
+          noteFlags: note.flags,
+          cardMod: cardRow.mod,
+          cardUsn: cardRow.usn,
         };
       })
       .filter((c): c is NonNullable<typeof c> => c !== null);
@@ -253,14 +346,24 @@ export function getDataFromAnki2(db: Database): AnkiDB2Data {
   const deckConfigs = (() => {
     try {
       const colData = executeQuery<{ dconf: string }>(db, "SELECT dconf FROM col");
-      const parsed = JSON.parse(colData.dconf) as Record<string, Record<string, unknown>>;
-      const result: Record<string, { learnSteps?: number[]; relearnSteps?: number[] }> = {};
+      const parsed = dconfSchema.parse(JSON.parse(colData.dconf));
+      const result: Record<string, Anki2DeckConfig> = {};
       for (const [id, config] of Object.entries(parsed)) {
-        const newConf = config?.new as { delays?: number[] } | undefined;
-        const lapseConf = config?.lapse as { delays?: number[] } | undefined;
         result[id] = {
-          learnSteps: newConf?.delays,
-          relearnSteps: lapseConf?.delays,
+          id: config.id,
+          name: config.name,
+          learnSteps: config.new?.delays,
+          relearnSteps: config.lapse?.delays,
+          new: config.new,
+          rev: config.rev,
+          lapse: config.lapse,
+          maxTaken: config.maxTaken,
+          autoplay: config.autoplay,
+          timer: config.timer,
+          replayq: config.replayq,
+          dyn: config.dyn,
+          mod: config.mod,
+          usn: config.usn,
         };
       }
       return result;
@@ -302,6 +405,7 @@ export function getDataFromAnki2(db: Database): AnkiDB2Data {
     revlog,
     collectionCreationTime,
     deckConfigs,
+    colConf,
     graves,
   };
 }

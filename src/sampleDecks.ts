@@ -70,6 +70,7 @@ function createSampleDeck({
       notesTypes: [],
       collectionCreationTime: 0,
       deckConfigs: {},
+      colConf: null,
     },
   };
 }

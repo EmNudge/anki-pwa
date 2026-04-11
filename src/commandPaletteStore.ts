@@ -8,6 +8,7 @@ export interface Command {
   icon?: Component;
   hotkey?: string;
   label?: string;
+  group?: string;
   children?: Command[];
   handler?: () => void | { keepOpen: boolean };
   metadata?: {

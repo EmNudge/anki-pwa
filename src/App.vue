@@ -36,6 +36,9 @@ import SchedulerSettings from "./components/SchedulerSettings.vue";
 import CommandPalette from "./components/CommandPalette.vue";
 import { useCommands } from "./composables/useCommands";
 import { getAutoplayAudioSources, playAudio } from "./utils/sound";
+import { Info } from "lucide-vue-next";
+import Modal from "./design-system/components/primitives/Modal.vue";
+import Tooltip from "./design-system/components/primitives/Tooltip.vue";
 import { markDataChanged, startAutoSync } from "./lib/autoSync";
 
 const activeSide = ref<"front" | "back">("front");
@@ -63,6 +66,23 @@ watch(computedDeckInfo, (newDeckInfo, oldDeckInfo) => {
     }
   }
 });
+
+const selectedSubdeck = computed(() => {
+  const info = deckInfoSig.value;
+  const id = selectedDeckIdSig.value;
+  if (!info || !id) return null;
+  return info.subdecks.find((d) => d.id === id) ?? null;
+});
+
+const selectedDeckName = computed(() => {
+  return selectedSubdeck.value?.name ?? deckInfoSig.value?.name ?? null;
+});
+
+const selectedDeckDescription = computed(() => {
+  return selectedSubdeck.value?.description || null;
+});
+
+const deckInfoModalOpen = ref(false);
 
 // Initialize review queue when cards are loaded (scheduler enabled state is per-deck, checked inside)
 watch([cardsSig, templatesSig, selectedDeckIdSig], ([cards, templates]) => {
@@ -114,6 +134,20 @@ const renderedCard = computed(() => {
 
   return { frontSideHtml, backSideHtml, cardCss: card.css ?? "" };
 });
+
+// Autoplay front-side audio when entering studying mode or when the card changes
+watch(
+  () => [reviewModeSig.value, renderedCard.value] as const,
+  ([mode, card], [oldMode]) => {
+    if (mode !== "studying" || !card) return;
+    if (oldMode !== "studying" || activeSide.value === "front") {
+      activeSide.value = "front";
+      for (const filename of getAutoplayAudioSources(card.frontSideHtml)) {
+        playAudio(filename);
+      }
+    }
+  },
+);
 
 function updateActiveSide(side: "front" | "back") {
   activeSide.value = side;
@@ -194,6 +228,14 @@ async function handleChooseAnswer(answer: Answer) {
   <main v-else>
     <div class="layout-center-column">
       <template v-if="renderedCard">
+        <div v-if="selectedDeckName" class="deck-header">
+          <Tooltip :text="selectedDeckDescription ?? 'No description'">
+            <button class="deck-info-btn" @click="deckInfoModalOpen = true">
+              <Info :size="16" />
+            </button>
+          </Tooltip>
+          <span>{{ selectedDeckName }}</span>
+        </div>
         <FlashCard
           :active-side="activeSide"
           :front-html="renderedCard.frontSideHtml"
@@ -223,6 +265,26 @@ async function handleChooseAnswer(answer: Answer) {
     :is-open="schedulerSettingsModalOpenSig"
     @close="schedulerSettingsModalOpenSig = false"
   />
+
+  <Modal :is-open="deckInfoModalOpen" title="Deck Info" size="sm" @close="deckInfoModalOpen = false">
+    <div v-if="selectedSubdeck" class="deck-info-content">
+      <dl class="deck-info-dl">
+        <dt>Name</dt>
+        <dd>{{ selectedSubdeck.fullName }}</dd>
+        <dt>Description</dt>
+        <dd>{{ selectedSubdeck.description || 'No description' }}</dd>
+        <dt>Cards</dt>
+        <dd>{{ selectedSubdeck.cardCount }}</dd>
+        <dt>New</dt>
+        <dd>{{ selectedSubdeck.newCount }}</dd>
+        <dt>Learning</dt>
+        <dd>{{ selectedSubdeck.learnCount }}</dd>
+        <dt>Due</dt>
+        <dd>{{ selectedSubdeck.dueCount }}</dd>
+      </dl>
+    </div>
+  </Modal>
+
   <CommandPalette :commands="commands" />
 </template>
 
@@ -239,9 +301,58 @@ main {
   padding: var(--spacing-8) var(--spacing-4);
 }
 
+.deck-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-1-5);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
 .no-deck-message {
   color: var(--color-text-secondary);
   font-size: var(--font-size-base);
+}
+
+.deck-info-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  color: var(--color-text-tertiary);
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition-colors);
+  box-shadow: none;
+}
+
+.deck-info-btn:hover {
+  color: var(--color-text-primary);
+  background: var(--color-surface-hover);
+}
+
+.deck-info-content {
+  padding: var(--spacing-2) 0;
+}
+
+.deck-info-dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--spacing-1-5) var(--spacing-4);
+  margin: 0;
+  font-size: var(--font-size-sm);
+}
+
+.deck-info-dl dt {
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-medium);
+}
+
+.deck-info-dl dd {
+  margin: 0;
+  color: var(--color-text-primary);
 }
 
 .link-btn {

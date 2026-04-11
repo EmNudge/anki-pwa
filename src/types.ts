@@ -2,6 +2,7 @@ export interface SubDeckInfo {
   id: string;
   name: string;
   fullName: string;
+  description?: string;
   cardCount: number;
   templateCount: number;
   newCount: number;

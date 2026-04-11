@@ -1,10 +1,33 @@
-import { getNotesType } from "./proto";
+import {
+  getNotesType,
+  parseFieldConfigProto,
+  parseTemplatesProto,
+  parseDeckCommonProto,
+  parseDeckConfigProto,
+  type Anki21bDeckCommon,
+  type Anki21bDeckConfig,
+} from "./proto";
 import { Database } from "sql.js";
 import { executeQuery, executeQueryAll } from "~/utils/sql";
-import { parseFieldConfigProto, parseTemplatesProto } from "./proto";
 import { assertTruthy } from "~/utils/assert";
 import { type CardScheduling, type RevlogEntry } from "../anki2";
 import { buildScheduling, resolveCardDeckName, isBlankCard, parseRevlog } from "../shared";
+
+export type Anki21bDeck = {
+  id: number;
+  name: string;
+  description?: string;
+  mtimeSecs?: number;
+  usn?: number;
+  common?: Anki21bDeckCommon;
+};
+
+export type Anki21bDeckConfigEntry = Anki21bDeckConfig & {
+  id: number;
+  name: string;
+  mtimeSecs: number;
+  usn: number;
+};
 
 export type AnkiDB21bData = {
   cards: {
@@ -27,10 +50,15 @@ export type AnkiDB21bData = {
     latexPre: string;
     latexPost: string;
     req: [number, string, number[]][] | null;
+    noteMod?: number;
+    noteUsn?: number;
+    cardMod?: number;
+    cardUsn?: number;
   }[];
   notesTypes: ReturnType<typeof getNotesType>;
   deckName: string;
-  decks: Record<string, { id: number; name: string }>;
+  decks: Record<string, Anki21bDeck>;
+  deckConfigs: Record<string, Anki21bDeckConfigEntry>;
   revlog: RevlogEntry[];
   collectionCreationTime: number;
   tagsTable: { tag: string; collapsed: boolean }[];
@@ -50,13 +78,35 @@ export function getDataFromAnki21b(db: Database): AnkiDB21bData {
   // Extract all decks from the decks table
   const { decks, deckName } = (() => {
     try {
-      const deckRows = executeQueryAll<{ id: number; name: string }>(
-        db,
-        "SELECT id, name FROM decks",
-      );
+      const deckRows = executeQueryAll<{
+        id: number;
+        name: string;
+        mtime_secs: number;
+        usn: number;
+        common: Uint8Array | null;
+      }>(db, "SELECT id, name, mtime_secs, usn, common FROM decks");
 
-      const decks = Object.fromEntries(
-        deckRows.map((deck) => [deck.id.toString(), { id: deck.id, name: deck.name }]),
+      const decks: Record<string, Anki21bDeck> = Object.fromEntries(
+        deckRows.map((deck) => {
+          let common: Anki21bDeckCommon | undefined;
+          if (deck.common && deck.common.length > 0) {
+            try {
+              common = parseDeckCommonProto(deck.common);
+            } catch {
+              // keep undefined
+            }
+          }
+          return [
+            deck.id.toString(),
+            {
+              id: deck.id,
+              name: deck.name,
+              mtimeSecs: deck.mtime_secs,
+              usn: deck.usn,
+              common,
+            },
+          ];
+        }),
       );
 
       // Use the first non-default deck's name, or "Default" if only default exists
@@ -66,7 +116,7 @@ export function getDataFromAnki21b(db: Database): AnkiDB21bData {
       return { decks, deckName };
     } catch (e) {
       console.warn("Failed to parse deck information:", e);
-      return { decks: {}, deckName: "Unknown" };
+      return { decks: {} as Record<string, Anki21bDeck>, deckName: "Unknown" };
     }
   })();
 
@@ -147,7 +197,9 @@ export function getDataFromAnki21b(db: Database): AnkiDB21bData {
       flds: string;
       tags: string;
       mid: string;
-    }>(db, "SELECT id, guid, flds, tags, cast(mid as text) as mid FROM notes");
+      mod: number;
+      usn: number;
+    }>(db, "SELECT id, guid, flds, tags, cast(mid as text) as mid, mod, usn FROM notes");
 
     const notesMap = new Map(notes.map((n) => [n.id, n]));
 
@@ -169,9 +221,11 @@ export function getDataFromAnki21b(db: Database): AnkiDB21bData {
       flags: number;
       left: number;
       data: string | Uint8Array;
+      mod: number;
+      usn: number;
     }>(
       db,
-      "SELECT id, nid, ord, did, odid, type, queue, due, ivl, factor, reps, lapses, odue, flags, left, data FROM cards",
+      "SELECT id, nid, ord, did, odid, type, queue, due, ivl, factor, reps, lapses, odue, flags, left, data, mod, usn FROM cards",
     );
 
     return cardRows
@@ -232,12 +286,44 @@ export function getDataFromAnki21b(db: Database): AnkiDB21bData {
           latexPost: noteTypeInfo?.latexPost ?? "",
           req,
           scheduling: buildScheduling(cardRow),
+          noteMod: note.mod,
+          noteUsn: note.usn,
+          cardMod: cardRow.mod,
+          cardUsn: cardRow.usn,
         };
       })
       .filter((c): c is NonNullable<typeof c> => c !== null);
   })();
 
   const revlog = parseRevlog(db);
+
+  // Parse deck_config table (anki21b stores deck configs as protobuf)
+  const deckConfigs = (() => {
+    try {
+      const rows = executeQueryAll<{
+        id: number;
+        name: string;
+        mtime_secs: number;
+        usn: number;
+        config: Uint8Array;
+      }>(db, "SELECT id, name, mtime_secs, usn, config FROM deck_config");
+
+      return Object.fromEntries(
+        rows.map((row) => [
+          row.id.toString(),
+          {
+            id: row.id,
+            name: row.name,
+            mtimeSecs: row.mtime_secs,
+            usn: row.usn,
+            ...parseDeckConfigProto(row.config),
+          },
+        ]),
+      ) as Record<string, Anki21bDeckConfigEntry>;
+    } catch {
+      return {} as Record<string, Anki21bDeckConfigEntry>;
+    }
+  })();
 
   // Parse tags table if it exists (anki21b has a dedicated tags table)
   const tagsTable = (() => {
@@ -252,5 +338,5 @@ export function getDataFromAnki21b(db: Database): AnkiDB21bData {
     }
   })();
 
-  return { cards, notesTypes, deckName, decks, revlog, collectionCreationTime, tagsTable };
+  return { cards, notesTypes, deckName, decks, deckConfigs, revlog, collectionCreationTime, tagsTable };
 }

@@ -1,0 +1,20 @@
+// Copyright: Ankitects Pty Ltd and contributors
+// License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
+
+syntax = "proto3";
+
+package anki.decks;
+
+message DeckCommon {
+  bool study_collapsed = 1;
+  bool browser_collapsed = 2;
+  uint32 last_day_studied = 3;
+  int32 new_studied = 4;
+  int32 review_studied = 5;
+  int32 milliseconds_studied = 6;
+  int32 learning_studied = 7;
+  // The deck config id this deck references
+  int64 config_id = 8;
+
+  bytes other = 255;
+}

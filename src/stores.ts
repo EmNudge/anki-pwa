@@ -116,7 +116,7 @@ ankiCachePromise.then(async (cache) => {
 
       activeDeckInputSig.value = { kind: "sqlite", bytes, mediaFiles };
       activeViewSig.value = "review";
-      reviewModeSig.value = "studying";
+      reviewModeSig.value = "deck-list";
       return;
     }
     persistActiveDeckSourceId(null);
@@ -132,7 +132,7 @@ ankiCachePromise.then(async (cache) => {
     }
     activeDeckInputSig.value = { kind: "sample", data: sampleDeck.data };
     activeViewSig.value = "review";
-    reviewModeSig.value = "studying";
+    reviewModeSig.value = "deck-list";
     return;
   }
 
@@ -140,7 +140,7 @@ ankiCachePromise.then(async (cache) => {
   if (response) {
     activeDeckInputSig.value = { kind: "blob", blob: await response.blob() };
     activeViewSig.value = "review";
-    reviewModeSig.value = "studying";
+    reviewModeSig.value = "deck-list";
     return;
   }
 

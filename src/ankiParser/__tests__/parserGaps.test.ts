@@ -592,9 +592,9 @@ describe("Parser Gaps (expected to fail)", () => {
         expect(card21bKeys).toContain(key);
         expect(card2Keys).toContain(key);
       }
-      // The remaining difference is noteData, csum, sfld (anki2-only for now)
+      // The remaining difference is noteData, csum, noteFlags, sfld (anki2-only for now)
       const anki2Only = card2Keys.filter((k) => !card21bKeys.includes(k));
-      expect(anki2Only.sort()).toEqual(["csum", "noteData", "sfld"]);
+      expect(anki2Only.sort()).toEqual(["csum", "noteData", "noteFlags", "sfld"]);
     });
   });
 
