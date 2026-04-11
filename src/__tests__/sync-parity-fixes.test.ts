@@ -458,13 +458,14 @@ describe("sync parity fixes", () => {
   // ── 3: Media batch size ───────────────────────────────────────
 
   describe("media batch size", () => {
-    test("ankiSync uses batch size of 30 for downloads and uploads", async () => {
+    test("ankiSync uses correct batch sizes for downloads and uploads", async () => {
       const { readFileSync } = await import("node:fs");
       const source = readFileSync(
         join(process.cwd(), "src", "lib", "ankiSync.ts"),
         "utf-8",
       );
-      expect(source).toContain("DOWNLOAD_BATCH_SIZE = 30");
+      // Download batch capped at 25 (server's MAX_MEDIA_FILES_IN_ZIP)
+      expect(source).toContain("DOWNLOAD_BATCH_SIZE = 25");
       expect(source).toContain("UPLOAD_BATCH_SIZE = 30");
     });
   });

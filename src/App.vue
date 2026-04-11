@@ -36,10 +36,14 @@ import SchedulerSettings from "./components/SchedulerSettings.vue";
 import CommandPalette from "./components/CommandPalette.vue";
 import { useCommands } from "./composables/useCommands";
 import { getAutoplayAudioSources, playAudio } from "./utils/sound";
+import { markDataChanged, startAutoSync } from "./lib/autoSync";
 
 const activeSide = ref<"front" | "back">("front");
 const reviewStartTime = ref<number>(Date.now());
 const commands = useCommands();
+
+// Start background auto-sync timer
+startAutoSync();
 
 // Compute deck info from anki data
 const computedDeckInfo = computed(() => {
@@ -161,6 +165,7 @@ async function handleChooseAnswer(answer: Answer) {
       const updatedState = await queue.processReview(reviewCard, answer, reviewTimeMs);
       updateDueCardsAfterReview(reviewCard.cardId, updatedState);
       moveToNextReviewCard();
+      markDataChanged();
     }
   } else {
     moveToNextCard();

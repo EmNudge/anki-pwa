@@ -173,25 +173,20 @@ function scalar(db: Database, sql: string): unknown {
 describe("sync gap fixes", () => {
   // ── Gap 1: Parallel media sync ──────────────────────────────────
 
-  describe("parallel media sync", () => {
-    test("SyncPanel runs media download and upload concurrently (structural check)", async () => {
-      // This is a structural test — we verify SyncPanel.vue uses Promise.allSettled
-      // for concurrent media operations. The actual concurrent behavior is tested
-      // in integration tests against a real server.
+  describe("sequential media sync", () => {
+    test("SyncPanel runs media download and upload sequentially (structural check)", async () => {
+      // Media sync must be sequential — each calls /msync/begin which starts a new
+      // server session, so parallel calls would invalidate the first session.
       const { readFileSync } = await import("node:fs");
       const syncPanelSource = readFileSync(
         join(process.cwd(), "src", "components", "SyncPanel.vue"),
         "utf-8",
       );
 
-      // Verify concurrent pattern is used
-      expect(syncPanelSource).toContain("Promise.allSettled");
+      // Verify sequential pattern is used (no Promise.allSettled)
+      expect(syncPanelSource).not.toContain("Promise.allSettled");
       expect(syncPanelSource).toContain("downloadMedia");
       expect(syncPanelSource).toContain("uploadMedia");
-
-      // Verify the old sequential pattern is NOT present
-      expect(syncPanelSource).not.toContain("Checking for new media...");
-      expect(syncPanelSource).not.toContain("Checking for media to upload...");
     });
   });
 

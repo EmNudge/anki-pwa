@@ -226,7 +226,8 @@ export async function downloadCollection(
   return decompressIfNeeded(bytes);
 }
 
-const DOWNLOAD_BATCH_SIZE = 30;
+/** Server enforces MAX_MEDIA_FILES_IN_ZIP = 25; exceeding it returns 400. */
+const DOWNLOAD_BATCH_SIZE = 25;
 
 const mediaSyncBeginSchema = z.object({
   usn: z.number(),

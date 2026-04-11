@@ -30,6 +30,7 @@ import {
   SyncAbortedError,
   ClockSkewError,
 } from "../lib/normalSync";
+import { acquireSyncLock, releaseSyncLock } from "../lib/autoSync";
 import mime from "mime";
 
 const serverUrl = ref("");
@@ -43,6 +44,8 @@ const lastSyncTime = ref<number | null>(null);
 const showPushConfirm = ref(false);
 const showFullSyncDialog = ref(false);
 const showAdvancedSync = ref(false);
+const lastSyncType = ref<string | null>(localStorage.getItem("anki-last-sync-type"));
+const lastSyncProto = ref<string | null>(localStorage.getItem("anki-last-sync-proto"));
 
 onMounted(() => {
   const config = readSyncConfig();
@@ -97,6 +100,11 @@ async function handleSync() {
     return;
   }
 
+  if (!acquireSyncLock()) {
+    syncError.value = "A sync is already in progress.";
+    return;
+  }
+
   syncError.value = "";
   isSyncing.value = true;
 
@@ -116,6 +124,7 @@ async function handleSync() {
     });
 
     if (result.action === "noChanges") {
+      setSyncInfo("Incremental", result.proto);
       syncStatus.value = "Already up to date.";
       const now = Date.now();
       writeSyncState({ ...state, lastSync: now });
@@ -129,36 +138,42 @@ async function handleSync() {
       await initializeReviewQueue();
     }
 
-    // Download and upload media in parallel
-    syncStatus.value = "Syncing media...";
-    const [dlResult, ulResult] = await Promise.allSettled([
-      downloadMedia(serverUrl.value, state.hkey, (s) => {
+    // Download then upload media sequentially — each calls /msync/begin which
+    // starts a new server session, so running them in parallel would invalidate
+    // the first session and cause 400 errors on downloadFiles.
+    syncStatus.value = "Downloading media...";
+    try {
+      const dlMedia = await downloadMedia(serverUrl.value, state.hkey, (s) => {
         syncStatus.value = s;
-      }),
-      uploadMedia(serverUrl.value, state.hkey, (s) => {
-        syncStatus.value = s;
-      }),
-    ]);
-
-    if (dlResult.status === "fulfilled" && dlResult.value.size > 0) {
-      const typedBlobs = new Map<string, Blob>();
-      for (const [filename, blob] of dlResult.value) {
-        typedBlobs.set(
-          filename,
-          new Blob([blob], { type: mime.getType(filename) ?? "application/octet-stream" }),
-        );
+      });
+      if (dlMedia.size > 0) {
+        const typedBlobs = new Map<string, Blob>();
+        for (const [filename, blob] of dlMedia) {
+          typedBlobs.set(
+            filename,
+            new Blob([blob], { type: mime.getType(filename) ?? "application/octet-stream" }),
+          );
+        }
+        syncStatus.value = `Downloaded ${dlMedia.size} media file${dlMedia.size === 1 ? "" : "s"}. Caching...`;
+        await addMediaToCache(typedBlobs);
       }
-      syncStatus.value = `Downloaded ${dlResult.value.size} media file${dlResult.value.size === 1 ? "" : "s"}. Caching...`;
-      await addMediaToCache(typedBlobs);
-    } else if (dlResult.status === "rejected") {
-      console.warn("Media download failed (non-fatal):", dlResult.reason);
+    } catch (dlErr) {
+      console.warn("Media download failed (non-fatal):", dlErr);
     }
 
-    if (ulResult.status === "rejected") {
-      console.warn("Media upload failed (non-fatal):", ulResult.reason);
-    } else if (ulResult.value > 0) {
-      syncStatus.value = `Uploaded ${ulResult.value} media file${ulResult.value === 1 ? "" : "s"}.`;
+    syncStatus.value = "Uploading media...";
+    try {
+      const uploaded = await uploadMedia(serverUrl.value, state.hkey, (s) => {
+        syncStatus.value = s;
+      });
+      if (uploaded > 0) {
+        syncStatus.value = `Uploaded ${uploaded} media file${uploaded === 1 ? "" : "s"}.`;
+      }
+    } catch (ulErr) {
+      console.warn("Media upload failed (non-fatal):", ulErr);
     }
+
+    setSyncInfo("Incremental", result.proto);
 
     const newState = { ...state, ...result.newState };
     writeSyncState(newState);
@@ -180,6 +195,7 @@ async function handleSync() {
     syncStatus.value = "";
   } finally {
     isSyncing.value = false;
+    releaseSyncLock();
   }
 }
 
@@ -208,6 +224,8 @@ async function doFullPull(hkey: string) {
   syncStatus.value = "Parsing collection...";
   await loadSyncedCollection(sqliteBytes, typedMediaBlobs);
 
+  setSyncInfo("Full download");
+
   const now = Date.now();
   const prevState = readSyncState();
   writeSyncState({ ...prevState, lastSync: now });
@@ -220,6 +238,11 @@ async function handlePull() {
   const state = readSyncState();
   if (!state.hkey) {
     syncError.value = "Not logged in. Please log in first.";
+    return;
+  }
+
+  if (!acquireSyncLock()) {
+    syncError.value = "A sync is already in progress.";
     return;
   }
 
@@ -239,6 +262,7 @@ async function handlePull() {
     syncStatus.value = "";
   } finally {
     isSyncing.value = false;
+    releaseSyncLock();
   }
 }
 
@@ -246,6 +270,11 @@ async function handlePush() {
   const state = readSyncState();
   if (!state.hkey) {
     syncError.value = "Not logged in. Please log in first.";
+    return;
+  }
+
+  if (!acquireSyncLock()) {
+    syncError.value = "A sync is already in progress.";
     return;
   }
 
@@ -286,6 +315,8 @@ async function handlePush() {
     // Update local cache with the modified version
     await refreshSyncedCollection(modifiedSqlite);
 
+    setSyncInfo("Full upload");
+
     const now = Date.now();
     writeSyncState({ ...state, lastSync: now });
     lastSyncTime.value = now;
@@ -301,6 +332,7 @@ async function handlePush() {
     syncStatus.value = "";
   } finally {
     isSyncing.value = false;
+    releaseSyncLock();
   }
 }
 
@@ -316,6 +348,16 @@ async function handleDisconnect() {
   syncStatus.value = "";
   syncError.value = "";
   lastSyncTime.value = null;
+}
+
+function setSyncInfo(type: string, proto?: 10 | 11) {
+  lastSyncType.value = type;
+  localStorage.setItem("anki-last-sync-type", type);
+  if (proto) {
+    const label = `v${proto}${proto === 11 ? " (zstd)" : " (legacy)"}`;
+    lastSyncProto.value = label;
+    localStorage.setItem("anki-last-sync-proto", label);
+  }
 }
 
 function formatLastSync(timestamp: number | null): string {
@@ -381,6 +423,9 @@ function formatLastSync(timestamp: number | null): string {
         </div>
 
         <div class="sync-last-sync">Last sync: {{ formatLastSync(lastSyncTime) }}</div>
+        <div v-if="lastSyncType" class="sync-last-sync">
+          Type: {{ lastSyncType }}<template v-if="lastSyncProto"> · Protocol: {{ lastSyncProto }}</template>
+        </div>
 
         <div class="sync-actions">
           <button class="sync-btn sync-btn--primary" :disabled="isSyncing" @click="handleSync">

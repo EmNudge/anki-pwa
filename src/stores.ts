@@ -32,6 +32,7 @@ import {
   filterMediaKeys,
 } from "./utils/mediaCache";
 import { QUEUE_USER_BURIED, QUEUE_SUSPENDED } from "./lib/syncWrite";
+import { markDataChanged } from "./lib/autoSync";
 
 /** Revoke object URLs from the previous media map to prevent memory leaks. */
 function revokeOldMediaUrls() {
@@ -550,6 +551,7 @@ export async function renameDeckInCollection(
     (input as { bytes: Uint8Array }).bytes = newBytes;
     const { getAnkiDataFromSqlite } = await import("./ankiParser");
     ankiDataSig.value = await getAnkiDataFromSqlite(newBytes, input.mediaFiles);
+    markDataChanged();
   } finally {
     db.close();
   }
@@ -644,6 +646,7 @@ export async function deleteDeckFromCollection(
     if (selectedDeckIdSig.value === deckId) {
       selectedDeckIdSig.value = null;
     }
+    markDataChanged();
   } finally {
     db.close();
   }
@@ -1123,6 +1126,7 @@ export async function updateNote(
 
     // Update in-place without triggering re-parse
     (input as { bytes: Uint8Array }).bytes = newBytes;
+    markDataChanged();
   } finally {
     db.close();
   }
