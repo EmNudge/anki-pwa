@@ -3,7 +3,7 @@ import type { CardState } from "./algorithm";
 import { DEFAULT_SCHEDULER_SETTINGS } from "./types";
 
 const DB_NAME = "anki-review-db";
-const DB_VERSION = 3; // 3: added deletedCards store for sync graves
+const DB_VERSION = 4; // 4: added deletedNotes and deletedDecks stores for sync graves
 
 /**
  * IndexedDB wrapper for persisting review state
@@ -92,6 +92,17 @@ class ReviewDB {
         if (!db.objectStoreNames.contains("deletedCards")) {
           const delStore = db.createObjectStore("deletedCards", { keyPath: "cardId" });
           delStore.createIndex("deckId", "deckId", { unique: false });
+        }
+
+        // Store for deleted notes (sync graves) — added in v4
+        if (!db.objectStoreNames.contains("deletedNotes")) {
+          const noteStore = db.createObjectStore("deletedNotes", { keyPath: "noteId" });
+          noteStore.createIndex("deckId", "deckId", { unique: false });
+        }
+
+        // Store for deleted decks (sync graves) — added in v4
+        if (!db.objectStoreNames.contains("deletedDecks")) {
+          db.createObjectStore("deletedDecks", { keyPath: "deletedDeckId" });
         }
       };
     });
@@ -306,20 +317,91 @@ class ReviewDB {
   }
 
   /**
+   * Mark a note as deleted (for sync graves tracking).
+   */
+  async markNoteDeleted(noteId: string, deckId: string): Promise<void> {
+    await this.run(["deletedNotes"], "readwrite", (tx) =>
+      tx.objectStore("deletedNotes").put({ noteId, deckId, deletedAt: Date.now() }),
+    );
+  }
+
+  /**
+   * Get all deleted note IDs for a deck.
+   */
+  async getDeletedNotesForDeck(deckId: string): Promise<{ noteId: string }[]> {
+    return this.run(["deletedNotes"], "readonly", (tx) =>
+      tx.objectStore("deletedNotes").index("deckId").getAll(deckId),
+    );
+  }
+
+  /**
+   * Clear deleted notes tracking for a deck (after successful sync).
+   */
+  async clearDeletedNotes(deckId: string): Promise<void> {
+    const db = await this.ensureInit();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction("deletedNotes", "readwrite");
+      const store = tx.objectStore("deletedNotes");
+      const index = store.index("deckId");
+      const request = index.openCursor(deckId);
+      request.onsuccess = () => {
+        const cursor = request.result;
+        if (cursor) {
+          cursor.delete();
+          cursor.continue();
+        }
+      };
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
+  /**
+   * Mark a deck as deleted (for sync graves tracking).
+   */
+  async markDeckDeleted(deletedDeckId: string): Promise<void> {
+    await this.run(["deletedDecks"], "readwrite", (tx) =>
+      tx.objectStore("deletedDecks").put({ deletedDeckId, deletedAt: Date.now() }),
+    );
+  }
+
+  /**
+   * Get all deleted deck IDs.
+   */
+  async getDeletedDecks(): Promise<{ deletedDeckId: string }[]> {
+    return this.run(["deletedDecks"], "readonly", (tx) =>
+      tx.objectStore("deletedDecks").getAll(),
+    );
+  }
+
+  /**
+   * Clear deleted decks tracking (after successful sync).
+   */
+  async clearDeletedDecks(): Promise<void> {
+    await this.run(["deletedDecks"], "readwrite", (tx) =>
+      tx.objectStore("deletedDecks").clear(),
+    );
+  }
+
+  /**
    * Clear all review data (for testing or reset)
    */
   async clearAll(): Promise<void> {
     const db = await this.ensureInit();
     return new Promise((resolve, reject) => {
-      const transaction = db.transaction(
-        ["cards", "reviewLogs", "dailyStats", "settings", "deletedCards"],
-        "readwrite",
-      );
+      const stores = [
+        "cards",
+        "reviewLogs",
+        "dailyStats",
+        "settings",
+        "deletedCards",
+        "deletedNotes",
+        "deletedDecks",
+      ];
+      const transaction = db.transaction(stores, "readwrite");
 
       transaction.oncomplete = () => resolve();
       transaction.onerror = () => reject(transaction.error);
-
-      const stores = ["cards", "reviewLogs", "dailyStats", "settings", "deletedCards"];
       for (const storeName of stores) {
         transaction.objectStore(storeName).clear();
       }

@@ -147,6 +147,90 @@ const ANSWER_TO_EASE: Record<string, number> = {
   easy: 4,
 };
 
+interface DeckStepInfo {
+  learnSteps: number;
+  relearnSteps: number;
+}
+
+/**
+ * Read learning/relearning step counts from SQLite deck config.
+ * Returns a map of deckId → step counts.
+ * Supports both anki2 (col.dconf + col.decks) and anki21b (deck_config + decks tables) formats.
+ */
+export function readDeckStepCounts(db: import("sql.js").Database): Map<number, DeckStepInfo> {
+  const result = new Map<number, DeckStepInfo>();
+
+  // Detect format
+  const hasNotetypes = db.exec(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='notetypes'",
+  );
+  const isAnki21b = (hasNotetypes[0]?.values.length ?? 0) > 0;
+
+  if (isAnki21b) {
+    // anki21b: deck_config table has config JSON, decks table references config via common JSON
+    const configMap = new Map<number, DeckStepInfo>();
+    const dcResult = db.exec("SELECT id, config FROM deck_config");
+    if (dcResult[0]) {
+      for (const row of dcResult[0].values) {
+        const id = row[0] as number;
+        try {
+          const cfg = JSON.parse(row[1] as string);
+          configMap.set(id, {
+            learnSteps: Array.isArray(cfg.new?.delays) ? cfg.new.delays.length : 2,
+            relearnSteps: Array.isArray(cfg.lapse?.delays) ? cfg.lapse.delays.length : 1,
+          });
+        } catch {
+          configMap.set(id, { learnSteps: 2, relearnSteps: 1 });
+        }
+      }
+    }
+    // Map each deck to its config
+    const decksResult = db.exec("SELECT id, common FROM decks");
+    if (decksResult[0]) {
+      for (const row of decksResult[0].values) {
+        const deckId = row[0] as number;
+        try {
+          const common = JSON.parse(row[1] as string);
+          const confId = common.conf ?? common.config_id ?? 1;
+          const steps = configMap.get(confId);
+          if (steps) result.set(deckId, steps);
+        } catch { /* use default */ }
+      }
+    }
+  } else {
+    // anki2: col.dconf has deck configs, col.decks has deck → conf mapping
+    const colResult = db.exec("SELECT dconf, decks FROM col");
+    if (colResult[0]?.values[0]) {
+      try {
+        const dconf = JSON.parse(colResult[0].values[0][0] as string) as Record<string, {
+          new?: { delays?: number[] };
+          lapse?: { delays?: number[] };
+        }>;
+        const decks = JSON.parse(colResult[0].values[0][1] as string) as Record<string, {
+          id: number;
+          conf?: string | number;
+        }>;
+
+        const configMap = new Map<string, DeckStepInfo>();
+        for (const [id, cfg] of Object.entries(dconf)) {
+          configMap.set(id, {
+            learnSteps: Array.isArray(cfg.new?.delays) ? cfg.new.delays.length : 2,
+            relearnSteps: Array.isArray(cfg.lapse?.delays) ? cfg.lapse.delays.length : 1,
+          });
+        }
+
+        for (const deck of Object.values(decks)) {
+          const confId = String(deck.conf ?? "1");
+          const steps = configMap.get(confId);
+          if (steps) result.set(deck.id, steps);
+        }
+      } catch { /* use defaults */ }
+    }
+  }
+
+  return result;
+}
+
 /**
  * Merge all local review state from IndexedDB into an already-open SQLite database.
  * Sets usn=-1 on all modified rows to mark them as pending sync.
@@ -165,9 +249,10 @@ export async function mergeIndexedDBToSqlite(
   const reviewedCards = await reviewDB.getCardsForDeck(deckId);
   if (reviewedCards.length === 0) return;
 
-  // Determine learning step counts from deck config (default steps)
-  const defaultLearnSteps = 2; // [1, 10]
-  const defaultRelearnSteps = 1; // [10]
+  // Step counts are read per-deck from SQLite deck config below
+
+  // Build a map of deckId → deck config step counts from SQLite
+  const deckStepCounts = readDeckStepCounts(db);
 
   // Update each reviewed card in the SQLite database
   const updateStmt = db.prepare(CARD_UPDATE_SQL);
@@ -186,13 +271,33 @@ export async function mergeIndexedDBToSqlite(
       card.queueOverride === QUEUE_USER_BURIED;
     if (!card.lastReviewed && !hasOverride && card.flags === undefined) continue;
 
+    // Read existing odue/odid from SQLite to preserve filtered deck state
+    let odue = 0;
+    let odid = 0;
+    const existingRow = db.exec(
+      "SELECT odue, odid, did FROM cards WHERE id=?",
+      [ankiCardId],
+    );
+    let cardDeckId: number | undefined;
+    if (existingRow[0]?.values[0]) {
+      odue = (existingRow[0].values[0][0] as number) ?? 0;
+      odid = (existingRow[0].values[0][1] as number) ?? 0;
+      cardDeckId = (existingRow[0].values[0][2] as number) ?? undefined;
+    }
+
     const state = card.cardState as SM2CardState;
     const type = phaseToType(state.phase);
     const queue = hasOverride ? card.queueOverride! : phaseToQueue(state.phase, state.interval);
     const due = convertDue(state, collectionCreationSecs);
     const ivl = Math.max(0, Math.round(state.interval));
     const factor = encodeFactor(state.ease, card.algorithm);
-    const totalSteps = state.phase === "relearning" ? defaultRelearnSteps : defaultLearnSteps;
+
+    // Use actual deck config step counts instead of hardcoded defaults
+    const effectiveDeckId = odid !== 0 ? odid : cardDeckId;
+    const steps = effectiveDeckId !== undefined ? deckStepCounts.get(effectiveDeckId) : undefined;
+    const learnSteps = steps?.learnSteps ?? 2;
+    const relearnSteps = steps?.relearnSteps ?? 1;
+    const totalSteps = state.phase === "relearning" ? relearnSteps : learnSteps;
     const stepsRemaining = Math.max(0, totalSteps - state.step);
     const left = encodeLeft(state, totalSteps, stepsRemaining);
     const flags = card.flags ?? 0;
@@ -210,8 +315,8 @@ export async function mergeIndexedDBToSqlite(
       flags,
       nowSecs,
       data,
-      0,
-      0,
+      odue,
+      odid,
       -1,
       ankiCardId,
     ]);
@@ -361,22 +466,41 @@ async function insertRevlogs(
 }
 
 /**
- * Insert graves entries for any deleted cards in this deck.
+ * Insert graves entries for any deleted cards, notes, and decks.
+ * Grave types: 0 = card, 1 = note, 2 = deck (matches Anki desktop).
  */
 async function insertGraves(db: import("sql.js").Database, deckId: string): Promise<void> {
   const { reviewDB } = await import("../scheduler/db");
-  const db_ = reviewDB as unknown as {
-    getDeletedCardsForDeck?: (deckId: string) => Promise<{ cardId: string }[]>;
-  };
-  const deletedCards = (await db_.getDeletedCardsForDeck?.(deckId)) ?? [];
-  if (deletedCards.length === 0) return;
+
+  const deletedCards = await reviewDB.getDeletedCardsForDeck(deckId);
+  const deletedNotes = await reviewDB.getDeletedNotesForDeck(deckId);
+  const deletedDecks = await reviewDB.getDeletedDecks();
+
+  const totalGraves = deletedCards.length + deletedNotes.length + deletedDecks.length;
+  if (totalGraves === 0) return;
 
   const insertStmt = db.prepare(GRAVES_INSERT_SQL);
+
+  // Card graves (type 0)
   for (const deleted of deletedCards) {
     const ankiCardId = Number(deleted.cardId);
     if (isNaN(ankiCardId)) continue;
-    // type 0 = card deletion
     insertStmt.run([-1, ankiCardId, 0]);
   }
+
+  // Note graves (type 1)
+  for (const deleted of deletedNotes) {
+    const ankiNoteId = Number(deleted.noteId);
+    if (isNaN(ankiNoteId)) continue;
+    insertStmt.run([-1, ankiNoteId, 1]);
+  }
+
+  // Deck graves (type 2)
+  for (const deleted of deletedDecks) {
+    const ankiDeckId = Number(deleted.deletedDeckId);
+    if (isNaN(ankiDeckId)) continue;
+    insertStmt.run([-1, ankiDeckId, 2]);
+  }
+
   insertStmt.free();
 }

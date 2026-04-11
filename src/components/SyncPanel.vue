@@ -129,39 +129,35 @@ async function handleSync() {
       await initializeReviewQueue();
     }
 
-    // Download any new media files from the server
-    syncStatus.value = "Checking for new media...";
-    try {
-      const mediaBlobs = await downloadMedia(serverUrl.value, state.hkey, (s) => {
+    // Download and upload media in parallel
+    syncStatus.value = "Syncing media...";
+    const [dlResult, ulResult] = await Promise.allSettled([
+      downloadMedia(serverUrl.value, state.hkey, (s) => {
         syncStatus.value = s;
-      });
-      if (mediaBlobs.size > 0) {
-        // Apply MIME types to downloaded blobs
-        const typedBlobs = new Map<string, Blob>();
-        for (const [filename, blob] of mediaBlobs) {
-          typedBlobs.set(
-            filename,
-            new Blob([blob], { type: mime.getType(filename) ?? "application/octet-stream" }),
-          );
-        }
-        syncStatus.value = `Downloaded ${mediaBlobs.size} media file${mediaBlobs.size === 1 ? "" : "s"}. Caching...`;
-        await addMediaToCache(typedBlobs);
+      }),
+      uploadMedia(serverUrl.value, state.hkey, (s) => {
+        syncStatus.value = s;
+      }),
+    ]);
+
+    if (dlResult.status === "fulfilled" && dlResult.value.size > 0) {
+      const typedBlobs = new Map<string, Blob>();
+      for (const [filename, blob] of dlResult.value) {
+        typedBlobs.set(
+          filename,
+          new Blob([blob], { type: mime.getType(filename) ?? "application/octet-stream" }),
+        );
       }
-    } catch (mediaErr) {
-      console.warn("Media download failed (non-fatal):", mediaErr);
+      syncStatus.value = `Downloaded ${dlResult.value.size} media file${dlResult.value.size === 1 ? "" : "s"}. Caching...`;
+      await addMediaToCache(typedBlobs);
+    } else if (dlResult.status === "rejected") {
+      console.warn("Media download failed (non-fatal):", dlResult.reason);
     }
 
-    // Upload any local media files the server doesn't have
-    syncStatus.value = "Checking for media to upload...";
-    try {
-      const mediaUploaded = await uploadMedia(serverUrl.value, state.hkey, (s) => {
-        syncStatus.value = s;
-      });
-      if (mediaUploaded > 0) {
-        syncStatus.value = `Uploaded ${mediaUploaded} media file${mediaUploaded === 1 ? "" : "s"}.`;
-      }
-    } catch (mediaErr) {
-      console.warn("Media upload failed (non-fatal):", mediaErr);
+    if (ulResult.status === "rejected") {
+      console.warn("Media upload failed (non-fatal):", ulResult.reason);
+    } else if (ulResult.value > 0) {
+      syncStatus.value = `Uploaded ${ulResult.value} media file${ulResult.value === 1 ? "" : "s"}.`;
     }
 
     const newState = { ...state, ...result.newState };

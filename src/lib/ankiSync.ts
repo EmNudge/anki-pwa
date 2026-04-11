@@ -2,6 +2,35 @@ import { z } from "zod";
 import { isZstdCompressed } from "~/utils/constants";
 import { getLocalMediaEntries } from "~/utils/mediaCache";
 
+/** Default timeout for sync HTTP requests (30 seconds). */
+const SYNC_TIMEOUT_MS = 30_000;
+
+/** Default timeout for large transfers like collection download/upload (5 minutes). */
+const TRANSFER_TIMEOUT_MS = 5 * 60_000;
+
+/**
+ * Fetch wrapper with AbortController timeout.
+ * Throws if the request exceeds the given timeout.
+ */
+export async function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+  timeoutMs = SYNC_TIMEOUT_MS,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new Error(`Sync request timed out after ${Math.round(timeoutMs / 1000)}s`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 const SYNC_CONFIG_KEY = "anki-sync-config";
 const SYNC_STATE_KEY = "anki-sync-state";
 
@@ -100,7 +129,7 @@ export async function syncPost(
 ): Promise<Response> {
   const extra: Record<string, string> | undefined = sessionKey ? { s: sessionKey } : undefined;
   const form = buildSyncForm(data, hkey, extra);
-  return fetch(url, { method: "POST", body: form });
+  return fetchWithTimeout(url, { method: "POST", body: form });
 }
 
 /**
@@ -129,7 +158,7 @@ export async function syncPostV11(
     headers["anki-sync-session"] = sessionKey;
   }
 
-  return fetch(url, {
+  return fetchWithTimeout(url, {
     method: "POST",
     headers,
     body: compressed.buffer as ArrayBuffer,
@@ -223,7 +252,7 @@ export async function downloadMedia(
 
   // Begin media sync — "v" must be a top-level multipart field
   const beginForm = buildSyncForm({}, hkey, { v: "anki-pwa,0.1,web" });
-  const beginResponse = await fetch(`${base}/msync/begin`, {
+  const beginResponse = await fetchWithTimeout(`${base}/msync/begin`, {
     method: "POST",
     body: beginForm,
   });
@@ -361,7 +390,7 @@ export async function uploadMedia(
 
   // Step 1: Begin media sync
   const beginForm = buildSyncForm({}, hkey, { v: "anki-pwa,0.1,web" });
-  const beginResponse = await fetch(`${base}/msync/begin`, {
+  const beginResponse = await fetchWithTimeout(`${base}/msync/begin`, {
     method: "POST",
     body: beginForm,
   });
@@ -441,10 +470,10 @@ export async function uploadMedia(
     form.append("k", hkey);
     form.append("data", zipBlob, "media.zip");
 
-    const uploadResponse = await fetch(`${base}/msync/uploadChanges`, {
+    const uploadResponse = await fetchWithTimeout(`${base}/msync/uploadChanges`, {
       method: "POST",
       body: form,
-    });
+    }, TRANSFER_TIMEOUT_MS);
 
     if (!uploadResponse.ok) {
       const body = await uploadResponse.text().catch(() => "(unreadable)");
@@ -505,10 +534,10 @@ export async function uploadCollection(
   form.append("data", new Blob([sqliteBytes as BlobPart]), "collection.anki2");
   form.append("c", "0");
 
-  const response = await fetch(`${base}/sync/upload`, {
+  const response = await fetchWithTimeout(`${base}/sync/upload`, {
     method: "POST",
     body: form,
-  });
+  }, TRANSFER_TIMEOUT_MS);
 
   if (response.status === 401 || response.status === 403) {
     throw new Error("Authentication expired. Please log in again.");
