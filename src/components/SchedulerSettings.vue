@@ -5,7 +5,12 @@ import {
   schedulerSettingsSig,
   initializeReviewQueue,
   settingsTargetDeckIdSig,
+  settingsTargetDeckNodeSig,
   getActiveDeckId,
+  isSyncedCollection,
+  renameDeckInCollection,
+  deleteDeckFromCollection,
+  exportDeckFromCollection,
 } from "../stores";
 import type { SchedulerSettings } from "../scheduler/types";
 import { DEFAULT_SM2_PARAMS } from "../scheduler/types";
@@ -21,13 +26,64 @@ const emit = defineEmits<{
 
 const settings = ref<SchedulerSettings>({ ...schedulerSettingsSig.value });
 
+// Deck management state
+const isRenaming = ref(false);
+const renameValue = ref("");
+const showDeleteConfirm = ref(false);
+const isExporting = ref(false);
+
+const deckNode = computed(() => settingsTargetDeckNodeSig.value);
+const isSynced = computed(() => isSyncedCollection());
+
 // Sync settings when modal opens
 watch(
   () => props.isOpen,
   (isOpen) => {
-    if (isOpen) settings.value = { ...schedulerSettingsSig.value };
+    if (isOpen) {
+      settings.value = { ...schedulerSettingsSig.value };
+      isRenaming.value = false;
+      showDeleteConfirm.value = false;
+    }
   },
 );
+
+function startRename() {
+  if (!deckNode.value) return;
+  renameValue.value = deckNode.value.name;
+  isRenaming.value = true;
+}
+
+async function confirmRename() {
+  const node = deckNode.value;
+  if (!node || !renameValue.value.trim()) return;
+  const newName = renameValue.value.trim();
+  if (newName === node.name) {
+    isRenaming.value = false;
+    return;
+  }
+  await renameDeckInCollection(node.id, node.fullName, newName);
+  isRenaming.value = false;
+  emit("close");
+}
+
+async function confirmDelete() {
+  const node = deckNode.value;
+  if (!node) return;
+  await deleteDeckFromCollection(node.id, node.fullName);
+  showDeleteConfirm.value = false;
+  emit("close");
+}
+
+async function handleExport() {
+  const node = deckNode.value;
+  if (!node) return;
+  isExporting.value = true;
+  try {
+    await exportDeckFromCollection(node.fullName);
+  } finally {
+    isExporting.value = false;
+  }
+}
 
 const sm2 = computed(() => ({
   ...DEFAULT_SM2_PARAMS,
@@ -94,6 +150,54 @@ function updateFsrsParam<K extends keyof NonNullable<SchedulerSettings["fsrsPara
 
 <template>
   <Modal title="Deck Settings" :is-open="isOpen" size="sm" @close="emit('close')">
+    <!-- Deck Management (synced decks only) -->
+    <div v-if="deckNode && isSynced" class="form-section">
+      <div class="section-title">Deck</div>
+
+      <div v-if="!isRenaming && !showDeleteConfirm" class="deck-name-display">
+        <span class="deck-full-name">{{ deckNode.fullName }}</span>
+        <span class="deck-card-count">{{ deckNode.cardCount }} cards</span>
+      </div>
+
+      <!-- Rename inline -->
+      <div v-if="isRenaming" class="form-group">
+        <label class="form-label">New Name</label>
+        <div class="rename-row">
+          <input
+            v-model="renameValue"
+            type="text"
+            class="form-input"
+            @keyup.enter="confirmRename"
+            @keyup.escape="isRenaming = false"
+          />
+          <Button variant="primary" size="sm" @click="confirmRename">Save</Button>
+          <Button variant="secondary" size="sm" @click="isRenaming = false">Cancel</Button>
+        </div>
+        <div class="help-text">Only renames this deck segment, not parent path</div>
+      </div>
+
+      <!-- Delete confirmation -->
+      <div v-if="showDeleteConfirm" class="delete-confirm">
+        <p class="delete-warning">
+          Delete "<strong>{{ deckNode.fullName }}</strong>" and all its
+          {{ deckNode.cardCount }} cards? This cannot be undone.
+        </p>
+        <div class="delete-actions">
+          <Button variant="danger" size="sm" @click="confirmDelete">Delete</Button>
+          <Button variant="secondary" size="sm" @click="showDeleteConfirm = false">Cancel</Button>
+        </div>
+      </div>
+
+      <!-- Action buttons -->
+      <div v-if="!isRenaming && !showDeleteConfirm" class="deck-actions">
+        <Button variant="secondary" size="sm" @click="startRename">Rename</Button>
+        <Button variant="secondary" size="sm" :disabled="isExporting" @click="handleExport">
+          {{ isExporting ? "Exporting..." : "Export" }}
+        </Button>
+        <Button variant="danger" size="sm" @click="showDeleteConfirm = true">Delete</Button>
+      </div>
+    </div>
+
     <div class="form-section">
       <div class="section-title">Scheduler</div>
       <div class="form-group">
@@ -447,5 +551,48 @@ function updateFsrsParam<K extends keyof NonNullable<SchedulerSettings["fsrsPara
   align-items: center;
   justify-content: space-between;
   cursor: pointer;
+}
+.deck-name-display {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-0-5);
+  margin-bottom: var(--spacing-3);
+}
+.deck-full-name {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+  word-break: break-word;
+}
+.deck-card-count {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+}
+.deck-actions {
+  display: flex;
+  gap: var(--spacing-2);
+}
+.rename-row {
+  display: flex;
+  gap: var(--spacing-2);
+  align-items: center;
+}
+.rename-row .form-input {
+  flex: 1;
+}
+.delete-confirm {
+  padding: var(--spacing-3);
+  background: var(--color-surface-elevated);
+  border: 1px solid var(--color-error);
+  border-radius: var(--radius-sm);
+}
+.delete-warning {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+  margin: 0 0 var(--spacing-3) 0;
+}
+.delete-actions {
+  display: flex;
+  gap: var(--spacing-2);
 }
 </style>
