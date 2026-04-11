@@ -2,6 +2,7 @@
 import { ref, watch } from "vue";
 import Modal from "../design-system/components/primitives/Modal.vue";
 import Button from "../design-system/components/primitives/Button.vue";
+import TiptapEditor from "./TiptapEditor.vue";
 import type { AnkiDB2Data } from "../ankiParser/anki2";
 
 type Card = AnkiDB2Data["cards"][number];
@@ -9,6 +10,7 @@ type Card = AnkiDB2Data["cards"][number];
 const props = defineProps<{
   isOpen: boolean;
   card: Card | null;
+  mediaFiles?: Map<string, string>;
 }>();
 
 const emit = defineEmits<{
@@ -68,7 +70,7 @@ function handleSave() {
     <div class="edit-form">
       <div v-for="(val, key) in editFields" :key="key" class="field-group">
         <label class="field-label">{{ key }}</label>
-        <textarea v-model="editFields[key]" class="field-input" rows="4" />
+        <TiptapEditor v-model="editFields[key]" :media-files="mediaFiles" />
       </div>
 
       <div class="tags-section">
@@ -120,24 +122,6 @@ function handleSave() {
   letter-spacing: var(--letter-spacing-wide);
 }
 
-.field-input {
-  width: 100%;
-  padding: var(--spacing-2);
-  font-family: var(--font-family-mono, monospace);
-  font-size: var(--font-size-sm);
-  color: var(--color-text-primary);
-  background: var(--color-surface-elevated);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  resize: vertical;
-  box-sizing: border-box;
-}
-
-.field-input:focus {
-  outline: none;
-  border-color: var(--color-border-focus);
-  box-shadow: var(--shadow-focus-ring);
-}
 
 .tags-section {
   display: flex;

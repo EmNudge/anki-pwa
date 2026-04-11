@@ -28,6 +28,10 @@
   },
   "dependencies": {
     "@dweb-browser/zstd-wasm": "^1.2.1",
+    "@tiptap/extension-image": "^3.22.3",
+    "@tiptap/pm": "^3.22.3",
+    "@tiptap/starter-kit": "^3.22.3",
+    "@tiptap/vue-3": "^3.22.3",
     "@zip-js/zip-js": "npm:@jsr/zip-js__zip-js@^2.7.57",
     "katex": "^0.16.21",
     "lucide-vue-next": "^0.474.0",

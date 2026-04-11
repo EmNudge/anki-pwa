@@ -54,6 +54,7 @@ export function computeDeckInfo(ankiData: AnkiData) {
         id: deckId,
         name: displayName,
         fullName: deck.name,
+        description: deck.description,
         cardCount: cardsInDeck.length,
         templateCount: templateNames.size,
         newCount,

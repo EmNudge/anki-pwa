@@ -28,7 +28,12 @@ async function loadAnkiDeck(page: Page, filename: string = 'example_music_interv
   // Wait for page to reload
   await page.waitForLoadState('networkidle');
 
-  // Wait for the FilePicker to be removed or card to appear
+  // After reload, the app lands on deck-list — click the first deck to start studying
+  const deckRow = page.locator('.deck-row').first();
+  await deckRow.waitFor({ timeout: 30000 });
+  await deckRow.click();
+
+  // Wait for the card to appear
   await page.waitForSelector('.card', { timeout: 30000 });
 }
 

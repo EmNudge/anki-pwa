@@ -7,10 +7,11 @@ export type AnkiData = {
   files: Map<string, string>;
   cards: AnkiDB2Data["cards"] | AnkiDB21bData["cards"];
   deckName: string;
-  decks: Record<string, { id: number; name: string }>;
+  decks: AnkiDB2Data["decks"] | AnkiDB21bData["decks"];
   notesTypes: AnkiDB2Data["notesTypes"] | AnkiDB21bData["notesTypes"];
   collectionCreationTime: number;
-  deckConfigs: AnkiDB2Data["deckConfigs"] | Record<string, never>;
+  deckConfigs: AnkiDB2Data["deckConfigs"] | AnkiDB21bData["deckConfigs"];
+  colConf: AnkiDB2Data["colConf"] | null;
 };
 
 export async function getAnkiDataFromBlob(file: Blob): Promise<AnkiData> {
@@ -19,13 +20,14 @@ export async function getAnkiDataFromBlob(file: Blob): Promise<AnkiData> {
   const db = await createDatabase(ankiDb.array);
 
   if (ankiDb.type === "21b") {
-    const { cards, deckName, decks, notesTypes, collectionCreationTime } = getDataFromAnki21b(db);
-    return { cards, files, deckName, decks, notesTypes, collectionCreationTime, deckConfigs: {} };
+    const { cards, deckName, decks, notesTypes, collectionCreationTime, deckConfigs } =
+      getDataFromAnki21b(db);
+    return { cards, files, deckName, decks, notesTypes, collectionCreationTime, deckConfigs, colConf: null };
   }
 
-  const { cards, deckName, decks, notesTypes, collectionCreationTime, deckConfigs } =
+  const { cards, deckName, decks, notesTypes, collectionCreationTime, deckConfigs, colConf } =
     getDataFromAnki2(db);
-  return { cards, files, deckName, decks, notesTypes, collectionCreationTime, deckConfigs };
+  return { cards, files, deckName, decks, notesTypes, collectionCreationTime, deckConfigs, colConf };
 }
 
 /**
@@ -44,13 +46,14 @@ export async function getAnkiDataFromSqlite(
     const tableNames = new Set((tables[0]?.values ?? []).map((row) => row[0] as string));
 
     if (tableNames.has("notetypes")) {
-      const { cards, deckName, decks, notesTypes, collectionCreationTime } = getDataFromAnki21b(db);
-      return { cards, files, deckName, decks, notesTypes, collectionCreationTime, deckConfigs: {} };
+      const { cards, deckName, decks, notesTypes, collectionCreationTime, deckConfigs } =
+        getDataFromAnki21b(db);
+      return { cards, files, deckName, decks, notesTypes, collectionCreationTime, deckConfigs, colConf: null };
     }
 
-    const { cards, deckName, decks, notesTypes, collectionCreationTime, deckConfigs } =
+    const { cards, deckName, decks, notesTypes, collectionCreationTime, deckConfigs, colConf } =
       getDataFromAnki2(db);
-    return { cards, files, deckName, decks, notesTypes, collectionCreationTime, deckConfigs };
+    return { cards, files, deckName, decks, notesTypes, collectionCreationTime, deckConfigs, colConf };
   } finally {
     db.close();
   }

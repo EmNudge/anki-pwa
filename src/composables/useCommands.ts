@@ -77,6 +77,7 @@ export function useCommands() {
         title: `Go to ${tab.title}`,
         description: tab.description,
         icon: tab.icon,
+        group: "Navigation",
         handler: () => {
           if (tab.id === "review" && activeViewSig.value === "review") {
             reviewModeSig.value = "deck-list";
@@ -88,6 +89,7 @@ export function useCommands() {
     );
 
     const commands: Command[] = [
+      ...buildCardActionCommands(ankiData),
       ...tabCommands,
       {
         id: "toggle-theme",
@@ -95,6 +97,7 @@ export function useCommands() {
         description: "Switch between light and dark mode",
         icon: icon(Moon),
         hotkey: "ctrl+T",
+        group: "Settings",
         handler: () => {
           const { toggleTheme } = useTheme();
           toggleTheme();
@@ -106,6 +109,7 @@ export function useCommands() {
         description: "Toggle audio feedback for card reviews",
         icon: icon(soundEffectsEnabledSig.value ? Volume2 : VolumeX),
         hotkey: "ctrl+E",
+        group: "Settings",
         handler: () => {
           toggleSoundEffects();
         },
@@ -116,6 +120,7 @@ export function useCommands() {
         description: "Configure spaced repetition algorithm parameters",
         icon: icon(Settings),
         hotkey: "ctrl+,",
+        group: "Settings",
         handler: () => {
           schedulerSettingsModalOpenSig.value = true;
         },
@@ -125,11 +130,11 @@ export function useCommands() {
         title: "Reset Scheduler",
         description: "Clear all review history and start fresh",
         icon: icon(RefreshCw),
+        group: "Settings",
         handler: () => {
           resetScheduler();
         },
       },
-      ...buildCardActionCommands(ankiData),
     ];
 
     return commands;
@@ -163,6 +168,7 @@ function buildCardActionCommands(ankiData: AnkiData | null): Command[] {
       description: "Hide this card until tomorrow's review session",
       icon: icon(EyeOff),
       hotkey: "-",
+      group: "Current Card",
       handler: () => {
         buryCurrentCard();
       },
@@ -173,6 +179,7 @@ function buildCardActionCommands(ankiData: AnkiData | null): Command[] {
       description: "Remove this card from all future reviews until manually unsuspended",
       icon: icon(Ban),
       hotkey: "@",
+      group: "Current Card",
       handler: () => {
         suspendCurrentCard();
       },
@@ -183,6 +190,7 @@ function buildCardActionCommands(ankiData: AnkiData | null): Command[] {
       description: "Mark this card with a colored flag for later reference",
       icon: icon(Flag),
       label: currentFlag > 0 ? `Flag ${currentFlag}` : undefined,
+      group: "Current Card",
       children: [
         {
           id: "flag-none",
@@ -211,6 +219,7 @@ function buildCardActionCommands(ankiData: AnkiData | null): Command[] {
       description: "View scheduling stats, ease factor, and review history",
       icon: icon(Info),
       hotkey: "I",
+      group: "Current Card",
       metadata: buildCardInfoMetadata(reviewCard, queue),
       handler: () => ({ keepOpen: true }),
     },
@@ -226,6 +235,7 @@ function buildCardActionCommands(ankiData: AnkiData | null): Command[] {
       icon: icon(Star),
       hotkey: "*",
       label: isMarked ? "Marked" : undefined,
+      group: "Current Card",
       handler: () => {
         markCurrentNote();
       },

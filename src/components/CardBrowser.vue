@@ -815,6 +815,7 @@ async function handleNoteSave(payload: { fields: Record<string, string | null>; 
     <NoteEditModal
       :is-open="editModalOpen"
       :card="selectedCard"
+      :media-files="mediaFilesSig"
       @close="editModalOpen = false"
       @save="handleNoteSave"
     />

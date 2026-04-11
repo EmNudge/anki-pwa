@@ -15,6 +15,7 @@ import {
 import type { SchedulerSettings } from "../scheduler/types";
 import { DEFAULT_SM2_PARAMS } from "../scheduler/types";
 import { Button, Modal } from "../design-system";
+import { Pencil } from "lucide-vue-next";
 
 const props = defineProps<{
   isOpen: boolean;
@@ -154,8 +155,13 @@ function updateFsrsParam<K extends keyof NonNullable<SchedulerSettings["fsrsPara
     <div v-if="deckNode && isSynced" class="form-section">
       <div class="section-title">Deck</div>
 
-      <div v-if="!isRenaming && !showDeleteConfirm" class="deck-name-display">
-        <span class="deck-full-name">{{ deckNode.fullName }}</span>
+      <div v-if="!isRenaming" class="deck-name-display">
+        <div class="deck-name-row">
+          <span class="deck-full-name">{{ deckNode.fullName }}</span>
+          <button class="rename-icon-btn" title="Rename deck" @click="startRename">
+            <Pencil :size="14" />
+          </button>
+        </div>
         <span class="deck-card-count">{{ deckNode.cardCount }} cards</span>
       </div>
 
@@ -176,25 +182,11 @@ function updateFsrsParam<K extends keyof NonNullable<SchedulerSettings["fsrsPara
         <div class="help-text">Only renames this deck segment, not parent path</div>
       </div>
 
-      <!-- Delete confirmation -->
-      <div v-if="showDeleteConfirm" class="delete-confirm">
-        <p class="delete-warning">
-          Delete "<strong>{{ deckNode.fullName }}</strong>" and all its
-          {{ deckNode.cardCount }} cards? This cannot be undone.
-        </p>
-        <div class="delete-actions">
-          <Button variant="danger" size="sm" @click="confirmDelete">Delete</Button>
-          <Button variant="secondary" size="sm" @click="showDeleteConfirm = false">Cancel</Button>
-        </div>
-      </div>
-
       <!-- Action buttons -->
-      <div v-if="!isRenaming && !showDeleteConfirm" class="deck-actions">
-        <Button variant="secondary" size="sm" @click="startRename">Rename</Button>
+      <div v-if="!isRenaming" class="deck-actions">
         <Button variant="secondary" size="sm" :disabled="isExporting" @click="handleExport">
           {{ isExporting ? "Exporting..." : "Export" }}
         </Button>
-        <Button variant="danger" size="sm" @click="showDeleteConfirm = true">Delete</Button>
       </div>
     </div>
 
@@ -495,6 +487,27 @@ function updateFsrsParam<K extends keyof NonNullable<SchedulerSettings["fsrsPara
       </div>
     </div>
 
+    <!-- Danger zone at the bottom -->
+    <div v-if="deckNode && isSynced" class="form-section danger-zone">
+      <div class="section-title danger-title">Danger Zone</div>
+      <div v-if="!showDeleteConfirm" class="danger-zone-content">
+        <div class="danger-zone-description">
+          Permanently delete this deck and all {{ deckNode.cardCount }} cards.
+        </div>
+        <Button variant="danger" size="sm" @click="showDeleteConfirm = true">Delete Deck</Button>
+      </div>
+      <div v-else class="delete-confirm">
+        <p class="delete-warning">
+          Delete "<strong>{{ deckNode.fullName }}</strong>" and all its
+          {{ deckNode.cardCount }} cards? This cannot be undone.
+        </p>
+        <div class="delete-actions">
+          <Button variant="danger" size="sm" @click="confirmDelete">Delete</Button>
+          <Button variant="secondary" size="sm" @click="showDeleteConfirm = false">Cancel</Button>
+        </div>
+      </div>
+    </div>
+
     <template #footer>
       <Button variant="secondary" @click="emit('close')">Cancel</Button>
       <Button variant="primary" @click="handleSave">Save Settings</Button>
@@ -558,11 +571,36 @@ function updateFsrsParam<K extends keyof NonNullable<SchedulerSettings["fsrsPara
   gap: var(--spacing-0-5);
   margin-bottom: var(--spacing-3);
 }
+.deck-name-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+}
 .deck-full-name {
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
   color: var(--color-text-primary);
   word-break: break-word;
+}
+.rename-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  color: var(--color-text-tertiary);
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition-colors);
+  box-shadow: none;
+}
+.rename-icon-btn:hover {
+  color: var(--color-text-primary);
+  background: var(--color-surface-hover);
 }
 .deck-card-count {
   font-size: var(--font-size-xs);
@@ -594,5 +632,22 @@ function updateFsrsParam<K extends keyof NonNullable<SchedulerSettings["fsrsPara
 .delete-actions {
   display: flex;
   gap: var(--spacing-2);
+}
+.danger-zone {
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--spacing-4);
+}
+.danger-title {
+  color: var(--color-error);
+}
+.danger-zone-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-3);
+}
+.danger-zone-description {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
 }
 </style>

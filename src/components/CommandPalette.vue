@@ -36,6 +36,30 @@ const filteredCommands = computed(() => {
   return commands.filter((cmd) => cmd.title.toLowerCase().includes(query));
 });
 
+// Group commands by their group field, preserving order
+const groupedCommands = computed(() => {
+  const commands = filteredCommands.value;
+  const groups: { label: string | null; commands: Command[] }[] = [];
+  let currentGroup: string | null | undefined;
+
+  for (const cmd of commands) {
+    const group = cmd.group ?? null;
+    if (group !== currentGroup || groups.length === 0) {
+      groups.push({ label: group, commands: [cmd] });
+      currentGroup = group;
+    } else {
+      groups[groups.length - 1]!.commands.push(cmd);
+    }
+  }
+
+  return groups;
+});
+
+// Whether to show group headers (only when not searching and there are multiple groups)
+const showGroups = computed(() => {
+  return !searchQuery.value && groupedCommands.value.length > 1;
+});
+
 // Reset selection when filtered commands change
 watch(filteredCommands, (commands) => {
   selectedIndex.value = 0;
@@ -211,44 +235,53 @@ onUnmounted(() => window.removeEventListener("keydown", onGlobalKeydown));
 
         <div class="command-palette-results">
           <template v-if="filteredCommands.length > 0">
-            <div
-              v-for="(cmd, index) in filteredCommands"
-              :key="cmd.id"
-              :class="['command-palette-item', { selected: index === selectedIndex }]"
-              @click="executeCommand(cmd)"
-              @mouseenter="selectedIndex = index"
-            >
-              <div class="command-item-content">
-                <span v-if="cmd.icon" class="command-item-icon">
-                  <component :is="cmd.icon" :size="16" />
-                </span>
-                <span class="command-item-title">
-                  <template v-if="highlightParts(cmd.title, searchQuery)">
-                    {{ highlightParts(cmd.title, searchQuery)!.before
-                    }}<span class="command-item-title-highlight">{{
-                      highlightParts(cmd.title, searchQuery)!.match
-                    }}</span
-                    >{{ highlightParts(cmd.title, searchQuery)!.after }}
-                  </template>
-                  <template v-else>{{ cmd.title }}</template>
-                </span>
-                <span v-if="cmd.label" class="command-item-label">{{ cmd.label }}</span>
+            <template v-for="(group, groupIdx) in groupedCommands" :key="group.label ?? groupIdx">
+              <div v-if="showGroups && group.label" class="command-group-header">
+                {{ group.label }}
               </div>
-              <span v-if="cmd.children && cmd.children.length > 0" class="command-item-arrow"
-                >&rarr;</span
-              >
+              <div v-else-if="showGroups && groupIdx > 0" class="command-group-divider" />
               <div
-                v-if="!cmd.children && cmd.hotkey && breadcrumb.length === 0"
-                class="command-item-hotkey"
+                v-for="cmd in group.commands"
+                :key="cmd.id"
+                :class="[
+                  'command-palette-item',
+                  { selected: filteredCommands.indexOf(cmd) === selectedIndex },
+                ]"
+                @click="executeCommand(cmd)"
+                @mouseenter="selectedIndex = filteredCommands.indexOf(cmd)"
               >
-                <kbd
-                  v-for="key in cmd.hotkey.split('+').map((k) => k.trim())"
-                  :key="key"
-                  class="command-item-kbd"
-                  >{{ key }}</kbd
+                <div class="command-item-content">
+                  <span v-if="cmd.icon" class="command-item-icon">
+                    <component :is="cmd.icon" :size="16" />
+                  </span>
+                  <span class="command-item-title">
+                    <template v-if="highlightParts(cmd.title, searchQuery)">
+                      {{ highlightParts(cmd.title, searchQuery)!.before
+                      }}<span class="command-item-title-highlight">{{
+                        highlightParts(cmd.title, searchQuery)!.match
+                      }}</span
+                      >{{ highlightParts(cmd.title, searchQuery)!.after }}
+                    </template>
+                    <template v-else>{{ cmd.title }}</template>
+                  </span>
+                  <span v-if="cmd.label" class="command-item-label">{{ cmd.label }}</span>
+                </div>
+                <span v-if="cmd.children && cmd.children.length > 0" class="command-item-arrow"
+                  >&rarr;</span
                 >
+                <div
+                  v-if="!cmd.children && cmd.hotkey && breadcrumb.length === 0"
+                  class="command-item-hotkey"
+                >
+                  <kbd
+                    v-for="key in cmd.hotkey.split('+').map((k) => k.trim())"
+                    :key="key"
+                    class="command-item-kbd"
+                    >{{ key }}</kbd
+                  >
+                </div>
               </div>
-            </div>
+            </template>
           </template>
           <div v-else class="command-palette-empty">No commands found</div>
         </div>
@@ -495,6 +528,21 @@ onUnmounted(() => window.removeEventListener("keydown", onGlobalKeydown));
 .command-palette-results {
   overflow-y: auto;
   max-height: 400px;
+}
+
+.command-group-header {
+  padding: var(--spacing-2) var(--spacing-4) var(--spacing-1);
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: var(--letter-spacing-wide);
+}
+
+.command-group-divider {
+  height: 1px;
+  margin: var(--spacing-1) var(--spacing-4);
+  background: var(--color-border);
 }
 
 .command-palette-item {

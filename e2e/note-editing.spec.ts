@@ -43,9 +43,9 @@ test.describe('Note Editing', () => {
     const fieldOnlyLabels = modalLabels.filter(l => l !== 'Tags');
     expect(fieldOnlyLabels).toEqual(fieldLabels);
 
-    // Textareas should have content
-    const textareas = page.locator('.edit-form textarea.field-input');
-    const count = await textareas.count();
+    // Tiptap editors should be present
+    const editors = page.locator('.edit-form .tiptap');
+    const count = await editors.count();
     expect(count).toBeGreaterThan(0);
   });
 
@@ -86,11 +86,12 @@ test.describe('Note Editing', () => {
     await page.locator('.detail-pane button:has-text("Edit")').click();
     await expect(page.locator('.ds-modal__title:has-text("Edit Note")')).toBeVisible();
 
-    // Modify the first field
-    const firstTextarea = page.locator('.edit-form textarea.field-input').first();
-    await firstTextarea.clear();
+    // Modify the first field via Tiptap editor
+    const firstEditor = page.locator('.edit-form .tiptap').first();
+    await firstEditor.click();
+    await page.keyboard.press('Control+A');
+    await page.keyboard.type('Edited field value e2e test');
     const newValue = 'Edited field value e2e test';
-    await firstTextarea.fill(newValue);
 
     // Save
     await page.locator('.ds-modal button:has-text("Save")').click();
@@ -114,12 +115,13 @@ test.describe('Note Editing', () => {
     // Select the first row
     await page.locator('.browse-table tbody tr').first().click();
 
-    // Open edit modal and change first field
+    // Open edit modal and change first field via Tiptap editor
     await page.locator('.detail-pane button:has-text("Edit")').click();
-    const firstTextarea = page.locator('.edit-form textarea.field-input').first();
-    await firstTextarea.clear();
+    const firstEditor = page.locator('.edit-form .tiptap').first();
+    await firstEditor.click();
+    await page.keyboard.press('Control+A');
     const newValue = 'Updated sort field';
-    await firstTextarea.fill(newValue);
+    await page.keyboard.type(newValue);
     await page.locator('.ds-modal button:has-text("Save")').click();
 
     // Table sort field column should reflect the change
@@ -201,10 +203,11 @@ test.describe('Note Editing', () => {
     await page.locator('.browse-table tbody tr').first().click();
     // Edit the first card's note
     await page.locator('.detail-pane button:has-text("Edit")').click();
-    const firstTextarea = page.locator('.edit-form textarea.field-input').first();
-    await firstTextarea.clear();
+    const firstEditor = page.locator('.edit-form .tiptap').first();
+    await firstEditor.click();
+    await page.keyboard.press('Control+A');
     const uniqueValue = `shared-note-edit-${Date.now()}`;
-    await firstTextarea.fill(uniqueValue);
+    await page.keyboard.type(uniqueValue);
     await page.locator('.ds-modal button:has-text("Save")').click();
 
     // Verify the edit took effect
