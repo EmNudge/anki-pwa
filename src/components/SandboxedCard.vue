@@ -27,7 +27,7 @@ const BASE_STYLES = `
   }
   :where(html[data-theme="light"]) body { color: #18181b; }
   :where(html[data-theme="dark"]) body { color: #f4f4f5; }
-  img { max-width: 100%; height: 200px; display: block; margin: 0 auto; }
+  img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
   hr { margin: 1rem 0; border: none; border-top: 1px solid; opacity: 0.5; }
   :where(html[data-theme="light"]) hr { border-color: #e4e4e7; }
   :where(html[data-theme="dark"]) hr { border-color: #3f3f46; }
