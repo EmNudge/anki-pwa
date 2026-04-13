@@ -50,6 +50,7 @@ export type AnkiDB21bData = {
     latexPre: string;
     latexPost: string;
     req: [number, string, number[]][] | null;
+    fieldDescriptions: Record<string, string>;
     noteMod?: number;
     noteUsn?: number;
     cardMod?: number;
@@ -235,6 +236,11 @@ export function getDataFromAnki21b(db: Database): AnkiDB21bData {
 
         const noteFields = fieldsByNtid.get(note.mid) ?? [];
         const fieldNames = noteFields.map((field) => field.name);
+        const fieldDescriptions = Object.fromEntries(
+          noteFields
+            .filter((field) => field.config.description)
+            .map((field) => [field.name, field.config.description]),
+        );
 
         const allTemplates = templatesMap.get(note.mid);
         assertTruthy(allTemplates, `Template for note ${note.mid} not found`);
@@ -285,6 +291,7 @@ export function getDataFromAnki21b(db: Database): AnkiDB21bData {
           latexPre: noteTypeInfo?.latexPre ?? "",
           latexPost: noteTypeInfo?.latexPost ?? "",
           req,
+          fieldDescriptions,
           scheduling: buildScheduling(cardRow),
           noteMod: note.mod,
           noteUsn: note.usn,
@@ -338,5 +345,14 @@ export function getDataFromAnki21b(db: Database): AnkiDB21bData {
     }
   })();
 
-  return { cards, notesTypes, deckName, decks, deckConfigs, revlog, collectionCreationTime, tagsTable };
+  return {
+    cards,
+    notesTypes,
+    deckName,
+    decks,
+    deckConfigs,
+    revlog,
+    collectionCreationTime,
+    tagsTable,
+  };
 }
