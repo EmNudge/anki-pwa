@@ -39,7 +39,6 @@ import {
   Play,
   Pause,
   Trash2,
-  EyeOff as EyeOffNote,
   Keyboard,
 } from "lucide-vue-next";
 import { useTheme } from "../design-system/hooks/useTheme";
@@ -76,7 +75,7 @@ const TAB_DEFINITIONS: { id: AppView; title: string; description: string; icon: 
   },
 ];
 
-export interface UseCommandsOptions {
+interface UseCommandsOptions {
   onEditCard?: () => void;
   onReplayAudio?: () => void;
   onPauseAudio?: () => void;
@@ -288,7 +287,7 @@ function buildCardActionCommands(ankiData: AnkiData | null, options: UseCommands
       id: "bury-note",
       title: "Bury Note",
       description: "Hide all cards of this note until tomorrow",
-      icon: icon(EyeOffNote),
+      icon: icon(EyeOff),
       hotkey: "=",
       group: "Current Card",
       handler: () => {
