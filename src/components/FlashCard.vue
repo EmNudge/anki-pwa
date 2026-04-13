@@ -69,7 +69,7 @@ onUnmounted(() => document.removeEventListener("keydown", handleKeyDown));
   position: relative;
   overflow: hidden;
 }
-@media (max-width: 1200px) {
+@media (min-width: 1200px) {
   .card {
     width: 800px;
   }
