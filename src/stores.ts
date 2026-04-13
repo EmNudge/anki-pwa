@@ -1116,6 +1116,75 @@ export function markCurrentNote() {
   }
 }
 
+/**
+ * Bury all cards of the current note (hide until next day).
+ */
+export async function buryCurrentNote() {
+  const card = currentReviewCardSig.value;
+  const ankiData = ankiDataSig.value;
+  if (!card || !ankiData) return;
+
+  const noteCard = ankiData.cards[card.cardIndex];
+  if (!noteCard) return;
+
+  const guid = noteCard.guid;
+
+  // Find all due cards sharing this note guid and bury them
+  const siblingCardIds = dueCardsSig.value
+    .filter((c) => {
+      const nc = ankiData.cards[c.cardIndex];
+      return nc && nc.guid === guid;
+    })
+    .map((c) => c.cardId);
+
+  for (const cardId of siblingCardIds) {
+    await reviewDB.patchCard(cardId, { queueOverride: QUEUE_USER_BURIED });
+    const sibling = dueCardsSig.value.find((c) => c.cardId === cardId);
+    if (sibling) sibling.reviewState.queueOverride = QUEUE_USER_BURIED;
+  }
+
+  dueCardsSig.value = dueCardsSig.value.filter((c) => !siblingCardIds.includes(c.cardId));
+  moveToNextReviewCard();
+}
+
+/**
+ * Delete the current note and all its cards from the review queue.
+ */
+export async function deleteCurrentNote() {
+  const card = currentReviewCardSig.value;
+  const ankiData = ankiDataSig.value;
+  if (!card || !ankiData) return;
+
+  const noteCard = ankiData.cards[card.cardIndex];
+  if (!noteCard) return;
+
+  const guid = noteCard.guid;
+
+  // Remove all due cards sharing this note guid
+  const siblingCardIds = dueCardsSig.value
+    .filter((c) => {
+      const nc = ankiData.cards[c.cardIndex];
+      return nc && nc.guid === guid;
+    })
+    .map((c) => c.cardId);
+
+  for (const cardId of siblingCardIds) {
+    await reviewDB.deleteCard(cardId);
+  }
+
+  // Remove cards from in-memory data (mutate in-place to preserve array type)
+  for (let i = ankiData.cards.length - 1; i >= 0; i--) {
+    if (ankiData.cards[i]!.guid === guid) {
+      ankiData.cards.splice(i, 1);
+    }
+  }
+  triggerRef(ankiDataSig);
+
+  dueCardsSig.value = dueCardsSig.value.filter((c) => !siblingCardIds.includes(c.cardId));
+  moveToNextReviewCard();
+  markDataChanged();
+}
+
 export function moveToNextCard() {
   selectedCardSig.value = selectedCardSig.value + 1;
 }

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import "./App.css";
-import { computed, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import FlashCard from "./components/FlashCard.vue";
 import CardButtons from "./components/CardButtons.vue";
 import type { Answer } from "./scheduler/types";
@@ -43,10 +43,41 @@ import { Info } from "lucide-vue-next";
 import Modal from "./design-system/components/primitives/Modal.vue";
 import Tooltip from "./design-system/components/primitives/Tooltip.vue";
 import { markDataChanged, startAutoSync } from "./lib/autoSync";
+import NoteEditModal from "./components/NoteEditModal.vue";
+import { updateNote } from "./stores";
 
 const activeSide = ref<"front" | "back">("front");
 const reviewStartTime = ref<number>(Date.now());
-const commands = useCommands();
+const editModalOpen = ref(false);
+const shortcutsModalOpen = ref(false);
+
+const commands = useCommands({
+  onEditCard: () => {
+    editModalOpen.value = true;
+  },
+  onReplayAudio: () => {
+    const card = renderedCard.value;
+    if (!card) return;
+    const html = activeSide.value === "front" ? card.frontSideHtml : card.backSideHtml;
+    for (const filename of getAutoplayAudioSources(html)) {
+      playAudio(filename);
+    }
+  },
+  onPauseAudio: () => {
+    // Pause/resume all active audio elements on the page
+    const audios = document.querySelectorAll<HTMLAudioElement>("audio");
+    for (const audio of audios) {
+      if (audio.paused) {
+        audio.play().catch(() => {});
+      } else {
+        audio.pause();
+      }
+    }
+  },
+  onShowShortcuts: () => {
+    shortcutsModalOpen.value = true;
+  },
+});
 
 // Start background auto-sync timer
 startAutoSync();
@@ -183,6 +214,41 @@ const intervals = computed(() => {
   return queue.getNextIntervals(reviewCard);
 });
 
+const currentNoteCard = computed(() => {
+  const data = currentCardData.value;
+  if (!data) return null;
+  return cardsSig.value[data.cardIndex] ?? null;
+});
+
+async function handleNoteSave(payload: { fields: Record<string, string | null>; tags: string[] }) {
+  const card = currentNoteCard.value;
+  if (!card) return;
+  await updateNote(card.guid, payload.fields, payload.tags);
+  editModalOpen.value = false;
+}
+
+// Handle 'E' key for edit - only on front side to avoid conflict with 'Easy' answer
+function handleEditKeydown(e: KeyboardEvent) {
+  if (
+    e.key.toLowerCase() === "e" &&
+    !e.ctrlKey &&
+    !e.metaKey &&
+    !e.altKey &&
+    activeSide.value === "front" &&
+    reviewModeSig.value === "studying" &&
+    activeViewSig.value === "review" &&
+    currentNoteCard.value &&
+    !(e.target instanceof HTMLInputElement) &&
+    !(e.target instanceof HTMLTextAreaElement)
+  ) {
+    e.preventDefault();
+    editModalOpen.value = true;
+  }
+}
+
+onMounted(() => document.addEventListener("keydown", handleEditKeydown));
+onUnmounted(() => document.removeEventListener("keydown", handleEditKeydown));
+
 function handleAudioButtonClick(src: string) {
   playAudio(src);
 }
@@ -295,6 +361,65 @@ async function handleChooseAnswer(answer: Answer) {
   </Modal>
 
   <CommandPalette :commands="commands" />
+
+  <NoteEditModal
+    :is-open="editModalOpen"
+    :card="currentNoteCard"
+    :media-files="mediaFilesSig"
+    @close="editModalOpen = false"
+    @save="handleNoteSave"
+  />
+
+  <Modal :is-open="shortcutsModalOpen" title="Keyboard Shortcuts" size="lg" @close="shortcutsModalOpen = false">
+    <div class="shortcuts-grid">
+      <div class="shortcuts-section">
+        <h3 class="shortcuts-heading">Review</h3>
+        <dl class="shortcuts-list">
+          <dt><kbd>Space</kbd> / <kbd>Enter</kbd></dt><dd>Reveal answer</dd>
+          <dt><kbd>1</kbd> / <kbd>A</kbd></dt><dd>Again</dd>
+          <dt><kbd>2</kbd> / <kbd>H</kbd></dt><dd>Hard</dd>
+          <dt><kbd>3</kbd> / <kbd>G</kbd> / <kbd>Space</kbd></dt><dd>Good</dd>
+          <dt><kbd>4</kbd> / <kbd>E</kbd></dt><dd>Easy</dd>
+        </dl>
+      </div>
+      <div class="shortcuts-section">
+        <h3 class="shortcuts-heading">Card Actions</h3>
+        <dl class="shortcuts-list">
+          <dt><kbd>E</kbd></dt><dd>Edit current card</dd>
+          <dt><kbd>*</kbd></dt><dd>Mark / unmark note</dd>
+          <dt><kbd>-</kbd></dt><dd>Bury card</dd>
+          <dt><kbd>=</kbd></dt><dd>Bury note</dd>
+          <dt><kbd>@</kbd></dt><dd>Suspend card</dd>
+          <dt><kbd>I</kbd></dt><dd>Card info</dd>
+          <dt><kbd>Ctrl</kbd>+<kbd>Del</kbd></dt><dd>Delete note</dd>
+        </dl>
+      </div>
+      <div class="shortcuts-section">
+        <h3 class="shortcuts-heading">Flags</h3>
+        <dl class="shortcuts-list">
+          <dt><kbd>Ctrl</kbd>+<kbd>1</kbd>–<kbd>7</kbd></dt><dd>Set flag 1–7</dd>
+          <dt><kbd>Ctrl</kbd>+<kbd>0</kbd></dt><dd>Remove flag</dd>
+        </dl>
+      </div>
+      <div class="shortcuts-section">
+        <h3 class="shortcuts-heading">Audio</h3>
+        <dl class="shortcuts-list">
+          <dt><kbd>R</kbd></dt><dd>Replay audio</dd>
+          <dt><kbd>5</kbd></dt><dd>Pause / resume audio</dd>
+        </dl>
+      </div>
+      <div class="shortcuts-section">
+        <h3 class="shortcuts-heading">General</h3>
+        <dl class="shortcuts-list">
+          <dt><kbd>Ctrl</kbd>+<kbd>K</kbd></dt><dd>Command palette</dd>
+          <dt><kbd>Ctrl</kbd>+<kbd>T</kbd></dt><dd>Toggle theme</dd>
+          <dt><kbd>Ctrl</kbd>+<kbd>E</kbd></dt><dd>Toggle sound effects</dd>
+          <dt><kbd>Ctrl</kbd>+<kbd>,</kbd></dt><dd>Scheduler settings</dd>
+          <dt><kbd>?</kbd></dt><dd>Show this help</dd>
+        </dl>
+      </div>
+    </div>
+  </Modal>
 </template>
 
 <style scoped>
@@ -374,5 +499,56 @@ main {
   box-shadow: none;
   cursor: pointer;
   text-decoration: underline;
+}
+
+.shortcuts-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--spacing-6);
+  padding: var(--spacing-2) 0;
+}
+
+@media (max-width: 600px) {
+  .shortcuts-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.shortcuts-heading {
+  margin: 0 0 var(--spacing-2);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.shortcuts-list {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--spacing-1) var(--spacing-3);
+  margin: 0;
+  font-size: var(--font-size-sm);
+}
+
+.shortcuts-list dt {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.shortcuts-list dd {
+  margin: 0;
+  color: var(--color-text-secondary);
+}
+
+.shortcuts-list kbd {
+  display: inline-block;
+  padding: 1px var(--spacing-1-5);
+  font-size: var(--font-size-xs);
+  font-family: var(--font-family-mono);
+  color: var(--color-text-secondary);
+  background: var(--color-surface-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  min-width: 20px;
+  text-align: center;
 }
 </style>

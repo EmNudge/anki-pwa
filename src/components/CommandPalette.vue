@@ -149,10 +149,15 @@ function matchesHotkey(e: KeyboardEvent, hotkey: string): boolean {
   const needsShift = partSet.has("shift");
   const needsAlt = partSet.has("alt");
 
+  // Allow shift for keys that naturally require it (e.g. *, @, ?, !, etc.)
+  // Only enforce strict shift check for letter/number keys
+  const isShiftedSymbol = key.length === 1 && !/[a-z0-9]/.test(key);
+  const shiftOk = needsShift ? e.shiftKey : (!e.shiftKey || isShiftedSymbol);
+
   return (
     (needsCtrl ? e.ctrlKey : !e.ctrlKey || needsMeta) &&
     (needsMeta ? e.metaKey : !e.metaKey || needsCtrl) &&
-    (needsShift ? e.shiftKey : !e.shiftKey) &&
+    shiftOk &&
     (needsAlt ? e.altKey : !e.altKey) &&
     e.key.toLowerCase() === key
   );
