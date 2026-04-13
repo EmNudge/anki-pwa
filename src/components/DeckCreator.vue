@@ -2,9 +2,10 @@
 import { ref, computed } from "vue";
 import { Button } from "../design-system";
 import AiDeckGenerator from "./AiDeckGenerator.vue";
+import CsvImportWizard from "./CsvImportWizard.vue";
 import { downloadBlob } from "../utils/downloadBlob";
 
-const mode = ref<"manual" | "ai">("manual");
+const mode = ref<"manual" | "csv" | "ai">("manual");
 const rawInput = ref("");
 const delimiter = ref<"tab" | "comma">("tab");
 
@@ -39,6 +40,9 @@ function exportDeck() {
         @click="mode = 'manual'"
       >
         Manual
+      </button>
+      <button :class="['mode-btn', { 'mode-btn--active': mode === 'csv' }]" @click="mode = 'csv'">
+        CSV Import
       </button>
       <button :class="['mode-btn', { 'mode-btn--active': mode === 'ai' }]" @click="mode = 'ai'">
         AI Generate
@@ -93,6 +97,8 @@ function exportDeck() {
         </div>
       </div>
     </template>
+
+    <CsvImportWizard v-else-if="mode === 'csv'" />
 
     <AiDeckGenerator v-else />
   </div>
