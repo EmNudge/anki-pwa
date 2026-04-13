@@ -53,21 +53,3 @@ export function buildTagTree(tags: string[], tagNoteCounts: Map<string, number>)
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/**
- * Rename a tag across all notes. Returns updated tags arrays.
- * Handles hierarchical tags: renaming "foo" to "bar" also renames "foo::baz" to "bar::baz".
- */
-export function renameTagInList(tags: string[], oldTag: string, newTag: string): string[] {
-  return tags.map((tag) => {
-    if (tag === oldTag) return newTag;
-    if (tag.startsWith(oldTag + "::")) return newTag + tag.slice(oldTag.length);
-    return tag;
-  });
-}
-
-/**
- * Remove a tag from a tags list. Also removes child tags.
- */
-export function removeTagFromList(tags: string[], tagToRemove: string): string[] {
-  return tags.filter((tag) => tag !== tagToRemove && !tag.startsWith(tagToRemove + "::"));
-}
