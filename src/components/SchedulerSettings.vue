@@ -11,8 +11,10 @@ import {
   renameDeckInCollection,
   deleteDeckFromCollection,
   exportDeckFromCollection,
+  exportCardsCsvJson,
 } from "../stores";
 import type { SchedulerSettings } from "../scheduler/types";
+import type { ExportFormat, ExportScope } from "../ankiExporter/csvJsonExport";
 import { DEFAULT_SM2_PARAMS } from "../scheduler/types";
 import { Button, Modal } from "../design-system";
 import { Pencil } from "lucide-vue-next";
@@ -32,6 +34,12 @@ const isRenaming = ref(false);
 const renameValue = ref("");
 const showDeleteConfirm = ref(false);
 const isExporting = ref(false);
+
+// Export options
+const exportFormat = ref<ExportFormat | "apkg">("apkg");
+const exportScope = ref<ExportScope>("deck");
+const exportIncludeScheduling = ref(true);
+const exportIncludeHtml = ref(true);
 
 const deckNode = computed(() => settingsTargetDeckNodeSig.value);
 const isSynced = computed(() => isSyncedCollection());
@@ -80,7 +88,17 @@ async function handleExport() {
   if (!node) return;
   isExporting.value = true;
   try {
-    await exportDeckFromCollection(node.fullName);
+    if (exportFormat.value === "apkg") {
+      await exportDeckFromCollection(node.fullName);
+    } else {
+      await exportCardsCsvJson({
+        format: exportFormat.value as ExportFormat,
+        scope: exportScope.value,
+        deckName: exportScope.value === "deck" ? node.fullName : undefined,
+        includeScheduling: exportIncludeScheduling.value,
+        includeHtml: exportIncludeHtml.value,
+      });
+    }
   } finally {
     isExporting.value = false;
   }
@@ -182,11 +200,48 @@ function updateFsrsParam<K extends keyof NonNullable<SchedulerSettings["fsrsPara
         <div class="help-text">Only renames this deck segment, not parent path</div>
       </div>
 
-      <!-- Action buttons -->
-      <div v-if="!isRenaming" class="deck-actions">
-        <Button variant="secondary" size="sm" :disabled="isExporting" @click="handleExport">
-          {{ isExporting ? "Exporting..." : "Export" }}
-        </Button>
+      <!-- Export options -->
+      <div v-if="!isRenaming" class="export-section">
+        <div class="form-group">
+          <label class="form-label">Export Format</label>
+          <select v-model="exportFormat" class="form-select">
+            <option value="apkg">Anki Package (.apkg)</option>
+            <option value="csv">CSV (.csv)</option>
+            <option value="json">JSON (.json)</option>
+          </select>
+        </div>
+
+        <template v-if="exportFormat !== 'apkg'">
+          <div class="form-group">
+            <label class="form-label">Scope</label>
+            <select v-model="exportScope" class="form-select">
+              <option value="deck">Current Deck</option>
+              <option value="all">All Cards</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="toggle-row">
+              <span class="form-label" style="margin-bottom: 0">Include Scheduling</span>
+              <input type="checkbox" v-model="exportIncludeScheduling" />
+            </label>
+            <div class="help-text">Include review history and scheduling data</div>
+          </div>
+
+          <div class="form-group">
+            <label class="toggle-row">
+              <span class="form-label" style="margin-bottom: 0">Include HTML</span>
+              <input type="checkbox" v-model="exportIncludeHtml" />
+            </label>
+            <div class="help-text">Keep HTML markup in field values</div>
+          </div>
+        </template>
+
+        <div class="deck-actions">
+          <Button variant="secondary" size="sm" :disabled="isExporting" @click="handleExport">
+            {{ isExporting ? "Exporting..." : "Export" }}
+          </Button>
+        </div>
       </div>
     </div>
 
@@ -498,8 +553,8 @@ function updateFsrsParam<K extends keyof NonNullable<SchedulerSettings["fsrsPara
       </div>
       <div v-else class="delete-confirm">
         <p class="delete-warning">
-          Delete "<strong>{{ deckNode.fullName }}</strong>" and all its
-          {{ deckNode.cardCount }} cards? This cannot be undone.
+          Delete "<strong>{{ deckNode.fullName }}</strong
+          >" and all its {{ deckNode.cardCount }} cards? This cannot be undone.
         </p>
         <div class="delete-actions">
           <Button variant="danger" size="sm" @click="confirmDelete">Delete</Button>
@@ -605,6 +660,11 @@ function updateFsrsParam<K extends keyof NonNullable<SchedulerSettings["fsrsPara
 .deck-card-count {
   font-size: var(--font-size-xs);
   color: var(--color-text-tertiary);
+}
+.export-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
 }
 .deck-actions {
   display: flex;

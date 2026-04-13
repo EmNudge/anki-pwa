@@ -861,6 +861,32 @@ export async function exportDeckFromCollection(fullName: string): Promise<void> 
 }
 
 /**
+ * Export the current deck (or all cards) as CSV or JSON.
+ */
+export async function exportCardsCsvJson(options: {
+  format: "csv" | "json";
+  scope: "deck" | "all";
+  deckName?: string;
+  includeScheduling: boolean;
+  includeHtml: boolean;
+  csvColumns?: string[];
+}): Promise<void> {
+  const data = ankiDataSig.value;
+  if (!data) return;
+
+  const { exportCards } = await import("./ankiExporter/csvJsonExport");
+  const { content, mimeType, extension } = exportCards(data, options);
+  if (!content) return;
+
+  const safeName = (options.deckName ?? "export")
+    .replace(/::/g, "_")
+    .replace(/[^a-zA-Z0-9_-]/g, "_");
+  const blob = new Blob([content], { type: mimeType });
+  const { downloadBlob } = await import("./utils/downloadBlob");
+  downloadBlob(blob, `${safeName}.${extension}`);
+}
+
+/**
  * Resolve the deck ID used for settings/review-queue storage.
  * For the currently-studying deck this is based on selected cards.
  */
