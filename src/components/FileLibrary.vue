@@ -491,6 +491,12 @@ function handleOpenSettings(node: DeckTreeNode, event: Event) {
   background: var(--color-surface-hover);
 }
 
+.collapse-btn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
+  color: var(--color-text-primary);
+}
+
 .collapse-icon {
   display: inline-block;
   font-size: 10px;
@@ -544,6 +550,12 @@ function handleOpenSettings(node: DeckTreeNode, event: Event) {
   background: var(--color-surface-hover);
 }
 
+.settings-btn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
+  color: var(--color-text-primary);
+}
+
 .stat {
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-semibold);
@@ -585,5 +597,11 @@ function handleOpenSettings(node: DeckTreeNode, event: Event) {
 .delete-btn:hover {
   color: var(--color-error);
   background: var(--color-surface-hover);
+}
+
+.delete-btn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
+  color: var(--color-text-primary);
 }
 </style>
