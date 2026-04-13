@@ -70,7 +70,11 @@ function handleSave() {
     <div class="edit-form">
       <div v-for="(val, key) in editFields" :key="key" class="field-group">
         <label class="field-label">{{ key }}</label>
-        <TiptapEditor v-model="editFields[key]" :media-files="mediaFiles" />
+        <TiptapEditor
+          v-model="editFields[key]"
+          :media-files="mediaFiles"
+          :field-description="card?.fieldDescriptions?.[key as string]"
+        />
       </div>
 
       <div class="tags-section">
@@ -121,7 +125,6 @@ function handleSave() {
   text-transform: uppercase;
   letter-spacing: var(--letter-spacing-wide);
 }
-
 
 .tags-section {
   display: flex;

@@ -39,6 +39,7 @@ function createCard(card: SampleCard, index: number) {
     latexPre: "",
     latexPost: "",
     req: null,
+    fieldDescriptions: {},
     noteData: null,
     csum: null,
     sfld: card.front,

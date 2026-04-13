@@ -149,6 +149,7 @@ export type AnkiDB2Data = {
     latexPre: string;
     latexPost: string;
     req: [number, string, number[]][] | null;
+    fieldDescriptions: Record<string, string>;
     noteData: string | null;
     csum: number | null;
     sfld: string | null;
@@ -300,6 +301,11 @@ export function getDataFromAnki2(db: Database): AnkiDB2Data {
         const valuesMap = Object.fromEntries(
           keys.map((key, index) => [key, values[index] ?? null]),
         );
+        const fieldDescriptions = Object.fromEntries(
+          modelForCard.flds
+            .filter((fld) => fld.description)
+            .map((fld) => [fld.name, fld.description!]),
+        );
 
         // Find the template matching this card's ordinal
         const matchingTemplate =
@@ -326,6 +332,7 @@ export function getDataFromAnki2(db: Database): AnkiDB2Data {
           latexPre: modelForCard.latexPre ?? "",
           latexPost: modelForCard.latexPost ?? "",
           req: modelForCard.req ?? null,
+          fieldDescriptions,
           noteData: note.data || null,
           csum: note.csum ?? null,
           sfld: note.sfld ?? null,
