@@ -1,4 +1,4 @@
-import { computed, markRaw, type Component } from "vue";
+import { computed, markRaw, h, type Component } from "vue";
 import type { AnkiData } from "../ankiParser";
 import {
   ankiDataSig,
@@ -36,6 +36,7 @@ import {
 } from "lucide-vue-next";
 import { useTheme } from "../design-system/hooks/useTheme";
 import { getFlags, getFlagLabel } from "../lib/flags";
+import ReviewLogPanel from "../components/ReviewLogPanel.vue";
 
 function icon(comp: Component): Component {
   return markRaw(comp);
@@ -288,6 +289,11 @@ function buildCardInfoMetadata(
       value: new Date(reviewCard.reviewState.lastReviewed).toLocaleDateString(),
     });
   }
+
+  entries.push({
+    label: "Review Log",
+    value: h(ReviewLogPanel, { cardId: reviewCard.cardId }),
+  });
 
   return entries;
 }
