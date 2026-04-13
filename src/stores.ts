@@ -1260,3 +1260,114 @@ export async function updateNote(
     db.close();
   }
 }
+
+/**
+ * Bulk add a tag to multiple notes (by guid).
+ * Persists to SQLite for synced collections.
+ */
+export async function bulkAddTag(guids: string[], tag: string): Promise<void> {
+  const data = ankiDataSig.value;
+  if (!data) return;
+
+  for (const card of data.cards) {
+    if (!guids.includes(card.guid)) continue;
+    if (card.tags.includes(tag)) continue;
+    card.tags = [...card.tags, tag];
+  }
+  triggerRef(ankiDataSig);
+
+  await bulkPersistTags(guids);
+}
+
+/**
+ * Bulk remove a tag from multiple notes (by guid).
+ * Also removes child tags (prefix match with "::").
+ */
+export async function bulkRemoveTag(guids: string[], tag: string): Promise<void> {
+  const data = ankiDataSig.value;
+  if (!data) return;
+
+  for (const card of data.cards) {
+    if (!guids.includes(card.guid)) continue;
+    card.tags = card.tags.filter((t) => t !== tag && !t.startsWith(tag + "::"));
+  }
+  triggerRef(ankiDataSig);
+
+  await bulkPersistTags(guids);
+}
+
+/**
+ * Rename a tag across all notes in the collection.
+ * Also renames child tags (e.g. "old::child" -> "new::child").
+ */
+export async function renameTag(oldTag: string, newTag: string): Promise<void> {
+  const data = ankiDataSig.value;
+  if (!data) return;
+
+  const affectedGuids: string[] = [];
+  for (const card of data.cards) {
+    const hasTag = card.tags.some((t) => t === oldTag || t.startsWith(oldTag + "::"));
+    if (!hasTag) continue;
+
+    card.tags = card.tags.map((t) => {
+      if (t === oldTag) return newTag;
+      if (t.startsWith(oldTag + "::")) return newTag + t.slice(oldTag.length);
+      return t;
+    });
+    if (!affectedGuids.includes(card.guid)) affectedGuids.push(card.guid);
+  }
+  triggerRef(ankiDataSig);
+
+  await bulkPersistTags(affectedGuids);
+}
+
+/**
+ * Delete a tag from all notes in the collection.
+ * Also removes child tags.
+ */
+export async function deleteTag(tag: string): Promise<void> {
+  const data = ankiDataSig.value;
+  if (!data) return;
+
+  const affectedGuids: string[] = [];
+  for (const card of data.cards) {
+    const hasTag = card.tags.some((t) => t === tag || t.startsWith(tag + "::"));
+    if (!hasTag) continue;
+
+    card.tags = card.tags.filter((t) => t !== tag && !t.startsWith(tag + "::"));
+    if (!affectedGuids.includes(card.guid)) affectedGuids.push(card.guid);
+  }
+  triggerRef(ankiDataSig);
+
+  await bulkPersistTags(affectedGuids);
+}
+
+/**
+ * Persist tag changes for a set of notes to the SQLite database.
+ */
+async function bulkPersistTags(guids: string[]): Promise<void> {
+  const data = ankiDataSig.value;
+  const input = activeDeckInputSig.value;
+  if (!data || input?.kind !== "sqlite") return;
+
+  const db = await createDatabase(input.bytes);
+  try {
+    const mod = Math.floor(Date.now() / 1000);
+
+    for (const guid of guids) {
+      const card = data.cards.find((c) => c.guid === guid);
+      if (!card) continue;
+
+      const tagsStr = card.tags.length > 0 ? ` ${card.tags.join(" ")} ` : "";
+      db.run("UPDATE notes SET tags=?, mod=?, usn=-1 WHERE guid=?", [tagsStr, mod, guid]);
+    }
+
+    const newBytes = new Uint8Array(db.export());
+    const cache = await caches.open("anki-cache");
+    await cache.put("/sync/collection.sqlite", new Response(new Blob([newBytes as BlobPart])));
+    activeDeckInputSig.value = { ...input, bytes: newBytes };
+    markDataChanged();
+  } finally {
+    db.close();
+  }
+}
