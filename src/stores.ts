@@ -448,6 +448,7 @@ const dueCardsSig = shallowRef<ReviewCard[]>([]);
 export const currentReviewCardSig = shallowRef<ReviewCard | null>(null);
 
 export const schedulerSettingsModalOpenSig = ref(false);
+export const flagSettingsModalOpenSig = ref(false);
 /** The deck ID whose settings are being edited in the modal */
 export const settingsTargetDeckIdSig = ref<string | null>(null);
 /** The deck tree node whose settings are being edited */

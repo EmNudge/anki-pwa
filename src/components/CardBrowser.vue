@@ -6,6 +6,7 @@ import { sanitizeHtmlForPreview } from "../utils/sanitize";
 import { playAudio } from "../utils/sound";
 import Button from "../design-system/components/primitives/Button.vue";
 import NoteEditModal from "./NoteEditModal.vue";
+import { getFlags } from "../lib/flags";
 
 type ViewMode = "cards" | "notes";
 const viewMode = ref<ViewMode>("notes");
@@ -72,16 +73,10 @@ type SearchToken =
   | { type: "negate"; inner: SearchToken };
 
 const IS_VALUES = ["new", "learn", "review", "due", "suspended", "buried"] as const;
-const FLAG_VALUES = [
+const FLAG_VALUES = computed(() => [
   { value: 0, label: "none" },
-  { value: 1, label: "red" },
-  { value: 2, label: "orange" },
-  { value: 3, label: "green" },
-  { value: 4, label: "blue" },
-  { value: 5, label: "pink" },
-  { value: 6, label: "turquoise" },
-  { value: 7, label: "purple" },
-] as const;
+  ...getFlags().map((f) => ({ value: f.flag, label: f.label.toLowerCase() })),
+]);
 
 const QUALIFIERS = ["deck:", "tag:", "is:", "flag:", "card:", "note:"] as const;
 
@@ -113,9 +108,18 @@ function parseSearch(query: string): SearchToken[] {
         case "is":
           token = { type: "is", value: val.toLowerCase() };
           break;
-        case "flag":
-          token = { type: "flag", value: parseInt(val, 10) || 0 };
+        case "flag": {
+          const parsed = parseInt(val, 10);
+          if (!isNaN(parsed)) {
+            token = { type: "flag", value: parsed };
+          } else {
+            const match = FLAG_VALUES.value.find(
+              (f) => f.label.toLowerCase() === val.toLowerCase(),
+            );
+            token = { type: "flag", value: match?.value ?? 0 };
+          }
           break;
+        }
         case "card":
           token = { type: "card", value: val };
           break;
@@ -220,7 +224,7 @@ const suggestions = computed<Suggestion[]>(() => {
       }
       break;
     case "flag:":
-      for (const f of FLAG_VALUES) {
+      for (const f of FLAG_VALUES.value) {
         const numStr = String(f.value);
         if (numStr.startsWith(valuePart) || f.label.startsWith(valuePart)) {
           results.push({

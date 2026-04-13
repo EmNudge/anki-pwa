@@ -20,6 +20,7 @@ import {
   reviewQueueSig,
   schedulerEnabledSig,
   schedulerSettingsModalOpenSig,
+  flagSettingsModalOpenSig,
   selectedCardSig,
   selectedDeckIdSig,
   selectedTemplateSig,
@@ -33,6 +34,7 @@ import DeckCreator from "./components/DeckCreator.vue";
 import CardBrowser from "./components/CardBrowser.vue";
 import SyncPanel from "./components/SyncPanel.vue";
 import SchedulerSettings from "./components/SchedulerSettings.vue";
+import FlagSettings from "./components/FlagSettings.vue";
 import CommandPalette from "./components/CommandPalette.vue";
 import { useCommands } from "./composables/useCommands";
 import { getAutoplayAudioSources, playAudio } from "./utils/sound";
@@ -264,6 +266,11 @@ async function handleChooseAnswer(answer: Answer) {
   <SchedulerSettings
     :is-open="schedulerSettingsModalOpenSig"
     @close="schedulerSettingsModalOpenSig = false"
+  />
+
+  <FlagSettings
+    :is-open="flagSettingsModalOpenSig"
+    @close="flagSettingsModalOpenSig = false"
   />
 
   <Modal :is-open="deckInfoModalOpen" title="Deck Info" size="sm" @close="deckInfoModalOpen = false">

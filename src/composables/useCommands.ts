@@ -8,6 +8,7 @@ import {
   soundEffectsEnabledSig,
   toggleSoundEffects,
   schedulerSettingsModalOpenSig,
+  flagSettingsModalOpenSig,
   resetScheduler,
   currentReviewCardSig,
   reviewQueueSig,
@@ -34,6 +35,7 @@ import {
   RefreshCcw,
 } from "lucide-vue-next";
 import { useTheme } from "../design-system/hooks/useTheme";
+import { getFlags, getFlagLabel } from "../lib/flags";
 
 function icon(comp: Component): Component {
   return markRaw(comp);
@@ -126,6 +128,16 @@ export function useCommands() {
         },
       },
       {
+        id: "flag-settings",
+        title: "Customize Flags",
+        description: "Rename flag labels",
+        icon: icon(Flag),
+        group: "Settings",
+        handler: () => {
+          flagSettingsModalOpenSig.value = true;
+        },
+      },
+      {
         id: "reset-scheduler",
         title: "Reset Scheduler",
         description: "Clear all review history and start fresh",
@@ -141,15 +153,6 @@ export function useCommands() {
   });
 }
 
-const FLAG_COLORS: { flag: number; label: string; color: string }[] = [
-  { flag: 1, label: "Red", color: "#ff6b6b" },
-  { flag: 2, label: "Orange", color: "#ffa94d" },
-  { flag: 3, label: "Green", color: "#69db7c" },
-  { flag: 4, label: "Blue", color: "#74c0fc" },
-  { flag: 5, label: "Pink", color: "#f783ac" },
-  { flag: 6, label: "Turquoise", color: "#63e6be" },
-  { flag: 7, label: "Purple", color: "#b197fc" },
-];
 
 function buildCardActionCommands(ankiData: AnkiData | null): Command[] {
   const reviewCard = currentReviewCardSig.value;
@@ -189,7 +192,7 @@ function buildCardActionCommands(ankiData: AnkiData | null): Command[] {
       title: "Flag Card",
       description: "Mark this card with a colored flag for later reference",
       icon: icon(Flag),
-      label: currentFlag > 0 ? `Flag ${currentFlag}` : undefined,
+      label: currentFlag > 0 ? getFlagLabel(currentFlag) : undefined,
       group: "Current Card",
       children: [
         {
@@ -201,7 +204,7 @@ function buildCardActionCommands(ankiData: AnkiData | null): Command[] {
             flagCurrentCard(0);
           },
         },
-        ...FLAG_COLORS.map(({ flag, label, color }) => ({
+        ...getFlags().map(({ flag, label, color }) => ({
           id: `flag-${flag}`,
           title: `${label} Flag`,
           icon: icon(Flag),
@@ -276,8 +279,7 @@ function buildCardInfoMetadata(
 
   const flags = reviewCard.reviewState.flags ?? 0;
   if (flags > 0) {
-    const flagInfo = FLAG_COLORS.find((f) => f.flag === flags);
-    entries.push({ label: "Flag", value: flagInfo ? flagInfo.label : String(flags) });
+    entries.push({ label: "Flag", value: getFlagLabel(flags) });
   }
 
   if (reviewCard.reviewState.lastReviewed) {
