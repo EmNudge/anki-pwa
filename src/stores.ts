@@ -1143,8 +1143,12 @@ export async function deleteCurrentNote() {
     await reviewDB.deleteCard(cardId);
   }
 
-  // Remove cards from in-memory data
-  ankiData.cards = ankiData.cards.filter((c) => c.guid !== guid);
+  // Remove cards from in-memory data (mutate in-place to preserve array type)
+  for (let i = ankiData.cards.length - 1; i >= 0; i--) {
+    if (ankiData.cards[i]!.guid === guid) {
+      ankiData.cards.splice(i, 1);
+    }
+  }
   triggerRef(ankiDataSig);
 
   dueCardsSig.value = dueCardsSig.value.filter((c) => !siblingCardIds.includes(c.cardId));
