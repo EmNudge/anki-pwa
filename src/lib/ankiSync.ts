@@ -34,7 +34,7 @@ export async function fetchWithTimeout(
 const SYNC_CONFIG_KEY = "anki-sync-config";
 const SYNC_STATE_KEY = "anki-sync-state";
 
-export interface SyncConfig {
+interface SyncConfig {
   serverUrl: string;
   username: string;
 }

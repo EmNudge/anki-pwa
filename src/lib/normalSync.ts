@@ -125,7 +125,7 @@ export class FullSyncRequiredError extends Error {
   }
 }
 
-export class SyncAbortedError extends Error {
+class SyncAbortedError extends Error {
   constructor(message = "Sync aborted by server") {
     super(message);
     this.name = "SyncAbortedError";
