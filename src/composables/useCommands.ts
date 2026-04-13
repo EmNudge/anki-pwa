@@ -16,6 +16,8 @@ import {
   suspendCurrentCard,
   flagCurrentCard,
   markCurrentNote,
+  buryCurrentNote,
+  deleteCurrentNote,
 } from "../stores";
 import type { Command } from "../commandPaletteStore";
 import {
@@ -33,6 +35,12 @@ import {
   Search,
   FolderPlus,
   RefreshCcw,
+  Pencil,
+  Play,
+  Pause,
+  Trash2,
+  EyeOff as EyeOffNote,
+  Keyboard,
 } from "lucide-vue-next";
 import { useTheme } from "../design-system/hooks/useTheme";
 import { getFlags, getFlagLabel } from "../lib/flags";
@@ -68,7 +76,14 @@ const TAB_DEFINITIONS: { id: AppView; title: string; description: string; icon: 
   },
 ];
 
-export function useCommands() {
+export interface UseCommandsOptions {
+  onEditCard?: () => void;
+  onReplayAudio?: () => void;
+  onPauseAudio?: () => void;
+  onShowShortcuts?: () => void;
+}
+
+export function useCommands(options: UseCommandsOptions = {}) {
   return computed<Command[]>(() => {
     const ankiData = ankiDataSig.value;
     const currentView = activeViewSig.value;
@@ -91,7 +106,7 @@ export function useCommands() {
     );
 
     const commands: Command[] = [
-      ...buildCardActionCommands(ankiData),
+      ...buildCardActionCommands(ankiData, options),
       ...tabCommands,
       {
         id: "toggle-theme",
@@ -147,6 +162,17 @@ export function useCommands() {
           resetScheduler();
         },
       },
+      {
+        id: "show-shortcuts",
+        title: "Keyboard Shortcuts",
+        description: "Show all available keyboard shortcuts",
+        icon: icon(Keyboard),
+        hotkey: "?",
+        group: "Help",
+        handler: () => {
+          options.onShowShortcuts?.();
+        },
+      },
     ];
 
     return commands;
@@ -154,7 +180,7 @@ export function useCommands() {
 }
 
 
-function buildCardActionCommands(ankiData: AnkiData | null): Command[] {
+function buildCardActionCommands(ankiData: AnkiData | null, options: UseCommandsOptions): Command[] {
   const reviewCard = currentReviewCardSig.value;
   if (!reviewCard || activeViewSig.value !== "review" || reviewModeSig.value !== "studying")
     return [];
@@ -199,6 +225,7 @@ function buildCardActionCommands(ankiData: AnkiData | null): Command[] {
           id: "flag-none",
           title: "No Flag",
           icon: icon(Flag),
+          hotkey: "ctrl+0",
           label: currentFlag === 0 ? "Current" : undefined,
           handler: () => {
             flagCurrentCard(0);
@@ -208,6 +235,7 @@ function buildCardActionCommands(ankiData: AnkiData | null): Command[] {
           id: `flag-${flag}`,
           title: `${label} Flag`,
           icon: icon(Flag),
+          hotkey: `ctrl+${flag}`,
           label: currentFlag === flag ? "Current" : undefined,
           metadata: [{ label: "Color", value: color }],
           handler: () => {
@@ -244,6 +272,65 @@ function buildCardActionCommands(ankiData: AnkiData | null): Command[] {
       },
     });
   }
+
+  commands.push(
+    {
+      id: "edit-card",
+      title: "Edit Card",
+      description: "Open the editor for the current card",
+      icon: icon(Pencil),
+      group: "Current Card",
+      handler: () => {
+        options.onEditCard?.();
+      },
+    },
+    {
+      id: "bury-note",
+      title: "Bury Note",
+      description: "Hide all cards of this note until tomorrow",
+      icon: icon(EyeOffNote),
+      hotkey: "=",
+      group: "Current Card",
+      handler: () => {
+        buryCurrentNote();
+      },
+    },
+    {
+      id: "replay-audio",
+      title: "Replay Audio",
+      description: "Replay any audio on the current card",
+      icon: icon(Play),
+      hotkey: "R",
+      group: "Current Card",
+      handler: () => {
+        options.onReplayAudio?.();
+      },
+    },
+    {
+      id: "pause-audio",
+      title: "Pause/Resume Audio",
+      description: "Pause or resume audio playback",
+      icon: icon(Pause),
+      hotkey: "5",
+      group: "Current Card",
+      handler: () => {
+        options.onPauseAudio?.();
+      },
+    },
+    {
+      id: "delete-note",
+      title: "Delete Note",
+      description: "Permanently delete this note and all its cards",
+      icon: icon(Trash2),
+      hotkey: "ctrl+Delete",
+      group: "Current Card",
+      handler: () => {
+        if (confirm("Delete this note and all its cards? This cannot be undone.")) {
+          deleteCurrentNote();
+        }
+      },
+    },
+  );
 
   return commands;
 }
