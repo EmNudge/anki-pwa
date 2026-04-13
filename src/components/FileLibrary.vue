@@ -38,9 +38,14 @@ const uploadedDecks = computed(() =>
 // Track collapsed state for parent decks
 const collapsed = reactive(new Set<string>());
 
-function handleFileInput(event: Event) {
+async function handleFileInput(event: Event) {
   const file = (event.target as HTMLInputElement).files?.[0];
-  if (file) addCachedFile(file);
+  if (!file) return;
+  try {
+    await addCachedFile(file);
+  } catch (error) {
+    console.error("Failed to load deck file:", error);
+  }
 }
 
 function selectSubdeck(deckId: string) {
