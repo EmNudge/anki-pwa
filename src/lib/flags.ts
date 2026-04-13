@@ -1,6 +1,6 @@
 import { ref } from "vue";
 
-export interface FlagDefinition {
+interface FlagDefinition {
   flag: number;
   label: string;
   color: string;
@@ -45,11 +45,6 @@ export function getFlagLabel(flag: number): string {
   const custom = customFlagLabelsSig.value;
   const def = DEFAULT_FLAGS.find((f) => f.flag === flag);
   return custom[flag] || def?.label || `Flag ${flag}`;
-}
-
-/** Get a single flag's color */
-export function getFlagColor(flag: number): string | undefined {
-  return DEFAULT_FLAGS.find((f) => f.flag === flag)?.color;
 }
 
 /** Get the default (color-based) label for a flag */
