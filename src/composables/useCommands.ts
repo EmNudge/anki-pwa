@@ -254,7 +254,7 @@ function buildCardInfoMetadata(
   queue: import("../scheduler/queue").ReviewQueue | null,
 ): Command["metadata"] {
   const displayInfo = queue?.getCardDisplayInfo(reviewCard) ?? {};
-  const entries: { label: string; value: string }[] = [
+  const entries: NonNullable<Command["metadata"]> = [
     { label: "Card ID", value: reviewCard.cardId },
     { label: "New", value: reviewCard.isNew ? "Yes" : "No" },
   ];
