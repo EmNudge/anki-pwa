@@ -26,6 +26,8 @@ describe("ReviewDB", () => {
         dailyNewLimit: 30,
         dailyReviewLimit: 300,
         showAheadOfSchedule: false,
+        learnAheadMins: 20,
+        rolloverHour: 4,
         fsrsParams: {
           requestRetention: 0.85,
           maximumInterval: 1000,
@@ -112,6 +114,8 @@ describe("ReviewDB", () => {
         dailyNewLimit: 20,
         dailyReviewLimit: 200,
         showAheadOfSchedule: false,
+        learnAheadMins: 20,
+        rolloverHour: 4,
         fsrsParams: { requestRetention: 0.9, maximumInterval: 36500 },
       });
 
@@ -127,6 +131,8 @@ describe("ReviewDB", () => {
         dailyNewLimit: 30,
         dailyReviewLimit: 300,
         showAheadOfSchedule: false,
+        learnAheadMins: 20,
+        rolloverHour: 4,
         fsrsParams: { requestRetention: 0.85, maximumInterval: 1000 },
       });
 
@@ -145,6 +151,8 @@ describe("ReviewDB", () => {
         dailyNewLimit: 20,
         dailyReviewLimit: 200,
         showAheadOfSchedule: false,
+        learnAheadMins: 20,
+        rolloverHour: 4,
       });
 
       await expect(db.saveSettings("deck-1", settings)).rejects.toThrow();
