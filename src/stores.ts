@@ -8,7 +8,7 @@ import { ReviewQueue, type ReviewCard } from "./scheduler/queue";
 import { DEFAULT_SCHEDULER_SETTINGS, type SchedulerSettings } from "./scheduler/types";
 import { reviewDB } from "./scheduler/db";
 import type { DeckInfo, DeckTreeNode } from "./types";
-import { sampleDeckMap, sampleDecks } from "./sampleDecks";
+import { sampleDeckMap, sampleDecks, mergedSampleDeckData } from "./sampleDecks";
 import {
   importedDeckFileName,
   persistActiveDeckSourceId as persistStoredActiveDeckSourceId,
@@ -97,6 +97,13 @@ ankiCachePromise.then(async (cache) => {
   }
 
   if (!activeDeckSourceIdSig.value) {
+    // Auto-load sample decks when no sync is configured and nothing else is active
+    if (!syncActiveSig.value) {
+      persistActiveDeckSourceId(SAMPLE_COLLECTION_ID);
+      activeDeckInputSig.value = { kind: "sample", data: mergedSampleDeckData };
+      activeViewSig.value = "review";
+      reviewModeSig.value = "deck-list";
+    }
     return;
   }
 
@@ -120,6 +127,18 @@ ankiCachePromise.then(async (cache) => {
       return;
     }
     persistActiveDeckSourceId(null);
+    return;
+  }
+
+  // Restore merged sample collection
+  if (activeDeckSourceIdSig.value === SAMPLE_COLLECTION_ID) {
+    if (syncActiveSig.value) {
+      persistActiveDeckSourceId(null);
+      return;
+    }
+    activeDeckInputSig.value = { kind: "sample", data: mergedSampleDeckData };
+    activeViewSig.value = "review";
+    reviewModeSig.value = "deck-list";
     return;
   }
 
@@ -237,6 +256,7 @@ export async function deleteCachedFile(name: string) {
 }
 
 const SYNC_COLLECTION_ID = "sync-collection";
+export const SAMPLE_COLLECTION_ID = "sample-collection";
 
 export async function loadSyncedCollection(bytes: Uint8Array, mediaBlobs?: Map<string, Blob>) {
   // Cache SQLite bytes and media blobs so they survive page reloads
@@ -532,7 +552,11 @@ export async function renameDeckInCollection(
         deck.usn = -1;
       }
       // Update children
-      for (const d of Object.values(decksJson) as Array<{ name: string; mod: number; usn: number }>) {
+      for (const d of Object.values(decksJson) as Array<{
+        name: string;
+        mod: number;
+        usn: number;
+      }>) {
         if (d.name.startsWith(oldFullName + "::")) {
           d.name = newFullName + d.name.slice(oldFullName.length);
           d.mod = mod;
@@ -562,10 +586,7 @@ export async function renameDeckInCollection(
  * Delete a deck from the synced SQLite collection.
  * Removes the deck, its cards, orphaned notes, and marks for sync.
  */
-export async function deleteDeckFromCollection(
-  deckId: string,
-  fullName: string,
-): Promise<void> {
+export async function deleteDeckFromCollection(deckId: string, fullName: string): Promise<void> {
   const input = activeDeckInputSig.value;
   if (input?.kind !== "sqlite") return;
 
@@ -579,16 +600,19 @@ export async function deleteDeckFromCollection(
     const deckIdsToDelete: number[] = [];
 
     if (anki21b) {
-      const rows = db.exec(
-        "SELECT id FROM decks WHERE id=? OR name LIKE ?",
-        [deckId, fullName + "::%"],
-      );
+      const rows = db.exec("SELECT id FROM decks WHERE id=? OR name LIKE ?", [
+        deckId,
+        fullName + "::%",
+      ]);
       if (rows[0]) {
         for (const row of rows[0].values) deckIdsToDelete.push(Number(row[0]));
       }
     } else {
       const result = db.exec("SELECT decks FROM col");
-      const decksJson = JSON.parse(String(result[0]?.values[0]?.[0] ?? "{}")) as Record<string, { name: string }>;
+      const decksJson = JSON.parse(String(result[0]?.values[0]?.[0] ?? "{}")) as Record<
+        string,
+        { name: string }
+      >;
       for (const [id, d] of Object.entries(decksJson)) {
         if (id === String(deckId) || d.name.startsWith(fullName + "::")) {
           deckIdsToDelete.push(Number(id));
@@ -703,7 +727,10 @@ export async function exportDeckFromCollection(fullName: string): Promise<void> 
       }
     } else {
       const result = srcDb.exec("SELECT decks FROM col");
-      const decksJson = JSON.parse(String(result[0]?.values[0]?.[0] ?? "{}")) as Record<string, { name: string }>;
+      const decksJson = JSON.parse(String(result[0]?.values[0]?.[0] ?? "{}")) as Record<
+        string,
+        { name: string }
+      >;
       const exportDecks: Record<string, unknown> = {};
       for (const [id, d] of Object.entries(decksJson)) {
         if (d.name === fullName || d.name.startsWith(fullName + "::")) {
@@ -873,9 +900,7 @@ export async function initializeReviewQueue() {
   await queue.init();
 
   const mappedIds = cards.map((c) => c.ankiCardId);
-  const ankiCardIds = mappedIds.every((id): id is number => id != null)
-    ? mappedIds
-    : undefined;
+  const ankiCardIds = mappedIds.every((id): id is number => id != null) ? mappedIds : undefined;
   const fullQueue = await queue.buildQueue(cards.length, templates.length, ankiCardIds);
   const dueCards = queue.getDueCards(fullQueue);
 
