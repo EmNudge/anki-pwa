@@ -464,6 +464,7 @@ export const schedulerEnabledSig = computed(() => schedulerSettingsSig.value.ena
 export const reviewQueueSig = shallowRef<ReviewQueue | null>(null);
 
 const dueCardsSig = shallowRef<ReviewCard[]>([]);
+export const fullQueueSig = shallowRef<ReviewCard[]>([]);
 
 export const currentReviewCardSig = shallowRef<ReviewCard | null>(null);
 
@@ -897,6 +898,7 @@ export function getActiveDeckId(): string {
 function clearReviewQueueState() {
   reviewQueueSig.value = null;
   dueCardsSig.value = [];
+  fullQueueSig.value = [];
   currentReviewCardSig.value = null;
 }
 
@@ -931,6 +933,7 @@ export async function initializeReviewQueue() {
   const dueCards = queue.getDueCards(fullQueue);
 
   reviewQueueSig.value = queue;
+  fullQueueSig.value = fullQueue;
   dueCardsSig.value = dueCards;
 
   if (dueCards.length > 0) {

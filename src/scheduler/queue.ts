@@ -63,11 +63,17 @@ export class ReviewQueue {
   }
 
   /**
-   * Get today's date as YYYY-MM-DD
+   * Get today's date as YYYY-MM-DD, adjusted for rollover hour.
+   * If the current time is before the rollover hour, the previous
+   * calendar day is considered "today".
    */
   private getTodayString(): string {
-    const today = new Date();
-    return today.toISOString().split("T")[0]!;
+    const now = new Date();
+    const rollover = this.settings.rolloverHour ?? 4;
+    if (now.getHours() < rollover) {
+      now.setDate(now.getDate() - 1);
+    }
+    return now.toISOString().split("T")[0]!;
   }
 
   /**
@@ -201,10 +207,18 @@ export class ReviewQueue {
     const selectedNew = newCards.slice(0, newLeft);
     const selectedReviews = dueReviews.slice(0, reviewLeft);
 
-    const includeAhead =
-      this.settings.showAheadOfSchedule && selectedReviews.length === 0 && selectedNew.length === 0
-        ? aheadCards
-        : [];
+    // Include ahead-of-schedule cards when the regular queue is empty
+    const learnAheadMs = (this.settings.learnAheadMins ?? 20) * 60 * 1000;
+    let includeAhead: ReviewCard[] = [];
+    if (selectedReviews.length === 0 && selectedNew.length === 0 && learningCards.length === 0) {
+      if (this.settings.showAheadOfSchedule) {
+        includeAhead = aheadCards;
+      } else if (learnAheadMs > 0) {
+        includeAhead = aheadCards.filter(
+          (c) => (dueDateCache.get(c.cardId) ?? Infinity) <= nowMs + learnAheadMs,
+        );
+      }
+    }
 
     // Sort learning cards by due time (soonest first)
     learningCards.sort(
@@ -336,6 +350,43 @@ export class ReviewQueue {
       newLeft: Math.max(0, this.settings.dailyNewLimit - this.todayStats.newCount),
       reviewsLeft: Math.max(0, this.settings.dailyReviewLimit - this.todayStats.reviewCount),
     };
+  }
+
+  /**
+   * Get today's stats for the congrats screen
+   */
+  getTodayStats(): DailyStats {
+    return { ...this.todayStats };
+  }
+
+  /**
+   * Get the soonest due date across all non-due cards in the given queue.
+   * Returns null if there are no upcoming cards.
+   */
+  getNextDueDate(queue: ReviewCard[]): Date | null {
+    const nowMs = Date.now();
+    let earliest: number | null = null;
+
+    for (const card of queue) {
+      if (card.reviewState.queueOverride === QUEUE_SUSPENDED) continue;
+      if (
+        card.reviewState.queueOverride === QUEUE_USER_BURIED ||
+        card.reviewState.queueOverride === QUEUE_SCHED_BURIED
+      )
+        continue;
+      if (card.isNew) continue;
+
+      try {
+        const dueMs = this.algorithm.getDueDate(card.reviewState.cardState).getTime();
+        if (dueMs > nowMs && (earliest === null || dueMs < earliest)) {
+          earliest = dueMs;
+        }
+      } catch {
+        // skip
+      }
+    }
+
+    return earliest !== null ? new Date(earliest) : null;
   }
 
   /**

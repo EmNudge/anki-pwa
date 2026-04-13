@@ -33,6 +33,7 @@ import DeckCreator from "./components/DeckCreator.vue";
 
 import CardBrowser from "./components/CardBrowser.vue";
 import SyncPanel from "./components/SyncPanel.vue";
+import CongratsScreen from "./components/CongratsScreen.vue";
 import SchedulerSettings from "./components/SchedulerSettings.vue";
 import FlagSettings from "./components/FlagSettings.vue";
 import CommandPalette from "./components/CommandPalette.vue";
@@ -255,6 +256,7 @@ async function handleChooseAnswer(answer: Answer) {
           @choose-answer="handleChooseAnswer"
         />
       </template>
+      <CongratsScreen v-else-if="schedulerEnabledSig && cardsSig.length > 0" />
       <p v-else-if="cardsSig.length === 0" class="no-deck-message">
         No deck loaded. Click the
         <button class="link-btn" @click="reviewModeSig = 'deck-list'">Review</button> tab to choose
