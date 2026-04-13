@@ -264,6 +264,48 @@ function updateFsrsParam<K extends keyof NonNullable<SchedulerSettings["fsrsPara
       </div>
     </div>
 
+    <div v-if="settings.enabled" class="form-section">
+      <div class="section-title">Schedule</div>
+      <div class="form-group">
+        <label class="form-label">Learn Ahead Limit (minutes)</label>
+        <input
+          type="number"
+          class="form-input"
+          :value="settings.learnAheadMins ?? 20"
+          min="0"
+          max="120"
+          @change="
+            updateSetting(
+              'learnAheadMins',
+              parseInt(($event.target as HTMLInputElement).value, 10),
+            )
+          "
+        />
+        <div class="help-text">
+          When the queue is empty, study cards due within this many minutes (0 = off)
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Day Rollover Hour</label>
+        <input
+          type="number"
+          class="form-input"
+          :value="settings.rolloverHour ?? 4"
+          min="0"
+          max="23"
+          @change="
+            updateSetting(
+              'rolloverHour',
+              parseInt(($event.target as HTMLInputElement).value, 10),
+            )
+          "
+        />
+        <div class="help-text">
+          Hour (0-23) when "today" starts. Set to 4 so late-night reviews count as the same day.
+        </div>
+      </div>
+    </div>
+
     <!-- SM-2 Parameters -->
     <div v-if="settings.enabled && settings.algorithm === 'sm2'" class="form-section">
       <div class="section-title">Learning</div>

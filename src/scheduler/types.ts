@@ -138,6 +138,18 @@ export interface SchedulerSettings {
   showAheadOfSchedule: boolean;
 
   /**
+   * Learn-ahead limit in minutes. Cards due within this window are
+   * shown when the regular queue is empty. Default 20.
+   */
+  learnAheadMins: number;
+
+  /**
+   * Hour of the day (0-23) when "today" rolls over. Default 4 (4 AM).
+   * Useful for night owls so late-night reviews count as the same day.
+   */
+  rolloverHour: number;
+
+  /**
    * SM-2 specific parameters (only used if algorithm is 'sm2')
    */
   sm2Params?: Partial<SM2Params>;
@@ -172,6 +184,8 @@ export const DEFAULT_SCHEDULER_SETTINGS: SchedulerSettings = {
   dailyNewLimit: 20,
   dailyReviewLimit: 200,
   showAheadOfSchedule: false,
+  learnAheadMins: 20,
+  rolloverHour: 4,
 };
 
 /**
