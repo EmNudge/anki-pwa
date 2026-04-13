@@ -1,11 +1,23 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from "vue";
-import { ankiDataSig, mediaFilesSig, activeDeckSourceIdSig, updateNote } from "../stores";
+import {
+  ankiDataSig,
+  mediaFilesSig,
+  activeDeckSourceIdSig,
+  updateNote,
+  bulkAddTag,
+  bulkRemoveTag,
+  renameTag,
+  deleteTag,
+} from "../stores";
 import { getRenderedCardString } from "../utils/render";
 import { sanitizeHtmlForPreview } from "../utils/sanitize";
 import { playAudio } from "../utils/sound";
 import Button from "../design-system/components/primitives/Button.vue";
+import Modal from "../design-system/components/primitives/Modal.vue";
 import NoteEditModal from "./NoteEditModal.vue";
+import TagTree from "./TagTree.vue";
+import { buildTagTree } from "../utils/tagTree";
 import { getFlags } from "../lib/flags";
 
 type ViewMode = "cards" | "notes";
@@ -39,6 +51,148 @@ const allTags = computed(() => {
   }
   return Array.from(tags).sort();
 });
+
+/** Tag note counts for the tree */
+const tagNoteCounts = computed(() => {
+  const data = ankiDataSig.value;
+  const counts = new Map<string, number>();
+  if (!data) return counts;
+
+  // Count unique notes per tag (deduplicate by guid)
+  const seenPerTag = new Map<string, Set<string>>();
+  for (const card of data.cards) {
+    for (const tag of card.tags) {
+      const seen = seenPerTag.get(tag) ?? new Set<string>();
+      seen.add(card.guid);
+      seenPerTag.set(tag, seen);
+    }
+  }
+  for (const [tag, guids] of seenPerTag) {
+    counts.set(tag, guids.size);
+  }
+  return counts;
+});
+
+/** Hierarchical tag tree */
+const tagTree = computed(() => buildTagTree(allTags.value, tagNoteCounts.value));
+
+/** Currently selected tag filter from sidebar */
+const activeTagFilter = ref<string | null>(null);
+
+/** Whether the tag sidebar is visible */
+const tagSidebarOpen = ref(true);
+
+// ── Multi-select ──
+
+const selectedRowKeys = ref(new Set<string>());
+
+function toggleRowSelection(key: string, event: MouseEvent) {
+  const next = new Set(selectedRowKeys.value);
+  if (event.shiftKey && selectedRowKeys.value.size > 0) {
+    // Range select
+    const keys = filteredRows.value.map((r) => r.key);
+    const lastSelected = Array.from(selectedRowKeys.value).pop()!;
+    const startIdx = keys.indexOf(lastSelected);
+    const endIdx = keys.indexOf(key);
+    if (startIdx !== -1 && endIdx !== -1) {
+      const [from, to] = startIdx < endIdx ? [startIdx, endIdx] : [endIdx, startIdx];
+      for (let i = from; i <= to; i++) {
+        next.add(keys[i]!);
+      }
+    }
+  } else if (event.ctrlKey || event.metaKey) {
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+  } else {
+    // Single click without modifier - select this row only (for detail pane)
+    selectedRowKey.value = key;
+    return;
+  }
+  selectedRowKeys.value = next;
+}
+
+function selectAll() {
+  selectedRowKeys.value = new Set(filteredRows.value.map((r) => r.key));
+}
+
+function clearSelection() {
+  selectedRowKeys.value = new Set<string>();
+}
+
+const selectedGuids = computed(() => {
+  const data = ankiDataSig.value;
+  if (!data) return [] as string[];
+  const guids = new Set<string>();
+  for (const row of filteredRows.value) {
+    if (!selectedRowKeys.value.has(row.key)) continue;
+    const card = data.cards[row.index];
+    if (card) guids.add(card.guid);
+  }
+  return Array.from(guids);
+});
+
+// ── Bulk tag add/remove ──
+
+const bulkTagModalOpen = ref(false);
+const bulkTagMode = ref<"add" | "remove">("add");
+const bulkTagInput = ref("");
+
+function openBulkTagModal(mode: "add" | "remove") {
+  bulkTagMode.value = mode;
+  bulkTagInput.value = "";
+  bulkTagModalOpen.value = true;
+}
+
+async function applyBulkTag() {
+  const tag = bulkTagInput.value.trim();
+  if (!tag || selectedGuids.value.length === 0) return;
+
+  if (bulkTagMode.value === "add") {
+    await bulkAddTag(selectedGuids.value, tag);
+  } else {
+    await bulkRemoveTag(selectedGuids.value, tag);
+  }
+  bulkTagModalOpen.value = false;
+  clearSelection();
+}
+
+// ── Tag rename/delete modals ──
+
+const tagRenameModalOpen = ref(false);
+const tagRenameOld = ref("");
+const tagRenameNew = ref("");
+
+function openTagRename(tag: string) {
+  tagRenameOld.value = tag;
+  tagRenameNew.value = tag;
+  tagRenameModalOpen.value = true;
+}
+
+async function applyTagRename() {
+  const oldTag = tagRenameOld.value;
+  const newTag = tagRenameNew.value.trim();
+  if (!newTag || newTag === oldTag) {
+    tagRenameModalOpen.value = false;
+    return;
+  }
+  await renameTag(oldTag, newTag);
+  if (activeTagFilter.value === oldTag) activeTagFilter.value = newTag;
+  tagRenameModalOpen.value = false;
+}
+
+const tagDeleteConfirmOpen = ref(false);
+const tagDeleteTarget = ref("");
+
+function openTagDelete(tag: string) {
+  tagDeleteTarget.value = tag;
+  tagDeleteConfirmOpen.value = true;
+}
+
+async function applyTagDelete() {
+  await deleteTag(tagDeleteTarget.value);
+  if (activeTagFilter.value === tagDeleteTarget.value) activeTagFilter.value = null;
+  tagDeleteConfirmOpen.value = false;
+}
 
 /** All unique deck names */
 const allDecks = computed(() => {
@@ -550,6 +704,14 @@ const filteredRows = computed(() => {
   const tokens = parseSearch(searchQuery.value);
   let result = rows.value;
 
+  // Apply tag sidebar filter
+  const tagFilter = activeTagFilter.value;
+  if (tagFilter) {
+    result = result.filter((row) =>
+      row.tags.some((t) => t === tagFilter || t.startsWith(tagFilter + "::")),
+    );
+  }
+
   if (tokens.length > 0) {
     result = result.filter((row) => tokens.every((token) => matchToken(row, token)));
   }
@@ -706,6 +868,13 @@ async function handleNoteSave(payload: { fields: Record<string, string | null>; 
     <!-- Toolbar -->
     <div class="toolbar">
       <div class="toolbar-left">
+        <button
+          class="toggle-btn"
+          :title="tagSidebarOpen ? 'Hide tag tree' : 'Show tag tree'"
+          @click="tagSidebarOpen = !tagSidebarOpen"
+        >
+          Tags
+        </button>
         <div class="view-toggle">
           <button
             :class="['toggle-btn', { 'toggle-btn--active': viewMode === 'notes' }]"
@@ -754,11 +923,33 @@ async function handleNoteSave(payload: { fields: Record<string, string | null>; 
       </div>
     </div>
 
+    <!-- Bulk operations toolbar -->
+    <div v-if="selectedRowKeys.size > 0" class="bulk-toolbar">
+      <span class="bulk-count">{{ selectedRowKeys.size }} selected</span>
+      <Button variant="secondary" size="sm" @click="selectAll">Select all</Button>
+      <Button variant="secondary" size="sm" @click="openBulkTagModal('add')">Add tag</Button>
+      <Button variant="secondary" size="sm" @click="openBulkTagModal('remove')">
+        Remove tag
+      </Button>
+      <Button variant="ghost" size="sm" @click="clearSelection">Clear</Button>
+    </div>
+
     <div v-if="!ankiDataSig" class="empty-state">
       <p class="empty-text">No deck loaded. Load a deck from the Review tab first.</p>
     </div>
 
     <div v-else class="browser-body">
+      <!-- Tag sidebar -->
+      <div v-if="tagSidebarOpen" class="tag-sidebar">
+        <TagTree
+          :nodes="tagTree"
+          :active-tag="activeTagFilter"
+          @select="activeTagFilter = $event"
+          @rename="openTagRename($event)"
+          @delete="openTagDelete($event)"
+        />
+      </div>
+
       <!-- Table -->
       <div class="table-wrap">
         <table class="browse-table">
@@ -778,8 +969,14 @@ async function handleNoteSave(payload: { fields: Record<string, string | null>; 
             <tr
               v-for="row in filteredRows"
               :key="row.key"
-              :class="['tr', { 'tr--selected': selectedRowKey === row.key }]"
-              @click="selectedRowKey = row.key"
+              :class="[
+                'tr',
+                {
+                  'tr--selected': selectedRowKey === row.key,
+                  'tr--multi-selected': selectedRowKeys.has(row.key),
+                },
+              ]"
+              @click="toggleRowSelection(row.key, $event)"
             >
               <td v-for="col in visibleColumns" :key="col.key" class="td">
                 {{ getCellValue(row, col.key) }}
@@ -823,6 +1020,77 @@ async function handleNoteSave(payload: { fields: Record<string, string | null>; 
       @close="editModalOpen = false"
       @save="handleNoteSave"
     />
+
+    <!-- Bulk tag modal -->
+    <Modal
+      :is-open="bulkTagModalOpen"
+      :title="
+        bulkTagMode === 'add' ? 'Add Tag to Selected Notes' : 'Remove Tag from Selected Notes'
+      "
+      size="sm"
+      @close="bulkTagModalOpen = false"
+    >
+      <div class="modal-field">
+        <label class="modal-label">Tag name</label>
+        <input
+          v-model="bulkTagInput"
+          class="modal-input"
+          type="text"
+          placeholder="e.g. vocab::spanish"
+          @keydown.enter="applyBulkTag"
+        />
+      </div>
+      <template #footer>
+        <Button variant="secondary" size="sm" @click="bulkTagModalOpen = false">Cancel</Button>
+        <Button size="sm" @click="applyBulkTag">
+          {{ bulkTagMode === "add" ? "Add" : "Remove" }}
+        </Button>
+      </template>
+    </Modal>
+
+    <!-- Tag rename modal -->
+    <Modal
+      :is-open="tagRenameModalOpen"
+      title="Rename Tag"
+      size="sm"
+      @close="tagRenameModalOpen = false"
+    >
+      <div class="modal-field">
+        <label class="modal-label">Current tag</label>
+        <input class="modal-input" type="text" :value="tagRenameOld" disabled />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">New tag name</label>
+        <input
+          v-model="tagRenameNew"
+          class="modal-input"
+          type="text"
+          @keydown.enter="applyTagRename"
+        />
+      </div>
+      <template #footer>
+        <Button variant="secondary" size="sm" @click="tagRenameModalOpen = false"> Cancel </Button>
+        <Button size="sm" @click="applyTagRename">Rename</Button>
+      </template>
+    </Modal>
+
+    <!-- Tag delete confirmation -->
+    <Modal
+      :is-open="tagDeleteConfirmOpen"
+      title="Delete Tag"
+      size="sm"
+      @close="tagDeleteConfirmOpen = false"
+    >
+      <p class="modal-text">
+        Remove the tag "{{ tagDeleteTarget }}" and all its child tags from every note?
+      </p>
+      <template #footer>
+        <Button variant="secondary" size="sm" @click="tagDeleteConfirmOpen = false">
+          Cancel
+        </Button>
+        <Button variant="danger" size="sm" @click="applyTagDelete">Delete</Button>
+      </template>
+    </Modal>
   </div>
 </template>
 
@@ -1189,5 +1457,85 @@ async function handleNoteSave(payload: { fields: Record<string, string | null>; 
 .detail-field-value :deep(.sound-btn:hover) {
   color: var(--color-text-primary);
   background: var(--color-surface-hover);
+}
+
+/* Tag sidebar */
+.tag-sidebar {
+  width: 180px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--color-border);
+  overflow-y: auto;
+  background: var(--color-surface);
+}
+
+@media (max-width: 899px) {
+  .tag-sidebar {
+    display: none;
+  }
+}
+
+/* Multi-select highlight */
+.tr--multi-selected {
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+}
+
+.tr--multi-selected:hover {
+  background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+}
+
+/* Bulk operations toolbar */
+.bulk-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  padding: var(--spacing-1-5) var(--spacing-3);
+  border-bottom: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-primary) 6%, var(--color-surface));
+  flex-shrink: 0;
+}
+
+.bulk-count {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+}
+
+/* Modal field styles */
+.modal-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-1);
+  margin-bottom: var(--spacing-3);
+}
+
+.modal-label {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+}
+
+.modal-input {
+  padding: var(--spacing-1-5) var(--spacing-2);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+  background: var(--color-surface-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  outline: none;
+}
+
+.modal-input:focus {
+  border-color: var(--color-border-focus);
+  box-shadow: var(--shadow-focus-ring);
+}
+
+.modal-input:disabled {
+  opacity: 0.6;
+}
+
+.modal-text {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+  margin: 0;
 }
 </style>
