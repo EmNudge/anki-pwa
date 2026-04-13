@@ -60,7 +60,7 @@ const visibleControls = computed(() => getReviewControls(props.activeSide));
   width: 500px;
   max-width: 100%;
 }
-@media (max-width: 1200px) {
+@media (min-width: 1200px) {
   .reveal-button {
     width: 800px;
   }
@@ -84,7 +84,7 @@ const visibleControls = computed(() => getReviewControls(props.activeSide));
 .button-set .time {
   opacity: 0.5;
 }
-@media (max-width: 1200px) {
+@media (min-width: 1200px) {
   .button-set {
     width: 800px;
   }
