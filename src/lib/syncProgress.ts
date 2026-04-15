@@ -44,7 +44,9 @@ const STAGE_ORDER: readonly SyncStage[] = [
   "verifying",
   "finalizing",
   "applying-config",
+  "downloading-collection",
   "downloading-media",
+  "uploading-collection",
   "uploading-media",
   "done",
 ];

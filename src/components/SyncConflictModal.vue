@@ -124,7 +124,7 @@ const emit = defineEmits<{
 }
 
 .conflict-option--local:hover {
-  border-color: #f59e0b;
+  border-color: var(--color-warning-500);
 }
 
 .conflict-option__icon {

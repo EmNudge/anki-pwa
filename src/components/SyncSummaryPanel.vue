@@ -119,7 +119,7 @@ const isEmpty = computed(() => entries.value.length === 0);
 }
 
 .sync-summary__arrow--out {
-  color: #f59e0b;
+  color: var(--color-warning-500);
 }
 
 .sync-summary__label {

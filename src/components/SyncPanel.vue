@@ -723,8 +723,8 @@ function formatLastSync(timestamp: number | null): string {
 
 .sync-btn--push {
   color: white;
-  background: #f59e0b;
-  border-color: #f59e0b;
+  background: var(--color-warning-500);
+  border-color: var(--color-warning-500);
 }
 
 .sync-btn--push:hover:not(:disabled) {
@@ -744,8 +744,8 @@ function formatLastSync(timestamp: number | null): string {
 .sync-confirm {
   margin-top: var(--spacing-3);
   padding: var(--spacing-3);
-  background: color-mix(in srgb, #f59e0b 8%, var(--color-surface));
-  border: 1px solid color-mix(in srgb, #f59e0b 30%, var(--color-border));
+  background: color-mix(in srgb, var(--color-warning-500) 8%, var(--color-surface));
+  border: 1px solid color-mix(in srgb, var(--color-warning-500) 30%, var(--color-border));
   border-radius: var(--radius-md);
 }
 
