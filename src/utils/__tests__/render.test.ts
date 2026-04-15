@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { getRenderedCardString } from "../render";
+import { getRenderedCardString, hasTypeAnswerField, extractExpectedAnswer } from "../render";
 
 describe("getRenderedCardString", () => {
   it("should correctly render Template 1 from German deck", () => {
@@ -500,6 +500,92 @@ describe("getRenderedCardString", () => {
       });
 
       expect(htmlEmpty).toBe("No extra");
+    });
+  });
+
+  describe("type:FieldName filter", () => {
+    it("should render input field on question side", () => {
+      const html = getRenderedCardString({
+        templateString: "{{type:Back}}",
+        variables: { Back: "to have" },
+        mediaFiles: new Map(),
+      });
+
+      expect(html).toContain('<input type="text"');
+      expect(html).toContain('id="typeans"');
+      expect(html).toContain('class="typeans-input"');
+      expect(html).toContain('placeholder="type answer"');
+    });
+
+    it("should render expected answer with data attribute on answer side", () => {
+      const html = getRenderedCardString({
+        templateString: "{{type:Back}}",
+        variables: { Back: "to have" },
+        mediaFiles: new Map(),
+        isAnswer: true,
+      });
+
+      expect(html).toContain('id="typeans"');
+      expect(html).toContain('data-expected="to have"');
+      expect(html).toContain("to have");
+    });
+
+    it("should strip HTML from expected answer", () => {
+      const html = getRenderedCardString({
+        templateString: "{{type:Back}}",
+        variables: { Back: "<b>answer</b> here" },
+        mediaFiles: new Map(),
+        isAnswer: true,
+      });
+
+      expect(html).toContain('data-expected="answer here"');
+      expect(html).not.toContain("<b>");
+    });
+
+    it("should detect type answer field in HTML", () => {
+      const frontHtml = getRenderedCardString({
+        templateString: "What is the answer? {{type:Back}}",
+        variables: { Back: "test" },
+        mediaFiles: new Map(),
+      });
+
+      expect(hasTypeAnswerField(frontHtml)).toBe(true);
+    });
+
+    it("should not detect type answer field in normal HTML", () => {
+      const frontHtml = getRenderedCardString({
+        templateString: "{{Front}}",
+        variables: { Front: "test" },
+        mediaFiles: new Map(),
+      });
+
+      expect(hasTypeAnswerField(frontHtml)).toBe(false);
+    });
+
+    it("should extract expected answer from back HTML", () => {
+      const backHtml = getRenderedCardString({
+        templateString: "{{type:Back}}",
+        variables: { Back: "Paris" },
+        mediaFiles: new Map(),
+        isAnswer: true,
+      });
+
+      expect(extractExpectedAnswer(backHtml)).toBe("Paris");
+    });
+
+    it("should strip type inputs from FrontSide on answer side", () => {
+      const backHtml = getRenderedCardString({
+        templateString: "{{FrontSide}}<hr>{{type:Back}}",
+        variables: { Back: "answer" },
+        mediaFiles: new Map(),
+        isAnswer: true,
+        frontTemplate: "Question {{type:Back}}",
+      });
+
+      // FrontSide should not contain the input from the front
+      expect(backHtml).not.toContain('<input type="text"');
+      // But should still contain the typeans span from the back template
+      expect(backHtml).toContain('id="typeans"');
     });
   });
 

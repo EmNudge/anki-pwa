@@ -12,10 +12,77 @@ const props = defineProps<{
 const emit = defineEmits<{
   audioButtonClick: [src: string];
   backgroundDetected: [color: string | null];
+  typeAnswerInput: [value: string];
+  typeAnswerSubmit: [];
 }>();
 
 const iframeRef = ref<HTMLIFrameElement | null>(null);
 let resizeObserver: ResizeObserver | null = null;
+
+const TYPEANS_STYLES = `
+  .typeans-input {
+    display: block;
+    width: 100%;
+    max-width: 400px;
+    margin: 0.75rem auto;
+    padding: 0.5rem 0.75rem;
+    font-size: 1rem;
+    font-family: inherit;
+    border: 2px solid #888;
+    border-radius: 6px;
+    text-align: center;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .typeans-input:focus {
+    border-color: #4a90d9;
+  }
+  :where(html[data-theme="dark"]) .typeans-input {
+    background: #27272a;
+    color: #f4f4f5;
+    border-color: #52525b;
+  }
+  :where(html[data-theme="dark"]) .typeans-input:focus {
+    border-color: #60a5fa;
+  }
+  #typeans {
+    display: block;
+    text-align: center;
+    margin: 0.5rem auto;
+    font-family: monospace;
+    font-size: 1rem;
+  }
+  .typeans-correct {
+    color: #0a0;
+  }
+  :where(html[data-theme="dark"]) .typeans-correct {
+    color: #4ade80;
+  }
+  .typeans-row {
+    margin: 0.25rem 0;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+  .typeGood {
+    color: #0a0;
+  }
+  :where(html[data-theme="dark"]) .typeGood {
+    color: #4ade80;
+  }
+  .typeBad {
+    color: #f00;
+  }
+  :where(html[data-theme="dark"]) .typeBad {
+    color: #f87171;
+  }
+  .typeMissed {
+    color: #888;
+    text-decoration: line-through;
+  }
+  :where(html[data-theme="dark"]) .typeMissed {
+    color: #a1a1aa;
+  }
+`;
 
 const BASE_STYLES = `
   *, *::before, *::after { box-sizing: border-box; }
@@ -44,6 +111,7 @@ const BASE_STYLES = `
   }
   .audio-container button svg { pointer-events: none; }
   audio { display: none; }
+  ${TYPEANS_STYLES}
 `;
 
 // srcdoc excludes theme so theme changes don't cause full iframe reloads
@@ -91,6 +159,35 @@ function setupIframe() {
       if (src) {
         emit("audioButtonClick", src);
       }
+    });
+  }
+
+  // Wire up type-answer input fields
+  const typeans = doc.querySelector<HTMLInputElement>('input.typeans-input');
+  if (typeans) {
+    // Focus the input automatically
+    setTimeout(() => typeans.focus(), 50);
+
+    // Emit input value as user types
+    typeans.addEventListener("input", () => {
+      emit("typeAnswerInput", typeans.value);
+    });
+
+    // Enter key submits/reveals
+    typeans.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        emit("typeAnswerSubmit");
+      }
+    });
+
+    // Prevent keyboard shortcuts from leaking through the iframe
+    typeans.addEventListener("keydown", (e) => {
+      // Allow Enter (handled above), Tab, and modifier combos to pass through
+      if (e.key === "Enter" || e.key === "Tab") return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      // Stop all other keys from bubbling to parent document
+      e.stopPropagation();
     });
   }
 
