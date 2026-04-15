@@ -9,6 +9,7 @@ import {
   bulkRemoveTag,
   renameTag,
   deleteTag,
+  repositionNewCards,
 } from "../stores";
 import { getRenderedCardString } from "../utils/render";
 import { sanitizeHtmlForPreview } from "../utils/sanitize";
@@ -204,6 +205,68 @@ async function applyBulkTag() {
   }
   bulkTagModalOpen.value = false;
   clearSelection();
+}
+
+// ── Reposition new cards ──
+
+const repositionModalOpen = ref(false);
+const repositionStart = ref(0);
+const repositionStep = ref(1);
+const repositionRandomize = ref(false);
+const repositionResultMsg = ref("");
+
+/** Count how many selected cards are new (queue=0) for the toolbar label */
+const selectedNewCardCount = computed(() => {
+  const data = ankiDataSig.value;
+  if (!data || viewMode.value !== "cards") return 0;
+  let count = 0;
+  for (const row of filteredRows.value) {
+    if (!selectedRowKeys.value.has(row.key)) continue;
+    if (row.kind !== "card") continue;
+    if (row.queueName === "new") count++;
+  }
+  return count;
+});
+
+function openRepositionModal() {
+  repositionStart.value = 0;
+  repositionStep.value = 1;
+  repositionRandomize.value = false;
+  repositionResultMsg.value = "";
+  repositionModalOpen.value = true;
+}
+
+async function applyReposition() {
+  const data = ankiDataSig.value;
+  if (!data) return;
+
+  // Collect card indices from selected rows (cards mode only)
+  const indices: number[] = [];
+  for (const row of filteredRows.value) {
+    if (!selectedRowKeys.value.has(row.key)) continue;
+    if (row.kind === "card") {
+      indices.push(row.index);
+    }
+  }
+
+  if (indices.length === 0) return;
+
+  const count = await repositionNewCards(
+    indices,
+    repositionStart.value,
+    repositionStep.value,
+    repositionRandomize.value,
+  );
+
+  if (count === 0) {
+    repositionResultMsg.value = "No new cards found in selection. Only new (unseen) cards can be repositioned.";
+  } else {
+    repositionResultMsg.value = `Repositioned ${count} new card${count === 1 ? "" : "s"}.`;
+    setTimeout(() => {
+      repositionModalOpen.value = false;
+      clearSelection();
+    }, 1200);
+  }
 }
 
 // ── Tag rename/delete modals ──
@@ -1236,6 +1299,14 @@ async function handleNoteSave(payload: { fields: Record<string, string | null>; 
       <Button variant="secondary" size="sm" @click="openBulkTagModal('remove')">
         Remove tag
       </Button>
+      <Button
+        v-if="viewMode === 'cards' && selectedNewCardCount > 0"
+        variant="secondary"
+        size="sm"
+        @click="openRepositionModal"
+      >
+        Reposition ({{ selectedNewCardCount }} new)
+      </Button>
       <Button variant="secondary" size="sm" @click="bulkSuspend" :disabled="bulkOperationInProgress"
         >Suspend</Button
       >
@@ -1445,6 +1516,52 @@ async function handleNoteSave(payload: { fields: Record<string, string | null>; 
           Cancel
         </Button>
         <Button variant="danger" size="sm" @click="applyTagDelete">Delete</Button>
+      </template>
+    </Modal>
+
+    <!-- Reposition new cards modal -->
+    <Modal
+      :is-open="repositionModalOpen"
+      title="Reposition New Cards"
+      size="sm"
+      @close="repositionModalOpen = false"
+    >
+      <p class="modal-text">
+        Change the due position of new (unseen) cards. Only cards in the new queue will be affected.
+        Learning and review cards are scheduled by the algorithm and cannot be repositioned.
+      </p>
+      <div class="modal-field">
+        <label class="modal-label">Starting position</label>
+        <input
+          v-model.number="repositionStart"
+          class="modal-input"
+          type="number"
+          min="0"
+          placeholder="0"
+          @keydown.enter="applyReposition"
+        />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Step (between cards)</label>
+        <input
+          v-model.number="repositionStep"
+          class="modal-input"
+          type="number"
+          min="1"
+          placeholder="1"
+          @keydown.enter="applyReposition"
+        />
+      </div>
+      <div class="modal-field">
+        <label class="modal-checkbox-label">
+          <input v-model="repositionRandomize" type="checkbox" />
+          Randomize order
+        </label>
+      </div>
+      <p v-if="repositionResultMsg" class="modal-result">{{ repositionResultMsg }}</p>
+      <template #footer>
+        <Button variant="secondary" size="sm" @click="repositionModalOpen = false">Cancel</Button>
+        <Button size="sm" @click="applyReposition">Reposition</Button>
       </template>
     </Modal>
   </div>
@@ -2011,5 +2128,21 @@ async function handleNoteSave(payload: { fields: Record<string, string | null>; 
   font-size: var(--font-size-sm);
   color: var(--color-text-primary);
   margin: 0;
+}
+
+.modal-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+
+.modal-result {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  margin: var(--spacing-2) 0 0;
+  font-style: italic;
 }
 </style>
