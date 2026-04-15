@@ -20,6 +20,7 @@ import {
   reviewQueueSig,
   schedulerEnabledSig,
   schedulerSettingsModalOpenSig,
+  schedulerSettingsSig,
   flagSettingsModalOpenSig,
   selectedCardSig,
   selectedDeckIdSig,
@@ -277,6 +278,38 @@ async function handleChooseAnswer(answer: Answer) {
   updateActiveSide("front");
   reviewStartTime.value = Date.now();
 }
+
+// --- Auto-advance timer ---
+const autoAdvanceTimerRef = ref<ReturnType<typeof setTimeout> | null>(null);
+
+function clearAutoAdvanceTimer() {
+  if (autoAdvanceTimerRef.value !== null) {
+    clearTimeout(autoAdvanceTimerRef.value);
+    autoAdvanceTimerRef.value = null;
+  }
+}
+
+watch(
+  [activeSide, () => schedulerSettingsSig.value.autoAdvance, () => reviewModeSig.value],
+  ([side, autoAdvance, mode]) => {
+    clearAutoAdvanceTimer();
+    if (mode !== "studying" || !autoAdvance) return;
+
+    if (side === "front" && autoAdvance.autoFlipDelaySecs > 0) {
+      autoAdvanceTimerRef.value = setTimeout(
+        () => handleReveal(),
+        autoAdvance.autoFlipDelaySecs * 1000,
+      );
+    } else if (side === "back" && autoAdvance.autoAdvanceDelaySecs > 0) {
+      autoAdvanceTimerRef.value = setTimeout(
+        () => handleChooseAnswer(autoAdvance.autoAdvanceAnswer),
+        autoAdvance.autoAdvanceDelaySecs * 1000,
+      );
+    }
+  },
+);
+
+onUnmounted(clearAutoAdvanceTimer);
 </script>
 
 <template>
@@ -336,18 +369,20 @@ async function handleChooseAnswer(answer: Answer) {
     @close="schedulerSettingsModalOpenSig = false"
   />
 
-  <FlagSettings
-    :is-open="flagSettingsModalOpenSig"
-    @close="flagSettingsModalOpenSig = false"
-  />
+  <FlagSettings :is-open="flagSettingsModalOpenSig" @close="flagSettingsModalOpenSig = false" />
 
-  <Modal :is-open="deckInfoModalOpen" title="Deck Info" size="sm" @close="deckInfoModalOpen = false">
+  <Modal
+    :is-open="deckInfoModalOpen"
+    title="Deck Info"
+    size="sm"
+    @close="deckInfoModalOpen = false"
+  >
     <div v-if="selectedSubdeck" class="deck-info-content">
       <dl class="deck-info-dl">
         <dt>Name</dt>
         <dd>{{ selectedSubdeck.fullName }}</dd>
         <dt>Description</dt>
-        <dd>{{ selectedSubdeck.description || 'No description' }}</dd>
+        <dd>{{ selectedSubdeck.description || "No description" }}</dd>
         <dt>Cards</dt>
         <dd>{{ selectedSubdeck.cardCount }}</dd>
         <dt>New</dt>
@@ -370,52 +405,78 @@ async function handleChooseAnswer(answer: Answer) {
     @save="handleNoteSave"
   />
 
-  <Modal :is-open="shortcutsModalOpen" title="Keyboard Shortcuts" size="lg" @close="shortcutsModalOpen = false">
+  <Modal
+    :is-open="shortcutsModalOpen"
+    title="Keyboard Shortcuts"
+    size="lg"
+    @close="shortcutsModalOpen = false"
+  >
     <div class="shortcuts-grid">
       <div class="shortcuts-section">
         <h3 class="shortcuts-heading">Review</h3>
         <dl class="shortcuts-list">
-          <dt><kbd>Space</kbd> / <kbd>Enter</kbd></dt><dd>Reveal answer</dd>
-          <dt><kbd>1</kbd> / <kbd>A</kbd></dt><dd>Again</dd>
-          <dt><kbd>2</kbd> / <kbd>H</kbd></dt><dd>Hard</dd>
-          <dt><kbd>3</kbd> / <kbd>G</kbd> / <kbd>Space</kbd></dt><dd>Good</dd>
-          <dt><kbd>4</kbd> / <kbd>E</kbd></dt><dd>Easy</dd>
+          <dt><kbd>Space</kbd> / <kbd>Enter</kbd></dt>
+          <dd>Reveal answer</dd>
+          <dt><kbd>1</kbd> / <kbd>A</kbd></dt>
+          <dd>Again</dd>
+          <dt><kbd>2</kbd> / <kbd>H</kbd></dt>
+          <dd>Hard</dd>
+          <dt><kbd>3</kbd> / <kbd>G</kbd> / <kbd>Space</kbd></dt>
+          <dd>Good</dd>
+          <dt><kbd>4</kbd> / <kbd>E</kbd></dt>
+          <dd>Easy</dd>
         </dl>
       </div>
       <div class="shortcuts-section">
         <h3 class="shortcuts-heading">Card Actions</h3>
         <dl class="shortcuts-list">
-          <dt><kbd>E</kbd></dt><dd>Edit current card</dd>
-          <dt><kbd>*</kbd></dt><dd>Mark / unmark note</dd>
-          <dt><kbd>-</kbd></dt><dd>Bury card</dd>
-          <dt><kbd>=</kbd></dt><dd>Bury note</dd>
-          <dt><kbd>@</kbd></dt><dd>Suspend card</dd>
-          <dt><kbd>I</kbd></dt><dd>Card info</dd>
-          <dt><kbd>Ctrl</kbd>+<kbd>Del</kbd></dt><dd>Delete note</dd>
+          <dt><kbd>E</kbd></dt>
+          <dd>Edit current card</dd>
+          <dt><kbd>*</kbd></dt>
+          <dd>Mark / unmark note</dd>
+          <dt><kbd>-</kbd></dt>
+          <dd>Bury card</dd>
+          <dt><kbd>=</kbd></dt>
+          <dd>Bury note</dd>
+          <dt><kbd>@</kbd></dt>
+          <dd>Suspend card</dd>
+          <dt><kbd>I</kbd></dt>
+          <dd>Card info</dd>
+          <dt><kbd>Ctrl</kbd>+<kbd>Del</kbd></dt>
+          <dd>Delete note</dd>
         </dl>
       </div>
       <div class="shortcuts-section">
         <h3 class="shortcuts-heading">Flags</h3>
         <dl class="shortcuts-list">
-          <dt><kbd>Ctrl</kbd>+<kbd>1</kbd>–<kbd>7</kbd></dt><dd>Set flag 1–7</dd>
-          <dt><kbd>Ctrl</kbd>+<kbd>0</kbd></dt><dd>Remove flag</dd>
+          <dt><kbd>Ctrl</kbd>+<kbd>1</kbd>–<kbd>7</kbd></dt>
+          <dd>Set flag 1–7</dd>
+          <dt><kbd>Ctrl</kbd>+<kbd>0</kbd></dt>
+          <dd>Remove flag</dd>
         </dl>
       </div>
       <div class="shortcuts-section">
         <h3 class="shortcuts-heading">Audio</h3>
         <dl class="shortcuts-list">
-          <dt><kbd>R</kbd></dt><dd>Replay audio</dd>
-          <dt><kbd>5</kbd></dt><dd>Pause / resume audio</dd>
+          <dt><kbd>R</kbd></dt>
+          <dd>Replay audio</dd>
+          <dt><kbd>5</kbd></dt>
+          <dd>Pause / resume audio</dd>
         </dl>
       </div>
       <div class="shortcuts-section">
         <h3 class="shortcuts-heading">General</h3>
         <dl class="shortcuts-list">
-          <dt><kbd>Ctrl</kbd>+<kbd>K</kbd></dt><dd>Command palette</dd>
-          <dt><kbd>Ctrl</kbd>+<kbd>T</kbd></dt><dd>Toggle theme</dd>
-          <dt><kbd>Ctrl</kbd>+<kbd>E</kbd></dt><dd>Toggle sound effects</dd>
-          <dt><kbd>Ctrl</kbd>+<kbd>,</kbd></dt><dd>Scheduler settings</dd>
-          <dt><kbd>?</kbd></dt><dd>Show this help</dd>
+          <dt><kbd>Ctrl</kbd>+<kbd>K</kbd></dt>
+          <dd>Command palette</dd>
+          <dt><kbd>Ctrl</kbd>+<kbd>T</kbd></dt>
+          <dd>Toggle theme</dd>
+          <dt><kbd>Ctrl</kbd>+<kbd>E</kbd></dt>
+          <dd>Toggle sound effects</dd>
+          <dt><kbd>Ctrl</kbd>+<kbd>,</kbd></dt>
+          <dd>Scheduler settings</dd>
+          <dt><kbd>?</kbd></dt>
+          <dd>Show this help</dd>
         </dl>
       </div>
     </div>

@@ -1,9 +1,32 @@
-import type { CardReviewState, Answer, SchedulerSettings, DailyStats } from "./types";
+import type { CardReviewState, Answer, SchedulerSettings, DailyStats, DayOfWeek } from "./types";
 import { reviewDB } from "./db";
 import type { SchedulingAlgorithm } from "./algorithm";
 import { FSRSAlgorithm } from "./fsrs-algorithm";
 import { AnkiSM2Algorithm } from "./anki-sm2-algorithm";
 import { QUEUE_SUSPENDED, QUEUE_SCHED_BURIED, QUEUE_USER_BURIED } from "../lib/syncWrite";
+
+/**
+ * Apply fuzz to a due date to spread reviews across days.
+ * Shifts the due date by a random offset within +/- fuzzFactor * interval.
+ */
+function applyLoadBalancerFuzz(dueDate: Date, intervalDays: number, fuzzFactor: number): Date {
+  if (intervalDays < 3 || fuzzFactor <= 0) return dueDate;
+  const fuzzDays = Math.round(intervalDays * fuzzFactor);
+  if (fuzzDays === 0) return dueDate;
+  const offset = Math.floor(Math.random() * (fuzzDays * 2 + 1)) - fuzzDays;
+  const fuzzed = new Date(dueDate.getTime() + offset * 24 * 60 * 60 * 1000);
+  return fuzzed;
+}
+
+/**
+ * Get the easy-days multiplier for a given date.
+ * Returns 1.0 if no easy days config is set.
+ */
+function getEasyDayMultiplier(date: Date, easyDays: Record<DayOfWeek, number> | undefined): number {
+  if (!easyDays) return 1;
+  const day = date.getDay() as DayOfWeek;
+  return easyDays[day] ?? 1;
+}
 
 /**
  * Represents a card ready for review, combining deck data with review state
@@ -201,8 +224,13 @@ export class ReviewQueue {
       }
     }
 
-    const newLeft = Math.max(0, this.settings.dailyNewLimit - this.todayStats.newCount);
-    const reviewLeft = Math.max(0, this.settings.dailyReviewLimit - this.todayStats.reviewCount);
+    // Apply easy-days multiplier to daily limits
+    const easyMultiplier = getEasyDayMultiplier(now, this.settings.easyDays);
+    const adjustedNewLimit = Math.round(this.settings.dailyNewLimit * easyMultiplier);
+    const adjustedReviewLimit = Math.round(this.settings.dailyReviewLimit * easyMultiplier);
+
+    const newLeft = Math.max(0, adjustedNewLimit - this.todayStats.newCount);
+    const reviewLeft = Math.max(0, adjustedReviewLimit - this.todayStats.reviewCount);
 
     const selectedNew = newCards.slice(0, newLeft);
     const selectedReviews = dueReviews.slice(0, reviewLeft);
@@ -245,6 +273,21 @@ export class ReviewQueue {
     try {
       // Review the card using the selected algorithm
       const result = this.algorithm.reviewCard(reviewCard.reviewState.cardState, answer);
+
+      // Apply load balancer fuzz to spread due dates when enabled
+      const lb = this.settings.loadBalancer;
+      if (lb?.enabled && lb.fuzzFactor > 0) {
+        const dueDate = this.algorithm.getDueDate(result.cardState);
+        const intervalMs = dueDate.getTime() - Date.now();
+        const intervalDays = intervalMs / (24 * 60 * 60 * 1000);
+        if (intervalDays >= 3) {
+          const fuzzed = applyLoadBalancerFuzz(dueDate, intervalDays, lb.fuzzFactor);
+          // Patch the due date in the card state — both SM-2 and FSRS store `due`
+          if ("due" in result.cardState) {
+            (result.cardState as { due: number }).due = fuzzed.getTime();
+          }
+        }
+      }
 
       // Update review state
       const updatedState: CardReviewState = {

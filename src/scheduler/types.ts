@@ -109,6 +109,53 @@ export const DEFAULT_SM2_PARAMS: SM2Params = {
 };
 
 /**
+ * Day-of-week index: 0 = Sunday, 6 = Saturday (matches Date.getDay())
+ */
+export type DayOfWeek = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+
+/**
+ * Auto-advance configuration for passive review
+ */
+export interface AutoAdvanceSettings {
+  /** Seconds to wait before auto-flipping the card (0 = disabled) */
+  autoFlipDelaySecs: number;
+  /** Seconds to wait after flip before advancing to next card (0 = disabled) */
+  autoAdvanceDelaySecs: number;
+  /** Answer to auto-submit when auto-advancing (default: "good") */
+  autoAdvanceAnswer: Answer;
+}
+
+/**
+ * Easy days configuration — per-day-of-week review multiplier
+ * 1.0 = normal, 0.5 = half reviews, 0 = no reviews
+ */
+export type EasyDaysConfig = Record<DayOfWeek, number>;
+
+/**
+ * Load balancer settings for spreading reviews across days
+ */
+export interface LoadBalancerSettings {
+  /** Whether to enable load balancing (default: false) */
+  enabled: boolean;
+  /** Fuzz range as a fraction of the interval (0.05 = +/-5%). Default 0.05. */
+  fuzzFactor: number;
+}
+
+/**
+ * Named option preset that can be shared across decks
+ */
+export interface OptionPreset {
+  /** Unique preset ID */
+  id: string;
+  /** User-facing name */
+  name: string;
+  /** The scheduler settings for this preset */
+  settings: SchedulerSettings;
+  /** Timestamp of last modification */
+  modifiedAt: number;
+}
+
+/**
  * Settings for the scheduler
  */
 export interface SchedulerSettings {
@@ -173,7 +220,48 @@ export interface SchedulerSettings {
      */
     maximumInterval?: number;
   };
+
+  /**
+   * Auto-advance settings for passive review
+   */
+  autoAdvance?: AutoAdvanceSettings;
+
+  /**
+   * Easy days — per-day-of-week review multiplier (0 = skip, 1 = normal)
+   */
+  easyDays?: EasyDaysConfig;
+
+  /**
+   * Load balancer — spread reviews across days to avoid spikes
+   */
+  loadBalancer?: LoadBalancerSettings;
+
+  /**
+   * ID of the option preset this deck uses (undefined = deck-local settings)
+   */
+  presetId?: string;
 }
+
+export const DEFAULT_AUTO_ADVANCE: AutoAdvanceSettings = {
+  autoFlipDelaySecs: 0,
+  autoAdvanceDelaySecs: 0,
+  autoAdvanceAnswer: "good",
+};
+
+export const DEFAULT_EASY_DAYS: EasyDaysConfig = {
+  0: 1,
+  1: 1,
+  2: 1,
+  3: 1,
+  4: 1,
+  5: 1,
+  6: 1,
+};
+
+export const DEFAULT_LOAD_BALANCER: LoadBalancerSettings = {
+  enabled: false,
+  fuzzFactor: 0.05,
+};
 
 /**
  * Default scheduler settings

@@ -5,7 +5,11 @@ import { createDatabase } from "./utils/sql";
 
 import { stringHash } from "./utils/constants";
 import { ReviewQueue, type ReviewCard } from "./scheduler/queue";
-import { DEFAULT_SCHEDULER_SETTINGS, type SchedulerSettings } from "./scheduler/types";
+import {
+  DEFAULT_SCHEDULER_SETTINGS,
+  type OptionPreset,
+  type SchedulerSettings,
+} from "./scheduler/types";
 import { reviewDB } from "./scheduler/db";
 import type { DeckInfo, DeckTreeNode } from "./types";
 import { sampleDeckMap, sampleDecks, mergedSampleDeckData } from "./sampleDecks";
@@ -1260,6 +1264,112 @@ export async function updateNote(
     db.close();
   }
 }
+
+// --- Option Presets ---
+
+export const presetsSig = ref<OptionPreset[]>([]);
+
+/** Load all presets from the database. */
+export async function loadPresets(): Promise<void> {
+  presetsSig.value = await reviewDB.getAllPresets();
+}
+
+/** Create a new preset from current settings. */
+export async function createPreset(name: string, settings: SchedulerSettings): Promise<string> {
+  const id = `preset-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const preset: OptionPreset = {
+    id,
+    name,
+    settings: JSON.parse(JSON.stringify(settings)),
+    modifiedAt: Date.now(),
+  };
+  await reviewDB.savePreset(preset);
+  await loadPresets();
+  return id;
+}
+
+/** Clone an existing preset with a new name. */
+export async function clonePreset(sourceId: string, newName: string): Promise<string | null> {
+  const source = await reviewDB.getPreset(sourceId);
+  if (!source) return null;
+  return createPreset(newName, source.settings);
+}
+
+/** Rename a preset. */
+export async function renamePreset(presetId: string, newName: string): Promise<void> {
+  const preset = await reviewDB.getPreset(presetId);
+  if (!preset) return;
+  await reviewDB.savePreset({ ...preset, name: newName, modifiedAt: Date.now() });
+  await loadPresets();
+}
+
+/** Delete a preset. */
+export async function deletePreset(presetId: string): Promise<void> {
+  await reviewDB.deletePreset(presetId);
+  await loadPresets();
+}
+
+/** Apply a preset to the current deck settings. */
+export async function applyPresetToDeck(presetId: string): Promise<void> {
+  const preset = await reviewDB.getPreset(presetId);
+  if (!preset) return;
+
+  const deckId = settingsTargetDeckIdSig.value ?? getActiveDeckId();
+  const settingsWithPresetId: SchedulerSettings = {
+    ...JSON.parse(JSON.stringify(preset.settings)),
+    presetId,
+  };
+
+  await reviewDB.saveSettings(deckId, settingsWithPresetId);
+  schedulerSettingsSig.value = settingsWithPresetId;
+
+  if (deckId === getActiveDeckId()) {
+    await initializeReviewQueue();
+  }
+}
+
+/** Export a preset as a JSON string for sharing. */
+export function exportPresetJson(preset: OptionPreset): string {
+  return JSON.stringify(
+    { name: preset.name, settings: preset.settings, exportedAt: Date.now() },
+    null,
+    2,
+  );
+}
+
+/** Import a preset from a JSON string. Returns the new preset ID or null on failure. */
+export async function importPresetJson(json: string): Promise<string | null> {
+  try {
+    const parsed = JSON.parse(json) as { name?: string; settings?: Record<string, unknown> };
+    if (!parsed.name || typeof parsed.name !== "string") return null;
+    if (!parsed.settings || typeof parsed.settings !== "object") return null;
+
+    // Validate required SchedulerSettings fields
+    const s = parsed.settings;
+    if (typeof s.enabled !== "boolean") return null;
+    if (typeof s.algorithm !== "string") return null;
+    if (typeof s.dailyNewLimit !== "number") return null;
+    if (typeof s.dailyReviewLimit !== "number") return null;
+
+    // Pick only known keys to prevent injection of arbitrary properties
+    const KNOWN_KEYS = [
+      "enabled", "algorithm", "dailyNewLimit", "dailyReviewLimit",
+      "showAheadOfSchedule", "learnAheadMins", "rolloverHour",
+      "sm2Params", "fsrsParams", "autoAdvance", "easyDays", "loadBalancer", "presetId",
+    ];
+    const sanitized: Record<string, unknown> = {};
+    for (const key of KNOWN_KEYS) {
+      if (key in s) sanitized[key] = s[key];
+    }
+
+    return createPreset(parsed.name, sanitized as unknown as SchedulerSettings);
+  } catch {
+    return null;
+  }
+}
+
+// Load presets on startup
+loadPresets();
 
 /**
  * Bulk add a tag to multiple notes (by guid).
