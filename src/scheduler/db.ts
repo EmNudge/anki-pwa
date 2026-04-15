@@ -1,9 +1,15 @@
-import type { CardReviewState, DailyStats, SchedulerSettings, StoredReviewLog } from "./types";
+import type {
+  CardReviewState,
+  DailyStats,
+  OptionPreset,
+  SchedulerSettings,
+  StoredReviewLog,
+} from "./types";
 import type { CardState } from "./algorithm";
 import { DEFAULT_SCHEDULER_SETTINGS } from "./types";
 
 const DB_NAME = "anki-review-db";
-const DB_VERSION = 4; // 4: added deletedNotes and deletedDecks stores for sync graves
+const DB_VERSION = 5; // 5: added presets store
 
 /**
  * IndexedDB wrapper for persisting review state
@@ -104,6 +110,11 @@ class ReviewDB {
         // Store for deleted decks (sync graves) — added in v4
         if (!db.objectStoreNames.contains("deletedDecks")) {
           db.createObjectStore("deletedDecks", { keyPath: "deletedDeckId" });
+        }
+
+        // Store for option presets — added in v5
+        if (!db.objectStoreNames.contains("presets")) {
+          db.createObjectStore("presets", { keyPath: "id" });
         }
       };
     });
@@ -370,18 +381,47 @@ class ReviewDB {
    * Get all deleted deck IDs.
    */
   async getDeletedDecks(): Promise<{ deletedDeckId: string }[]> {
-    return this.run(["deletedDecks"], "readonly", (tx) =>
-      tx.objectStore("deletedDecks").getAll(),
-    );
+    return this.run(["deletedDecks"], "readonly", (tx) => tx.objectStore("deletedDecks").getAll());
   }
 
   /**
    * Clear deleted decks tracking (after successful sync).
    */
   async clearDeletedDecks(): Promise<void> {
-    await this.run(["deletedDecks"], "readwrite", (tx) =>
-      tx.objectStore("deletedDecks").clear(),
+    await this.run(["deletedDecks"], "readwrite", (tx) => tx.objectStore("deletedDecks").clear());
+  }
+
+  /**
+   * Get all option presets.
+   */
+  async getAllPresets(): Promise<OptionPreset[]> {
+    return this.run(["presets"], "readonly", (tx) => tx.objectStore("presets").getAll());
+  }
+
+  /**
+   * Get a single preset by ID.
+   */
+  async getPreset(id: string): Promise<OptionPreset | null> {
+    return this.run(
+      ["presets"],
+      "readonly",
+      (tx) => tx.objectStore("presets").get(id),
+      (r) => (r as OptionPreset | null) ?? null,
     );
+  }
+
+  /**
+   * Save (create or update) a preset.
+   */
+  async savePreset(preset: OptionPreset): Promise<void> {
+    await this.run(["presets"], "readwrite", (tx) => tx.objectStore("presets").put(preset));
+  }
+
+  /**
+   * Delete a preset by ID.
+   */
+  async deletePreset(id: string): Promise<void> {
+    await this.run(["presets"], "readwrite", (tx) => tx.objectStore("presets").delete(id));
   }
 
   /**
@@ -398,6 +438,7 @@ class ReviewDB {
         "deletedCards",
         "deletedNotes",
         "deletedDecks",
+        "presets",
       ];
       const transaction = db.transaction(stores, "readwrite");
 
