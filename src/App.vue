@@ -6,6 +6,8 @@ import CardButtons from "./components/CardButtons.vue";
 import type { Answer } from "./scheduler/types";
 import { getRenderedCardString } from "./utils/render";
 import { computeDeckInfo } from "./utils/deckInfo";
+import { pushUndo } from "./undoRedo";
+import { executeUndo, executeRedo } from "./undoRedoExecutor";
 import {
   activeViewSig,
   ankiDataSig,
@@ -55,6 +57,9 @@ const shortcutsModalOpen = ref(false);
 const commands = useCommands({
   onEditCard: () => {
     editModalOpen.value = true;
+  },
+  onUndoToast: (message: string) => {
+    showUndoToast(message);
   },
   onReplayAudio: () => {
     const card = renderedCard.value;
@@ -247,8 +252,54 @@ function handleEditKeydown(e: KeyboardEvent) {
   }
 }
 
-onMounted(() => document.addEventListener("keydown", handleEditKeydown));
-onUnmounted(() => document.removeEventListener("keydown", handleEditKeydown));
+// Undo/redo toast notification
+const undoToast = ref<string | null>(null);
+let undoToastTimer: ReturnType<typeof setTimeout> | null = null;
+
+function showUndoToast(message: string) {
+  undoToast.value = message;
+  if (undoToastTimer) clearTimeout(undoToastTimer);
+  undoToastTimer = setTimeout(() => {
+    undoToast.value = null;
+  }, 2500);
+}
+
+// Handle Ctrl+Z (undo) and Ctrl+Shift+Z (redo) keyboard shortcuts
+async function handleUndoRedoKeydown(e: KeyboardEvent) {
+  // Skip if focused on an input/textarea element
+  if (
+    e.target instanceof HTMLInputElement ||
+    e.target instanceof HTMLTextAreaElement ||
+    (e.target instanceof HTMLElement && e.target.isContentEditable)
+  ) {
+    return;
+  }
+
+  const isCtrlOrMeta = e.ctrlKey || e.metaKey;
+  if (!isCtrlOrMeta) return;
+
+  if (e.key.toLowerCase() === "z" && !e.shiftKey) {
+    e.preventDefault();
+    const desc = await executeUndo();
+    if (desc) showUndoToast(`Undo: ${desc}`);
+  } else if (
+    (e.key.toLowerCase() === "z" && e.shiftKey) ||
+    e.key.toLowerCase() === "y"
+  ) {
+    e.preventDefault();
+    const desc = await executeRedo();
+    if (desc) showUndoToast(`Redo: ${desc}`);
+  }
+}
+
+onMounted(() => {
+  document.addEventListener("keydown", handleEditKeydown);
+  document.addEventListener("keydown", handleUndoRedoKeydown);
+});
+onUnmounted(() => {
+  document.removeEventListener("keydown", handleEditKeydown);
+  document.removeEventListener("keydown", handleUndoRedoKeydown);
+});
 
 function handleAudioButtonClick(src: string) {
   playAudio(src);
@@ -265,8 +316,34 @@ async function handleChooseAnswer(answer: Answer) {
     const queue = reviewQueueSig.value;
 
     if (reviewCard && queue) {
+      // Capture previous state for undo
+      const previousState = JSON.parse(JSON.stringify(reviewCard.reviewState));
+      const wasNew = reviewCard.isNew;
+      const today = new Date();
+      const rolloverHour = 4; // Default rollover hour
+      if (today.getHours() < rolloverHour) today.setDate(today.getDate() - 1);
+      const dailyStatsDate = today.toISOString().split("T")[0]!;
+
       const reviewTimeMs = Date.now() - reviewStartTime.value;
+      const reviewLogTimestamp = Date.now();
       const updatedState = await queue.processReview(reviewCard, answer, reviewTimeMs);
+
+      // Record undo entry
+      const answerLabel = answer.charAt(0).toUpperCase() + answer.slice(1);
+      pushUndo({
+        type: "review",
+        description: `Answer ${answerLabel}`,
+        undoData: {
+          cardId: reviewCard.cardId,
+          previousState,
+          newState: JSON.parse(JSON.stringify(updatedState)),
+          reviewLogTimestamp,
+          wasNew,
+          dailyStatsDate,
+          reviewTimeMs,
+        },
+      });
+
       updateDueCardsAfterReview(reviewCard.cardId, updatedState);
       moveToNextReviewCard();
       markDataChanged();
@@ -313,7 +390,7 @@ onUnmounted(clearAutoAdvanceTimer);
 </script>
 
 <template>
-  <StatusBar />
+  <StatusBar @undo-toast="showUndoToast" />
 
   <!-- BROWSE VIEW -->
   <CardBrowser v-if="activeViewSig === 'browse'" />
@@ -467,6 +544,10 @@ onUnmounted(clearAutoAdvanceTimer);
       <div class="shortcuts-section">
         <h3 class="shortcuts-heading">General</h3>
         <dl class="shortcuts-list">
+          <dt><kbd>Ctrl</kbd>+<kbd>Z</kbd></dt>
+          <dd>Undo</dd>
+          <dt><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd></dt>
+          <dd>Redo</dd>
           <dt><kbd>Ctrl</kbd>+<kbd>K</kbd></dt>
           <dd>Command palette</dd>
           <dt><kbd>Ctrl</kbd>+<kbd>T</kbd></dt>
@@ -481,6 +562,13 @@ onUnmounted(clearAutoAdvanceTimer);
       </div>
     </div>
   </Modal>
+
+  <!-- Undo/Redo toast notification -->
+  <Transition name="toast">
+    <div v-if="undoToast" class="undo-toast">
+      {{ undoToast }}
+    </div>
+  </Transition>
 </template>
 
 <style scoped>
@@ -611,5 +699,40 @@ main {
   border-radius: var(--radius-sm);
   min-width: 20px;
   text-align: center;
+}
+
+.undo-toast {
+  position: fixed;
+  bottom: var(--spacing-6);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: var(--spacing-2) var(--spacing-4);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-on-primary);
+  background: var(--color-text-primary);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  z-index: var(--z-index-tooltip);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.toast-enter-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.toast-leave-active {
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.toast-enter-from {
+  opacity: 0;
+  transform: translateX(-50%) translateY(8px);
+}
+
+.toast-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(-4px);
 }
 </style>

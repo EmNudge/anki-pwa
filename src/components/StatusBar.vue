@@ -1,5 +1,13 @@
 <script setup lang="ts">
 import { type AppView, activeViewSig, reviewModeSig } from "../stores";
+import { canUndo, canRedo, undoDescription, redoDescription } from "../undoRedo";
+import { executeUndo, executeRedo } from "../undoRedoExecutor";
+import { Undo2, Redo2 } from "lucide-vue-next";
+import Tooltip from "../design-system/components/primitives/Tooltip.vue";
+
+const emit = defineEmits<{
+  undoToast: [message: string];
+}>();
 
 const tabs: { id: AppView; label: string }[] = [
   { id: "review", label: "Review" },
@@ -15,6 +23,16 @@ function handleTabClick(tabId: AppView) {
     activeViewSig.value = tabId;
   }
 }
+
+async function handleUndo() {
+  const desc = await executeUndo();
+  if (desc) emit("undoToast", `Undo: ${desc}`);
+}
+
+async function handleRedo() {
+  const desc = await executeRedo();
+  if (desc) emit("undoToast", `Redo: ${desc}`);
+}
 </script>
 
 <template>
@@ -29,6 +47,26 @@ function handleTabClick(tabId: AppView) {
         {{ tab.label }}
       </button>
     </div>
+    <div class="status-bar-actions">
+      <Tooltip :text="undoDescription ? `Undo: ${undoDescription} (Ctrl+Z)` : 'Nothing to undo'">
+        <button
+          class="undo-redo-btn"
+          :disabled="!canUndo"
+          @click="handleUndo"
+        >
+          <Undo2 :size="16" />
+        </button>
+      </Tooltip>
+      <Tooltip :text="redoDescription ? `Redo: ${redoDescription} (Ctrl+Shift+Z)` : 'Nothing to redo'">
+        <button
+          class="undo-redo-btn"
+          :disabled="!canRedo"
+          @click="handleRedo"
+        >
+          <Redo2 :size="16" />
+        </button>
+      </Tooltip>
+    </div>
   </nav>
 </template>
 
@@ -39,6 +77,7 @@ function handleTabClick(tabId: AppView) {
   z-index: var(--z-index-sticky);
   display: flex;
   align-items: center;
+  justify-content: space-between;
   height: 44px;
   padding: 0 var(--spacing-4);
   background: var(--color-surface);
@@ -71,5 +110,42 @@ function handleTabClick(tabId: AppView) {
 .tab--active {
   color: var(--color-primary);
   background: var(--color-surface-elevated);
+}
+
+.status-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-1);
+}
+
+.undo-redo-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  color: var(--color-text-secondary);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: var(--transition-colors);
+  box-shadow: none;
+}
+
+.undo-redo-btn:hover:not(:disabled) {
+  color: var(--color-text-primary);
+  background: var(--color-surface-hover);
+}
+
+.undo-redo-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.undo-redo-btn:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: -2px;
 }
 </style>
