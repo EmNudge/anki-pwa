@@ -11,6 +11,7 @@ import {
   deleteTag,
   repositionNewCards,
 } from "../stores";
+import FindReplaceModal from "./FindReplaceModal.vue";
 import { getRenderedCardString } from "../utils/render";
 import { sanitizeHtmlForPreview } from "../utils/sanitize";
 import { playAudio } from "../utils/sound";
@@ -1190,6 +1191,7 @@ async function bulkDelete() {
 // ── Edit modal ──
 
 const editModalOpen = ref(false);
+const findReplaceOpen = ref(false);
 const isSynced = computed(() => activeDeckSourceIdSig.value === "sync-collection");
 
 async function handleNoteSave(payload: { fields: Record<string, string | null>; tags: string[] }) {
@@ -1256,6 +1258,9 @@ async function handleNoteSave(payload: { fields: Record<string, string | null>; 
         </div>
       </div>
       <div class="toolbar-right">
+        <Button variant="secondary" size="sm" @click="findReplaceOpen = true">
+          Find &amp; Replace
+        </Button>
         <div class="column-menu-wrap" ref="columnMenuRef">
           <button
             class="toolbar-icon-btn"
@@ -1564,6 +1569,15 @@ async function handleNoteSave(payload: { fields: Record<string, string | null>; 
         <Button size="sm" @click="applyReposition">Reposition</Button>
       </template>
     </Modal>
+
+    <!-- Find & Replace modal -->
+    <FindReplaceModal
+      :is-open="findReplaceOpen"
+      :selected-guids="selectedGuids"
+      :deck-names="allDecks"
+      @close="findReplaceOpen = false"
+      @applied="clearSelection()"
+    />
   </div>
 </template>
 

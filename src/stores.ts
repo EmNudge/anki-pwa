@@ -1597,6 +1597,67 @@ export async function deleteTag(tag: string): Promise<void> {
 }
 
 /**
+ * Bulk update field values for multiple notes.
+ * Takes an array of { guid, fields } where fields is the full Record<string, string|null>.
+ * Persists to SQLite for synced collections.
+ */
+export async function bulkUpdateNoteFields(
+  updates: { guid: string; fields: Record<string, string | null> }[],
+): Promise<void> {
+  const data = ankiDataSig.value;
+  if (!data || updates.length === 0) return;
+
+  // Apply in-memory updates
+  for (const { guid, fields } of updates) {
+    for (const card of data.cards) {
+      if (card.guid !== guid) continue;
+      for (const [key, val] of Object.entries(fields)) {
+        card.values[key] = val;
+      }
+    }
+  }
+  triggerRef(ankiDataSig);
+
+  // Persist to SQLite for synced collections
+  const input = activeDeckInputSig.value;
+  if (input?.kind !== "sqlite") return;
+
+  const db = await createDatabase(input.bytes);
+  try {
+    const mod = Math.floor(Date.now() / 1000);
+
+    for (const { guid, fields } of updates) {
+      const result = db.exec("SELECT id FROM notes WHERE guid=?", [guid]);
+      const rawNoteId = result[0]?.values[0]?.[0];
+      if (rawNoteId == null) continue;
+      const noteId = Number(rawNoteId);
+
+      const fieldValues = Object.values(fields);
+      const flds = fieldValues.map((v) => v ?? "").join("\x1f");
+      const firstField = fieldValues[0] ?? "";
+      const sfld = firstField.replace(/<[^>]*>/g, "").trim();
+      const csum = stringHash(sfld);
+
+      db.run("UPDATE notes SET flds=?, sfld=?, csum=?, mod=?, usn=-1 WHERE id=?", [
+        flds,
+        sfld,
+        csum,
+        mod,
+        noteId,
+      ]);
+    }
+
+    const newBytes = new Uint8Array(db.export());
+    const cache = await caches.open("anki-cache");
+    await cache.put("/sync/collection.sqlite", new Response(new Blob([newBytes as BlobPart])));
+    activeDeckInputSig.value = { ...input, bytes: newBytes };
+    markDataChanged();
+  } finally {
+    db.close();
+  }
+}
+
+/**
  * Persist tag changes for a set of notes to the SQLite database.
  */
 async function bulkPersistTags(guids: string[]): Promise<void> {
