@@ -37,6 +37,7 @@ import {
 } from "./utils/mediaCache";
 import { QUEUE_USER_BURIED, QUEUE_SUSPENDED } from "./lib/syncWrite";
 import { markDataChanged } from "./lib/autoSync";
+import { pushUndo, clearUndoHistory } from "./undoRedo";
 
 /** Revoke object URLs from the previous media map to prevent memory leaks. */
 function revokeOldMediaUrls() {
@@ -78,6 +79,7 @@ function clearLoadedDeck() {
   selectedDeckIdSig.value = null;
   activeViewSig.value = "review";
   reviewModeSig.value = "deck-list";
+  clearUndoHistory();
 }
 
 // Initialize: migrate old single-file cache and load active file
@@ -1050,6 +1052,7 @@ export function moveToNextReviewCard() {
  */
 export async function resetScheduler() {
   await reviewDB.clearAll();
+  clearUndoHistory();
 
   clearReviewQueueState();
 
@@ -1074,8 +1077,14 @@ function removeCurrentCardAndAdvance() {
 export async function buryCurrentCard() {
   const card = currentReviewCardSig.value;
   if (!card) return;
+  const previousQueueOverride = card.reviewState.queueOverride;
   await reviewDB.patchCard(card.cardId, { queueOverride: QUEUE_USER_BURIED });
   card.reviewState.queueOverride = QUEUE_USER_BURIED;
+  pushUndo({
+    type: "buryCard",
+    description: "Bury Card",
+    undoData: { cardId: card.cardId, previousQueueOverride },
+  });
   removeCurrentCardAndAdvance();
 }
 
@@ -1085,8 +1094,14 @@ export async function buryCurrentCard() {
 export async function suspendCurrentCard() {
   const card = currentReviewCardSig.value;
   if (!card) return;
+  const previousQueueOverride = card.reviewState.queueOverride;
   await reviewDB.patchCard(card.cardId, { queueOverride: QUEUE_SUSPENDED });
   card.reviewState.queueOverride = QUEUE_SUSPENDED;
+  pushUndo({
+    type: "suspendCard",
+    description: "Suspend Card",
+    undoData: { cardId: card.cardId, previousQueueOverride },
+  });
   removeCurrentCardAndAdvance();
 }
 
@@ -1096,9 +1111,15 @@ export async function suspendCurrentCard() {
 export async function flagCurrentCard(flag: number) {
   const card = currentReviewCardSig.value;
   if (!card) return;
+  const previousFlag = card.reviewState.flags ?? 0;
   const clamped = flag & 0b111;
   await reviewDB.patchCard(card.cardId, { flags: clamped });
   card.reviewState.flags = clamped;
+  pushUndo({
+    type: "flagCard",
+    description: `Flag Card`,
+    undoData: { cardId: card.cardId, previousFlag, newFlag: clamped },
+  });
 }
 
 /**
@@ -1118,6 +1139,11 @@ export function markCurrentNote() {
   } else {
     noteCard.tags.push("marked");
   }
+  pushUndo({
+    type: "markNote",
+    description: hasMarked ? "Unmark Note" : "Mark Note",
+    undoData: { guid: noteCard.guid, wasMarked: hasMarked },
+  });
 }
 
 /**
@@ -1141,11 +1167,24 @@ export async function buryCurrentNote() {
     })
     .map((c) => c.cardId);
 
+  // Capture previous overrides for undo
+  const previousQueueOverrides: Record<string, number | undefined> = {};
+  for (const cardId of siblingCardIds) {
+    const sibling = dueCardsSig.value.find((c) => c.cardId === cardId);
+    previousQueueOverrides[cardId] = sibling?.reviewState.queueOverride;
+  }
+
   for (const cardId of siblingCardIds) {
     await reviewDB.patchCard(cardId, { queueOverride: QUEUE_USER_BURIED });
     const sibling = dueCardsSig.value.find((c) => c.cardId === cardId);
     if (sibling) sibling.reviewState.queueOverride = QUEUE_USER_BURIED;
   }
+
+  pushUndo({
+    type: "buryNote",
+    description: "Bury Note",
+    undoData: { cardIds: siblingCardIds, previousQueueOverrides },
+  });
 
   dueCardsSig.value = dueCardsSig.value.filter((c) => !siblingCardIds.includes(c.cardId));
   moveToNextReviewCard();
@@ -1164,6 +1203,20 @@ export async function deleteCurrentNote() {
 
   const guid = noteCard.guid;
 
+  // Capture card data for undo before deleting
+  const deletedCards = ankiData.cards
+    .filter((c) => c.guid === guid)
+    .map((c) => ({
+      values: { ...c.values },
+      tags: [...c.tags],
+      deckName: c.deckName,
+      css: c.css ?? "",
+      templates: JSON.parse(JSON.stringify(c.templates)),
+      ankiCardId: c.ankiCardId,
+      fieldDescriptions: c.fieldDescriptions ? { ...c.fieldDescriptions } : undefined,
+      guid: c.guid,
+    }));
+
   // Remove all due cards sharing this note guid
   const siblingCardIds = dueCardsSig.value
     .filter((c) => {
@@ -1171,6 +1224,16 @@ export async function deleteCurrentNote() {
       return nc && nc.guid === guid;
     })
     .map((c) => c.cardId);
+
+  // Capture review states and logs for undo
+  const reviewStates: import("./scheduler/types").CardReviewState[] = [];
+  const reviewLogs: import("./scheduler/types").StoredReviewLog[] = [];
+  for (const cardId of siblingCardIds) {
+    const state = await reviewDB.getCard(cardId);
+    if (state) reviewStates.push(state);
+    const logs = await reviewDB.getReviewLogsForCard(cardId);
+    reviewLogs.push(...logs);
+  }
 
   for (const cardId of siblingCardIds) {
     await reviewDB.deleteCard(cardId);
@@ -1184,6 +1247,12 @@ export async function deleteCurrentNote() {
   }
   triggerRef(ankiDataSig);
 
+  pushUndo({
+    type: "noteDelete",
+    description: "Delete Note",
+    undoData: { guid, cards: deletedCards, reviewStates, reviewLogs },
+  });
+
   dueCardsSig.value = dueCardsSig.value.filter((c) => !siblingCardIds.includes(c.cardId));
   moveToNextReviewCard();
   markDataChanged();
@@ -1196,14 +1265,27 @@ export function moveToNextCard() {
 /**
  * Update a note's fields and tags across all cards sharing the same guid.
  * Persists to SQLite cache for synced collections (marks usn=-1 for sync).
+ * @param skipUndo If true, do not record an undo entry (used by undo/redo executor).
  */
 export async function updateNote(
   guid: string,
   newFields: Record<string, string | null>,
   newTags: string[],
+  skipUndo = false,
 ): Promise<void> {
   const data = ankiDataSig.value;
   if (!data) return;
+
+  // Capture previous state for undo
+  let previousFields: Record<string, string | null> | undefined;
+  let previousTags: string[] | undefined;
+  if (!skipUndo) {
+    const noteCard = data.cards.find((c) => c.guid === guid);
+    if (noteCard) {
+      previousFields = { ...noteCard.values };
+      previousTags = [...noteCard.tags];
+    }
+  }
 
   // Update all in-memory cards sharing this note guid
   for (const card of data.cards) {
@@ -1214,6 +1296,20 @@ export async function updateNote(
     card.tags = [...newTags];
   }
   triggerRef(ankiDataSig);
+
+  if (!skipUndo && previousFields && previousTags) {
+    pushUndo({
+      type: "noteEdit",
+      description: "Edit Note",
+      undoData: {
+        guid,
+        previousFields,
+        previousTags,
+        newFields: { ...newFields },
+        newTags: [...newTags],
+      },
+    });
+  }
 
   // Persist to SQLite for synced collections
   const input = activeDeckInputSig.value;
@@ -1379,12 +1475,27 @@ export async function bulkAddTag(guids: string[], tag: string): Promise<void> {
   const data = ankiDataSig.value;
   if (!data) return;
 
+  // Capture previous tags for undo
+  const previousTags: Record<string, string[]> = {};
+  for (const card of data.cards) {
+    if (!guids.includes(card.guid)) continue;
+    if (!previousTags[card.guid]) {
+      previousTags[card.guid] = [...card.tags];
+    }
+  }
+
   for (const card of data.cards) {
     if (!guids.includes(card.guid)) continue;
     if (card.tags.includes(tag)) continue;
     card.tags = [...card.tags, tag];
   }
   triggerRef(ankiDataSig);
+
+  pushUndo({
+    type: "bulkAddTag",
+    description: `Add Tag "${tag}"`,
+    undoData: { guids, tag, previousTags },
+  });
 
   await bulkPersistTags(guids);
 }
@@ -1397,11 +1508,26 @@ export async function bulkRemoveTag(guids: string[], tag: string): Promise<void>
   const data = ankiDataSig.value;
   if (!data) return;
 
+  // Capture previous tags for undo
+  const previousTags: Record<string, string[]> = {};
+  for (const card of data.cards) {
+    if (!guids.includes(card.guid)) continue;
+    if (!previousTags[card.guid]) {
+      previousTags[card.guid] = [...card.tags];
+    }
+  }
+
   for (const card of data.cards) {
     if (!guids.includes(card.guid)) continue;
     card.tags = card.tags.filter((t) => t !== tag && !t.startsWith(tag + "::"));
   }
   triggerRef(ankiDataSig);
+
+  pushUndo({
+    type: "bulkRemoveTag",
+    description: `Remove Tag "${tag}"`,
+    undoData: { guids, tag, previousTags },
+  });
 
   await bulkPersistTags(guids);
 }
@@ -1428,6 +1554,12 @@ export async function renameTag(oldTag: string, newTag: string): Promise<void> {
   }
   triggerRef(ankiDataSig);
 
+  pushUndo({
+    type: "renameTag",
+    description: `Rename Tag "${oldTag}"`,
+    undoData: { oldTag, newTag },
+  });
+
   await bulkPersistTags(affectedGuids);
 }
 
@@ -1439,15 +1571,27 @@ export async function deleteTag(tag: string): Promise<void> {
   const data = ankiDataSig.value;
   if (!data) return;
 
+  // Capture previous tags for undo
+  const previousTags: Record<string, string[]> = {};
   const affectedGuids: string[] = [];
   for (const card of data.cards) {
     const hasTag = card.tags.some((t) => t === tag || t.startsWith(tag + "::"));
     if (!hasTag) continue;
 
+    if (!previousTags[card.guid]) {
+      previousTags[card.guid] = [...card.tags];
+    }
+
     card.tags = card.tags.filter((t) => t !== tag && !t.startsWith(tag + "::"));
     if (!affectedGuids.includes(card.guid)) affectedGuids.push(card.guid);
   }
   triggerRef(ankiDataSig);
+
+  pushUndo({
+    type: "deleteTag",
+    description: `Delete Tag "${tag}"`,
+    undoData: { tag, previousTags },
+  });
 
   await bulkPersistTags(affectedGuids);
 }

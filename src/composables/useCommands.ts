@@ -40,10 +40,14 @@ import {
   Pause,
   Trash2,
   Keyboard,
+  Undo2,
+  Redo2,
 } from "lucide-vue-next";
 import { useTheme } from "../design-system/hooks/useTheme";
 import { getFlags, getFlagLabel } from "../lib/flags";
 import ReviewLogPanel from "../components/ReviewLogPanel.vue";
+import { canUndo, canRedo, undoDescription, redoDescription } from "../undoRedo";
+import { executeUndo, executeRedo } from "../undoRedoExecutor";
 
 function icon(comp: Component): Component {
   return markRaw(comp);
@@ -81,6 +85,7 @@ interface UseCommandsOptions {
   onReplayAudio?: () => void;
   onPauseAudio?: () => void;
   onShowShortcuts?: () => void;
+  onUndoToast?: (message: string) => void;
 }
 
 export function useCommands(options: UseCommandsOptions = {}) {
@@ -105,7 +110,41 @@ export function useCommands(options: UseCommandsOptions = {}) {
       }),
     );
 
+    // Undo/redo commands (only show when available)
+    const undoRedoCommands: Command[] = [];
+    if (canUndo.value) {
+      undoRedoCommands.push({
+        id: "undo",
+        title: `Undo: ${undoDescription.value}`,
+        description: "Revert the last operation",
+        icon: icon(Undo2),
+        hotkey: "ctrl+Z",
+        group: "Edit",
+        handler: () => {
+          void executeUndo().then((desc) => {
+            if (desc) options.onUndoToast?.(`Undo: ${desc}`);
+          });
+        },
+      });
+    }
+    if (canRedo.value) {
+      undoRedoCommands.push({
+        id: "redo",
+        title: `Redo: ${redoDescription.value}`,
+        description: "Re-apply the last undone operation",
+        icon: icon(Redo2),
+        hotkey: "ctrl+shift+Z",
+        group: "Edit",
+        handler: () => {
+          void executeRedo().then((desc) => {
+            if (desc) options.onUndoToast?.(`Redo: ${desc}`);
+          });
+        },
+      });
+    }
+
     const commands: Command[] = [
+      ...undoRedoCommands,
       ...buildCardActionCommands(ankiData, options),
       ...tabCommands,
       {
