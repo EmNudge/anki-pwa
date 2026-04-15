@@ -1476,18 +1476,16 @@ export async function bulkAddTag(guids: string[], tag: string): Promise<void> {
   if (!data) return;
 
   // Capture previous tags for undo
+  const guidSet = new Set(guids);
   const previousTags: Record<string, string[]> = {};
   for (const card of data.cards) {
-    if (!guids.includes(card.guid)) continue;
+    if (!guidSet.has(card.guid)) continue;
     if (!previousTags[card.guid]) {
       previousTags[card.guid] = [...card.tags];
     }
-  }
-
-  for (const card of data.cards) {
-    if (!guids.includes(card.guid)) continue;
-    if (card.tags.includes(tag)) continue;
-    card.tags = [...card.tags, tag];
+    if (!card.tags.includes(tag)) {
+      card.tags = [...card.tags, tag];
+    }
   }
   triggerRef(ankiDataSig);
 
@@ -1509,16 +1507,13 @@ export async function bulkRemoveTag(guids: string[], tag: string): Promise<void>
   if (!data) return;
 
   // Capture previous tags for undo
+  const guidSet = new Set(guids);
   const previousTags: Record<string, string[]> = {};
   for (const card of data.cards) {
-    if (!guids.includes(card.guid)) continue;
+    if (!guidSet.has(card.guid)) continue;
     if (!previousTags[card.guid]) {
       previousTags[card.guid] = [...card.tags];
     }
-  }
-
-  for (const card of data.cards) {
-    if (!guids.includes(card.guid)) continue;
     card.tags = card.tags.filter((t) => t !== tag && !t.startsWith(tag + "::"));
   }
   triggerRef(ankiDataSig);
@@ -1540,7 +1535,7 @@ export async function renameTag(oldTag: string, newTag: string): Promise<void> {
   const data = ankiDataSig.value;
   if (!data) return;
 
-  const affectedGuids: string[] = [];
+  const affectedGuidSet = new Set<string>();
   for (const card of data.cards) {
     const hasTag = card.tags.some((t) => t === oldTag || t.startsWith(oldTag + "::"));
     if (!hasTag) continue;
@@ -1550,10 +1545,11 @@ export async function renameTag(oldTag: string, newTag: string): Promise<void> {
       if (t.startsWith(oldTag + "::")) return newTag + t.slice(oldTag.length);
       return t;
     });
-    if (!affectedGuids.includes(card.guid)) affectedGuids.push(card.guid);
+    affectedGuidSet.add(card.guid);
   }
   triggerRef(ankiDataSig);
 
+  const affectedGuids = [...affectedGuidSet];
   pushUndo({
     type: "renameTag",
     description: `Rename Tag "${oldTag}"`,
@@ -1573,7 +1569,7 @@ export async function deleteTag(tag: string): Promise<void> {
 
   // Capture previous tags for undo
   const previousTags: Record<string, string[]> = {};
-  const affectedGuids: string[] = [];
+  const affectedGuidSet = new Set<string>();
   for (const card of data.cards) {
     const hasTag = card.tags.some((t) => t === tag || t.startsWith(tag + "::"));
     if (!hasTag) continue;
@@ -1583,8 +1579,9 @@ export async function deleteTag(tag: string): Promise<void> {
     }
 
     card.tags = card.tags.filter((t) => t !== tag && !t.startsWith(tag + "::"));
-    if (!affectedGuids.includes(card.guid)) affectedGuids.push(card.guid);
+    affectedGuidSet.add(card.guid);
   }
+  const affectedGuids = [...affectedGuidSet];
   triggerRef(ankiDataSig);
 
   pushUndo({
@@ -1608,12 +1605,12 @@ export async function bulkUpdateNoteFields(
   if (!data || updates.length === 0) return;
 
   // Apply in-memory updates
-  for (const { guid, fields } of updates) {
-    for (const card of data.cards) {
-      if (card.guid !== guid) continue;
-      for (const [key, val] of Object.entries(fields)) {
-        card.values[key] = val;
-      }
+  const updateMap = new Map(updates.map((u) => [u.guid, u.fields]));
+  for (const card of data.cards) {
+    const fields = updateMap.get(card.guid);
+    if (!fields) continue;
+    for (const [key, val] of Object.entries(fields)) {
+      card.values[key] = val;
     }
   }
   triggerRef(ankiDataSig);
@@ -1669,8 +1666,16 @@ async function bulkPersistTags(guids: string[]): Promise<void> {
   try {
     const mod = Math.floor(Date.now() / 1000);
 
+    const guidSet = new Set(guids);
+    const cardsByGuid = new Map<string, (typeof data.cards)[number]>();
+    for (const card of data.cards) {
+      if (guidSet.has(card.guid) && !cardsByGuid.has(card.guid)) {
+        cardsByGuid.set(card.guid, card);
+      }
+    }
+
     for (const guid of guids) {
-      const card = data.cards.find((c) => c.guid === guid);
+      const card = cardsByGuid.get(guid);
       if (!card) continue;
 
       const tagsStr = card.tags.length > 0 ? ` ${card.tags.join(" ")} ` : "";
