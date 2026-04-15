@@ -36,6 +36,7 @@ import FileLibrary from "./components/FileLibrary.vue";
 import DeckCreator from "./components/DeckCreator.vue";
 
 import CardBrowser from "./components/CardBrowser.vue";
+import FindDuplicates from "./components/FindDuplicates.vue";
 import SyncPanel from "./components/SyncPanel.vue";
 import CongratsScreen from "./components/CongratsScreen.vue";
 import SchedulerSettings from "./components/SchedulerSettings.vue";
@@ -421,6 +422,9 @@ onUnmounted(clearAutoAdvanceTimer);
 
   <!-- BROWSE VIEW -->
   <CardBrowser v-if="activeViewSig === 'browse'" />
+
+  <!-- FIND DUPLICATES VIEW -->
+  <FindDuplicates v-else-if="activeViewSig === 'duplicates'" />
 
   <!-- CREATE DECK VIEW -->
   <DeckCreator v-else-if="activeViewSig === 'create'" />

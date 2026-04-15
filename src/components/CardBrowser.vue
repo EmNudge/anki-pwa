@@ -4,6 +4,7 @@ import {
   ankiDataSig,
   mediaFilesSig,
   activeDeckSourceIdSig,
+  activeViewSig,
   updateNote,
   bulkAddTag,
   bulkRemoveTag,
@@ -1261,6 +1262,9 @@ async function handleNoteSave(payload: { fields: Record<string, string | null>; 
         <Button variant="secondary" size="sm" @click="findReplaceOpen = true">
           Find &amp; Replace
         </Button>
+        <button class="toggle-btn" @click="activeViewSig = 'duplicates'" title="Find Duplicates">
+          Find Duplicates
+        </button>
         <div class="column-menu-wrap" ref="columnMenuRef">
           <button
             class="toolbar-icon-btn"
