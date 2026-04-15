@@ -1481,3 +1481,91 @@ async function bulkPersistTags(guids: string[]): Promise<void> {
     db.close();
   }
 }
+
+/**
+ * Reposition new cards by changing their due position number.
+ * Only applies to cards in the "new" queue (type=0, queue=0).
+ *
+ * @param cardIndices - Indices into ankiDataSig.value.cards[] to reposition
+ * @param startPosition - Starting position number (1-based)
+ * @param step - Step size between positions (default 1)
+ * @param randomize - Whether to randomize order within the selection
+ */
+export async function repositionNewCards(
+  cardIndices: number[],
+  startPosition: number,
+  step: number,
+  randomize: boolean,
+): Promise<number> {
+  const data = ankiDataSig.value;
+  if (!data || cardIndices.length === 0) return 0;
+
+  // Filter to only new cards (queue=0 means new queue)
+  const newCardIndices = cardIndices.filter((i) => {
+    const card = data.cards[i];
+    if (!card?.scheduling) return false;
+    return card.scheduling.queue === 0 && card.scheduling.type === 0;
+  });
+
+  if (newCardIndices.length === 0) return 0;
+
+  // Optionally randomize the order of the indices (Fisher-Yates shuffle)
+  const ordered = [...newCardIndices];
+  if (randomize) {
+    for (let i = ordered.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [ordered[i], ordered[j]] = [ordered[j]!, ordered[i]!];
+    }
+  }
+
+  // Assign new positions
+  for (let i = 0; i < ordered.length; i++) {
+    const card = data.cards[ordered[i]!]!;
+    if (card.scheduling) {
+      card.scheduling = {
+        ...card.scheduling,
+        due: startPosition + i * step,
+      };
+    }
+  }
+  triggerRef(ankiDataSig);
+
+  // Persist to SQLite if available
+  await persistNewCardPositions(ordered, startPosition, step);
+
+  return ordered.length;
+}
+
+/**
+ * Persist new card due-position changes to the SQLite database.
+ */
+async function persistNewCardPositions(
+  cardIndices: number[],
+  startPosition: number,
+  step: number,
+): Promise<void> {
+  const data = ankiDataSig.value;
+  const input = activeDeckInputSig.value;
+  if (!data || input?.kind !== "sqlite") return;
+
+  const db = await createDatabase(input.bytes);
+  try {
+    const mod = Math.floor(Date.now() / 1000);
+
+    for (let i = 0; i < cardIndices.length; i++) {
+      const card = data.cards[cardIndices[i]!];
+      if (!card?.ankiCardId) continue;
+
+      const newDue = startPosition + i * step;
+      db.run("UPDATE cards SET due=?, mod=?, usn=-1 WHERE id=?", [newDue, mod, card.ankiCardId]);
+    }
+
+    const newBytes = new Uint8Array(db.export());
+    const cache = await caches.open("anki-cache");
+    await cache.put("/sync/collection.sqlite", new Response(new Blob([newBytes as BlobPart])));
+    activeDeckInputSig.value = { ...input, bytes: newBytes };
+    markDataChanged();
+  } finally {
+    db.close();
+  }
+}
