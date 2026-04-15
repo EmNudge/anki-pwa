@@ -11,7 +11,6 @@ import {
   readSyncState,
   writeSyncState,
   clearSyncState,
-  type SyncConfig,
 } from "../lib/ankiSync";
 import {
   loadSyncedCollection,
@@ -24,13 +23,12 @@ import {
   initializeReviewQueue,
 } from "../stores";
 import { applyReviewStateToSqlite } from "../lib/syncWrite";
-import {
-  normalSync,
-  FullSyncRequiredError,
-  SyncAbortedError,
-  ClockSkewError,
-} from "../lib/normalSync";
+import { normalSync, FullSyncRequiredError, type SyncSummary } from "../lib/normalSync";
 import { acquireSyncLock, releaseSyncLock } from "../lib/autoSync";
+import { createProgress, type SyncProgress } from "../lib/syncProgress";
+import SyncProgressBar from "./SyncProgressBar.vue";
+import SyncConflictModal from "./SyncConflictModal.vue";
+import SyncSummaryPanel from "./SyncSummaryPanel.vue";
 import mime from "mime";
 
 const serverUrl = ref("");
@@ -40,9 +38,14 @@ const isLoggedIn = ref(false);
 const isSyncing = ref(false);
 const syncStatus = ref("");
 const syncError = ref("");
+const syncProgress = ref<SyncProgress | null>(null);
+const syncSummary = ref<SyncSummary | null>(null);
 const lastSyncTime = ref<number | null>(null);
 const showPushConfirm = ref(false);
-const showFullSyncDialog = ref(false);
+const showConflictModal = ref(false);
+const conflictReason = ref(
+  "The collection schema has changed (e.g. notetypes were modified on another device). Choose which version to keep.",
+);
 const showAdvancedSync = ref(false);
 const lastSyncType = ref<string | null>(localStorage.getItem("anki-last-sync-type"));
 const lastSyncProto = ref<string | null>(localStorage.getItem("anki-last-sync-proto"));
@@ -106,6 +109,7 @@ async function handleSync() {
   }
 
   syncError.value = "";
+  syncSummary.value = null;
   isSyncing.value = true;
 
   try {
@@ -113,18 +117,27 @@ async function handleSync() {
     const cachedBytes = await getCachedSqlite();
     if (!cachedBytes) {
       syncStatus.value = "No local collection. Performing full download...";
+      syncProgress.value = createProgress("downloading-collection");
       await doFullPull(state.hkey);
       return;
     }
 
     // Attempt normal (incremental) sync
     const deckId = getActiveDeckId();
-    const result = await normalSync(serverUrl.value, state.hkey, deckId, cachedBytes, (status) => {
-      syncStatus.value = status;
-    });
+    const result = await normalSync(
+      serverUrl.value,
+      state.hkey,
+      deckId,
+      cachedBytes,
+      (status, progress) => {
+        syncStatus.value = status;
+        if (progress) syncProgress.value = progress;
+      },
+    );
 
     if (result.action === "noChanges") {
       setSyncInfo("Incremental", result.proto);
+      syncProgress.value = createProgress("done");
       syncStatus.value = "Already up to date.";
       const now = Date.now();
       writeSyncState({ ...state, lastSync: now });
@@ -138,10 +151,25 @@ async function handleSync() {
       await initializeReviewQueue();
     }
 
+    // Build summary from the sync result, will be updated with media counts
+    const summary: SyncSummary = {
+      ...(result.summary ?? {
+        remoteGraves: 0,
+        localGraves: 0,
+        remoteMetadataChanges: 0,
+        localMetadataChanges: 0,
+        chunksReceived: 0,
+        chunksSent: 0,
+        mediaDownloaded: 0,
+        mediaUploaded: 0,
+      }),
+    };
+
     // Download then upload media sequentially — each calls /msync/begin which
     // starts a new server session, so running them in parallel would invalidate
     // the first session and cause 400 errors on downloadFiles.
     syncStatus.value = "Downloading media...";
+    syncProgress.value = createProgress("downloading-media");
     try {
       const dlMedia = await downloadMedia(serverUrl.value, state.hkey, (s) => {
         syncStatus.value = s;
@@ -156,24 +184,29 @@ async function handleSync() {
         }
         syncStatus.value = `Downloaded ${dlMedia.size} media file${dlMedia.size === 1 ? "" : "s"}. Caching...`;
         await addMediaToCache(typedBlobs);
+        summary.mediaDownloaded = dlMedia.size;
       }
     } catch (dlErr) {
       console.warn("Media download failed (non-fatal):", dlErr);
     }
 
     syncStatus.value = "Uploading media...";
+    syncProgress.value = createProgress("uploading-media");
     try {
       const uploaded = await uploadMedia(serverUrl.value, state.hkey, (s) => {
         syncStatus.value = s;
       });
       if (uploaded > 0) {
         syncStatus.value = `Uploaded ${uploaded} media file${uploaded === 1 ? "" : "s"}.`;
+        summary.mediaUploaded = uploaded;
       }
     } catch (ulErr) {
       console.warn("Media upload failed (non-fatal):", ulErr);
     }
 
     setSyncInfo("Incremental", result.proto);
+    syncProgress.value = createProgress("done");
+    syncSummary.value = summary;
 
     const newState = { ...state, ...result.newState };
     writeSyncState(newState);
@@ -181,9 +214,13 @@ async function handleSync() {
 
     syncStatus.value = "Sync completed successfully.";
   } catch (err) {
+    syncProgress.value = createProgress("error");
     if (err instanceof FullSyncRequiredError) {
-      showFullSyncDialog.value = true;
-      syncStatus.value = "Full sync required — schema has changed.";
+      conflictReason.value =
+        err.message ||
+        "The collection schema has changed (e.g. notetypes were modified on another device). Choose which version to keep.";
+      showConflictModal.value = true;
+      syncStatus.value = "";
       return;
     }
     if (err instanceof Error && err.message.includes("Authentication expired")) {
@@ -202,12 +239,14 @@ async function handleSync() {
 /** Full download (pull) — replaces local collection entirely. */
 async function doFullPull(hkey: string) {
   syncStatus.value = "Downloading collection...";
+  syncProgress.value = createProgress("downloading-collection");
   const setStatus = (s: string) => {
     syncStatus.value = s;
   };
   const sqliteBytes = await downloadCollection(serverUrl.value, hkey, setStatus);
 
   syncStatus.value = "Downloading media files...";
+  syncProgress.value = createProgress("downloading-media");
   const mediaBlobs = await downloadMedia(serverUrl.value, hkey, setStatus);
   let typedMediaBlobs: Map<string, Blob> | undefined;
   if (mediaBlobs.size > 0) {
@@ -225,6 +264,7 @@ async function doFullPull(hkey: string) {
   await loadSyncedCollection(sqliteBytes, typedMediaBlobs);
 
   setSyncInfo("Full download");
+  syncProgress.value = createProgress("done");
 
   const now = Date.now();
   const prevState = readSyncState();
@@ -246,13 +286,15 @@ async function handlePull() {
     return;
   }
 
-  showFullSyncDialog.value = false;
+  showConflictModal.value = false;
   syncError.value = "";
+  syncSummary.value = null;
   isSyncing.value = true;
 
   try {
     await doFullPull(state.hkey);
   } catch (err) {
+    syncProgress.value = createProgress("error");
     if (err instanceof Error && err.message.includes("Authentication expired")) {
       isLoggedIn.value = false;
       syncActiveSig.value = false;
@@ -279,10 +321,12 @@ async function handlePush() {
   }
 
   showPushConfirm.value = false;
-  showFullSyncDialog.value = false;
+  showConflictModal.value = false;
   syncError.value = "";
+  syncSummary.value = null;
   isSyncing.value = true;
   syncStatus.value = "Preparing collection for upload...";
+  syncProgress.value = createProgress("merging-local");
 
   try {
     const sqliteBytes = await getCachedSqlite();
@@ -297,10 +341,12 @@ async function handlePush() {
 
     // Upload to server
     syncStatus.value = "Uploading collection to server...";
+    syncProgress.value = createProgress("uploading-collection");
     await uploadCollection(serverUrl.value, state.hkey, modifiedSqlite);
 
     // Upload media files
     syncStatus.value = "Uploading media files...";
+    syncProgress.value = createProgress("uploading-media");
     try {
       const mediaUploaded = await uploadMedia(serverUrl.value, state.hkey, (s) => {
         syncStatus.value = s;
@@ -316,6 +362,7 @@ async function handlePush() {
     await refreshSyncedCollection(modifiedSqlite);
 
     setSyncInfo("Full upload");
+    syncProgress.value = createProgress("done");
 
     const now = Date.now();
     writeSyncState({ ...state, lastSync: now });
@@ -323,6 +370,7 @@ async function handlePush() {
 
     syncStatus.value = "Collection pushed successfully.";
   } catch (err) {
+    syncProgress.value = createProgress("error");
     if (err instanceof Error && err.message.includes("Authentication expired")) {
       isLoggedIn.value = false;
       syncActiveSig.value = false;
@@ -424,7 +472,8 @@ function formatLastSync(timestamp: number | null): string {
 
         <div class="sync-last-sync">Last sync: {{ formatLastSync(lastSyncTime) }}</div>
         <div v-if="lastSyncType" class="sync-last-sync">
-          Type: {{ lastSyncType }}<template v-if="lastSyncProto"> · Protocol: {{ lastSyncProto }}</template>
+          Type: {{ lastSyncType
+          }}<template v-if="lastSyncProto"> · Protocol: {{ lastSyncProto }}</template>
         </div>
 
         <div class="sync-actions">
@@ -439,24 +488,11 @@ function formatLastSync(timestamp: number | null): string {
           </button>
         </div>
 
-        <!-- Full sync required dialog -->
-        <div v-if="showFullSyncDialog" class="sync-confirm">
-          <p class="sync-confirm-text">
-            <strong>Full sync required.</strong> The collection schema has changed (e.g. notetypes
-            were modified on another device). Choose a direction:
-          </p>
-          <div class="sync-confirm-actions">
-            <button class="sync-btn sync-btn--primary" @click="handlePull">
-              Download from Server
-            </button>
-            <button class="sync-btn sync-btn--push" @click="showPushConfirm = true">
-              Upload to Server
-            </button>
-            <button class="sync-btn sync-btn--secondary" @click="showFullSyncDialog = false">
-              Cancel
-            </button>
-          </div>
-        </div>
+        <!-- Sync progress indicator -->
+        <SyncProgressBar :progress="syncProgress" :is-active="isSyncing" />
+
+        <!-- Sync summary (shown after sync completes) -->
+        <SyncSummaryPanel :summary="syncSummary" />
 
         <!-- Push confirmation dialog -->
         <div v-if="showPushConfirm" class="sync-confirm">
@@ -502,6 +538,18 @@ function formatLastSync(timestamp: number | null): string {
         </details>
       </template>
     </div>
+
+    <!-- Conflict resolution modal -->
+    <SyncConflictModal
+      :is-open="showConflictModal"
+      :reason="conflictReason"
+      @close="showConflictModal = false"
+      @keep-remote="handlePull"
+      @keep-local="
+        showPushConfirm = true;
+        showConflictModal = false;
+      "
+    />
 
     <!-- Status Messages -->
     <div v-if="syncStatus" class="sync-status">{{ syncStatus }}</div>
@@ -675,8 +723,8 @@ function formatLastSync(timestamp: number | null): string {
 
 .sync-btn--push {
   color: white;
-  background: #f59e0b;
-  border-color: #f59e0b;
+  background: var(--color-warning-500);
+  border-color: var(--color-warning-500);
 }
 
 .sync-btn--push:hover:not(:disabled) {
@@ -696,8 +744,8 @@ function formatLastSync(timestamp: number | null): string {
 .sync-confirm {
   margin-top: var(--spacing-3);
   padding: var(--spacing-3);
-  background: color-mix(in srgb, #f59e0b 8%, var(--color-surface));
-  border: 1px solid color-mix(in srgb, #f59e0b 30%, var(--color-border));
+  background: color-mix(in srgb, var(--color-warning-500) 8%, var(--color-surface));
+  border: 1px solid color-mix(in srgb, var(--color-warning-500) 30%, var(--color-border));
   border-radius: var(--radius-md);
 }
 

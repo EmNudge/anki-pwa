@@ -32,55 +32,66 @@ import {
   NotetypeSchemaMismatchError,
   chunkSchema,
 } from "./syncMerge";
+import { createProgress, type SyncProgress } from "./syncProgress";
 
 // ── Zod Schemas ───────────────────────────────────────────────────
 
-const rawMetaResponseSchema = z.object({
-  mod: z.number().optional(),
-  modified: z.number().optional(),
-  scm: z.number().optional(),
-  schema: z.number().optional(),
-  usn: z.number().optional(),
-  ts: z.number().optional(),
-  current_time: z.number().optional(),
-  msg: z.string().optional(),
-  server_message: z.string().optional(),
-  cont: z.boolean().optional(),
-  should_continue: z.boolean().optional(),
-  hostNum: z.number().optional(),
-  host_number: z.number().optional(),
-  empty: z.boolean().optional(),
-  mediaUsn: z.number().optional(),
-  media_usn: z.number().optional(),
-  v: z.number().optional(),
-  server_version: z.number().optional(),
-}).passthrough();
+const rawMetaResponseSchema = z
+  .object({
+    mod: z.number().optional(),
+    modified: z.number().optional(),
+    scm: z.number().optional(),
+    schema: z.number().optional(),
+    usn: z.number().optional(),
+    ts: z.number().optional(),
+    current_time: z.number().optional(),
+    msg: z.string().optional(),
+    server_message: z.string().optional(),
+    cont: z.boolean().optional(),
+    should_continue: z.boolean().optional(),
+    hostNum: z.number().optional(),
+    host_number: z.number().optional(),
+    empty: z.boolean().optional(),
+    mediaUsn: z.number().optional(),
+    media_usn: z.number().optional(),
+    v: z.number().optional(),
+    server_version: z.number().optional(),
+  })
+  .passthrough();
 
-const rawStartResponseSchema = z.object({
-  cards: z.array(z.number()).optional(),
-  notes: z.array(z.number()).optional(),
-  decks: z.array(z.number()).optional(),
-}).passthrough();
+const rawStartResponseSchema = z
+  .object({
+    cards: z.array(z.number()).optional(),
+    notes: z.array(z.number()).optional(),
+    decks: z.array(z.number()).optional(),
+  })
+  .passthrough();
 
 const syncModelSchema = z.object({ id: z.number() }).passthrough();
 const syncDeckSchema = z.object({ id: z.number() }).passthrough();
 const syncDeckConfigSchema = z.object({ id: z.number() }).passthrough();
 
-const rawApplyChangesResponseSchema = z.object({
-  models: z.array(syncModelSchema).optional(),
-  decks: z.tuple([z.array(syncDeckSchema), z.array(syncDeckConfigSchema)]).optional(),
-  tags: z.array(z.string()).optional(),
-  conf: z.record(z.unknown()).optional(),
-  crt: z.number().optional(),
-}).passthrough();
+const rawApplyChangesResponseSchema = z
+  .object({
+    models: z.array(syncModelSchema).optional(),
+    decks: z.tuple([z.array(syncDeckSchema), z.array(syncDeckConfigSchema)]).optional(),
+    tags: z.array(z.string()).optional(),
+    conf: z.record(z.unknown()).optional(),
+    crt: z.number().optional(),
+  })
+  .passthrough();
 
-const rawSanityCheckResponseSchema = z.object({
-  status: z.string().optional(),
-}).passthrough();
+const rawSanityCheckResponseSchema = z
+  .object({
+    status: z.string().optional(),
+  })
+  .passthrough();
 
-const rawFinishResponseSchema = z.object({
-  mod: z.number().optional(),
-}).passthrough();
+const rawFinishResponseSchema = z
+  .object({
+    mod: z.number().optional(),
+  })
+  .passthrough();
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -114,7 +125,7 @@ export class FullSyncRequiredError extends Error {
   }
 }
 
-export class SyncAbortedError extends Error {
+class SyncAbortedError extends Error {
   constructor(message = "Sync aborted by server") {
     super(message);
     this.name = "SyncAbortedError";
@@ -139,7 +150,7 @@ export class ClockSkewError extends Error {
   }
 }
 
-type ProgressCallback = (status: string) => void;
+type ProgressCallback = (status: string, progress?: SyncProgress) => void;
 
 interface NormalSyncResult {
   action: SyncAction;
@@ -147,6 +158,19 @@ interface NormalSyncResult {
   newState?: Partial<SyncState>;
   /** Protocol version negotiated with the server (10 = legacy multipart, 11 = zstd). */
   proto?: 10 | 11;
+  /** Summary of what changed during sync */
+  summary?: SyncSummary;
+}
+
+export interface SyncSummary {
+  remoteGraves: number;
+  localGraves: number;
+  remoteMetadataChanges: number;
+  localMetadataChanges: number;
+  chunksReceived: number;
+  chunksSent: number;
+  mediaDownloaded: number;
+  mediaUploaded: number;
 }
 
 const CHUNK_SIZE = 250;
@@ -198,10 +222,12 @@ async function syncEndpoint(
 
 async function fetchMeta(serverUrl: string, hkey: string): Promise<SyncMeta> {
   // Request v11 — server will respond with its max supported version
-  const r = rawMetaResponseSchema.parse(await syncEndpoint(serverUrl, "meta", hkey, {
-    v: 11,
-    cv: "anki-pwa,0.1,web",
-  }));
+  const r = rawMetaResponseSchema.parse(
+    await syncEndpoint(serverUrl, "meta", hkey, {
+      v: 11,
+      cv: "anki-pwa,0.1,web",
+    }),
+  );
 
   // Detect server version from response.
   // v11 servers include a "v" or "server_version" field.
@@ -249,17 +275,19 @@ async function startSync(
   proto: ProtoVersion = 10,
   sessionKey?: string,
 ): Promise<Graves> {
-  const r = rawStartResponseSchema.parse(await syncEndpoint(
-    serverUrl,
-    "start",
-    hkey,
-    {
-      minUsn: clientUsn,
-      lnewer: localIsNewer,
-    },
-    proto,
-    sessionKey,
-  ));
+  const r = rawStartResponseSchema.parse(
+    await syncEndpoint(
+      serverUrl,
+      "start",
+      hkey,
+      {
+        minUsn: clientUsn,
+        lnewer: localIsNewer,
+      },
+      proto,
+      sessionKey,
+    ),
+  );
   return {
     cards: r.cards ?? [],
     notes: r.notes ?? [],
@@ -312,16 +340,18 @@ async function exchangeChanges(
   proto: ProtoVersion = 10,
   sessionKey?: string,
 ): Promise<UnchunkedChanges> {
-  const r = rawApplyChangesResponseSchema.parse(await syncEndpoint(
-    serverUrl,
-    "applyChanges",
-    hkey,
-    {
-      changes: localChanges,
-    },
-    proto,
-    sessionKey,
-  ));
+  const r = rawApplyChangesResponseSchema.parse(
+    await syncEndpoint(
+      serverUrl,
+      "applyChanges",
+      hkey,
+      {
+        changes: localChanges,
+      },
+      proto,
+      sessionKey,
+    ),
+  );
   return {
     models: r.models ?? [],
     decks: r.decks ?? [[], []],
@@ -374,16 +404,18 @@ async function sanityCheck(
   proto: ProtoVersion = 10,
   sessionKey?: string,
 ): Promise<void> {
-  const r = rawSanityCheckResponseSchema.parse(await syncEndpoint(
-    serverUrl,
-    "sanityCheck2",
-    hkey,
-    {
-      client: counts,
-    },
-    proto,
-    sessionKey,
-  ));
+  const r = rawSanityCheckResponseSchema.parse(
+    await syncEndpoint(
+      serverUrl,
+      "sanityCheck2",
+      hkey,
+      {
+        client: counts,
+      },
+      proto,
+      sessionKey,
+    ),
+  );
   if (r.status === "bad") {
     throw new FullSyncRequiredError(
       "Sync sanity check failed: client and server counts do not match. A full sync is required.",
@@ -439,12 +471,36 @@ async function applyDeckConfigsToScheduler(
   const isAnki21b = (hasNotetypes[0]?.values.length ?? 0) > 0;
 
   // Collect all deck configs
-  const rawDconfSchema = z.object({
-    new: z.object({ delays: z.array(z.number()).optional(), perDay: z.number().optional(), order: z.number().optional() }).optional(),
-    lapse: z.object({ delays: z.array(z.number()).optional(), minInt: z.number().optional(), mult: z.number().optional(), leechFails: z.number().optional() }).optional(),
-    rev: z.object({ perDay: z.number().optional(), ease4: z.number().optional(), hardFactor: z.number().optional(), ivlFct: z.number().optional(), maxIvl: z.number().optional(), fuzz: z.boolean().optional() }).optional(),
-    maxTaken: z.number().optional(),
-  }).passthrough();
+  const rawDconfSchema = z
+    .object({
+      new: z
+        .object({
+          delays: z.array(z.number()).optional(),
+          perDay: z.number().optional(),
+          order: z.number().optional(),
+        })
+        .optional(),
+      lapse: z
+        .object({
+          delays: z.array(z.number()).optional(),
+          minInt: z.number().optional(),
+          mult: z.number().optional(),
+          leechFails: z.number().optional(),
+        })
+        .optional(),
+      rev: z
+        .object({
+          perDay: z.number().optional(),
+          ease4: z.number().optional(),
+          hardFactor: z.number().optional(),
+          ivlFct: z.number().optional(),
+          maxIvl: z.number().optional(),
+          fuzz: z.boolean().optional(),
+        })
+        .optional(),
+      maxTaken: z.number().optional(),
+    })
+    .passthrough();
 
   type RawDconf = z.infer<typeof rawDconfSchema>;
 
@@ -552,12 +608,12 @@ async function normalSyncInner(
 
   try {
     // Step 0: Merge IndexedDB review state into SQLite (marks changed rows with usn=-1)
-    onProgress("Merging local review state...");
+    onProgress("Merging local review state...", createProgress("merging-local"));
     await mergeIndexedDBToSqlite(db, deckId);
 
     // Step 1: Read local metadata and fetch remote metadata
     const localMeta = readLocalMeta(db);
-    onProgress("Checking server for changes...");
+    onProgress("Checking server for changes...", createProgress("checking-server"));
     const remoteMeta = await fetchMeta(serverUrl, hkey);
 
     // Check server messages
@@ -597,7 +653,7 @@ async function normalSyncInner(
 
     // Step 3: Start sync — exchange graves
     const localIsNewer = localMeta.mod > remoteMeta.mod;
-    onProgress("Starting sync session...");
+    onProgress("Starting sync session...", createProgress("starting-session"));
     sessionStarted = true;
     const remoteGraves = await startSync(
       serverUrl,
@@ -613,6 +669,10 @@ async function normalSyncInner(
       remoteGraves.cards.length + remoteGraves.notes.length + remoteGraves.decks.length;
     onProgress(
       `Applying ${remoteGraveCount} remote deletion${remoteGraveCount !== 1 ? "s" : ""}...`,
+      createProgress(
+        "applying-deletions",
+        `${remoteGraveCount} deletion${remoteGraveCount !== 1 ? "s" : ""}`,
+      ),
     );
     await applyRemoteGraves(db, remoteGraves);
 
@@ -620,7 +680,13 @@ async function normalSyncInner(
     const localGraves = buildLocalGraves(db);
     const localGraveCount =
       localGraves.cards.length + localGraves.notes.length + localGraves.decks.length;
-    onProgress(`Sending ${localGraveCount} local deletion${localGraveCount !== 1 ? "s" : ""}...`);
+    onProgress(
+      `Sending ${localGraveCount} local deletion${localGraveCount !== 1 ? "s" : ""}...`,
+      createProgress(
+        "sending-deletions",
+        `${localGraveCount} deletion${localGraveCount !== 1 ? "s" : ""}`,
+      ),
+    );
     await sendGraves(serverUrl, hkey, localGraves, proto, sessionKey);
 
     // Step 5: Exchange unchunked changes (models, decks, config, tags)
@@ -633,6 +699,10 @@ async function normalSyncInner(
       localChanges.tags.length;
     onProgress(
       `Exchanging metadata (${localUnchunkedCount} local change${localUnchunkedCount !== 1 ? "s" : ""})...`,
+      createProgress(
+        "exchanging-metadata",
+        `${localUnchunkedCount} local change${localUnchunkedCount !== 1 ? "s" : ""}`,
+      ),
     );
     const remoteChanges = await exchangeChanges(serverUrl, hkey, localChanges, proto, sessionKey);
     try {
@@ -645,18 +715,42 @@ async function normalSyncInner(
     }
 
     // Step 6: Receive server chunks (cards, notes, revlog)
-    await receiveChunks(serverUrl, hkey, db, onProgress, localMeta.usn, proto, sessionKey);
+    let chunksReceived = 0;
+    const origReceiveProgress = onProgress;
+    await receiveChunks(
+      serverUrl,
+      hkey,
+      db,
+      (status) => {
+        chunksReceived++;
+        origReceiveProgress(status, createProgress("receiving-changes", `chunk ${chunksReceived}`));
+      },
+      localMeta.usn,
+      proto,
+      sessionKey,
+    );
 
     // Step 7: Send local chunks
-    await sendChunks(serverUrl, hkey, db, onProgress, proto, sessionKey);
+    let chunksSent = 0;
+    await sendChunks(
+      serverUrl,
+      hkey,
+      db,
+      (status) => {
+        chunksSent++;
+        onProgress(status, createProgress("sending-changes", `chunk ${chunksSent}`));
+      },
+      proto,
+      sessionKey,
+    );
 
     // Step 8: Sanity check
-    onProgress("Verifying sync integrity...");
+    onProgress("Verifying sync integrity...", createProgress("verifying"));
     const counts = getSanityCounts(db, anki21b);
     await sanityCheck(serverUrl, hkey, counts, proto, sessionKey);
 
     // Step 9: Finish
-    onProgress("Finalizing...");
+    onProgress("Finalizing...", createProgress("finalizing"));
     const newMod = await finishSync(serverUrl, hkey, proto, sessionKey);
     sessionStarted = false;
 
@@ -664,12 +758,18 @@ async function normalSyncInner(
     finalizeUsn(db, remoteMeta.usn, newMod, anki21b);
 
     // Apply synced deck configs to scheduler settings
-    onProgress("Applying deck configuration...");
+    onProgress("Applying deck configuration...", createProgress("applying-config"));
     await applyDeckConfigsToScheduler(db, deckId);
 
     // Export modified SQLite
     const newBytes = new Uint8Array(db.export());
     db.close();
+
+    const remoteMetadataChanges =
+      remoteChanges.models.length +
+      remoteChanges.decks[0].length +
+      remoteChanges.decks[1].length +
+      remoteChanges.tags.length;
 
     return {
       action: "normalSync",
@@ -680,6 +780,16 @@ async function normalSyncInner(
         scm: remoteMeta.scm,
       },
       proto,
+      summary: {
+        remoteGraves: remoteGraveCount,
+        localGraves: localGraveCount,
+        remoteMetadataChanges,
+        localMetadataChanges: localUnchunkedCount,
+        chunksReceived,
+        chunksSent,
+        mediaDownloaded: 0,
+        mediaUploaded: 0,
+      },
     };
   } catch (error) {
     if (sessionStarted) {
