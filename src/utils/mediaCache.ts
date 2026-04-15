@@ -22,35 +22,34 @@ export function mediaCachePath(filename: string): string {
   return `${MEDIA_PATH_PREFIX}${filename}`;
 }
 
-/**
- * Load all cached media entries as filename → Blob.
- */
-export async function getLocalMediaEntries(cache: Cache): Promise<Map<string, Blob>> {
+async function loadMediaEntries<T>(
+  cache: Cache,
+  transform: (blob: Blob) => T,
+): Promise<Map<string, T>> {
   const mediaKeys = filterMediaKeys(await cache.keys());
-  const entries = new Map<string, Blob>();
+  const entries = new Map<string, T>();
   for (const req of mediaKeys) {
     const resp = await cache.match(req);
     if (resp) {
-      entries.set(mediaKeyToFilename(req), await resp.blob());
+      entries.set(mediaKeyToFilename(req), transform(await resp.blob()));
     }
   }
   return entries;
 }
 
 /**
+ * Load all cached media entries as filename → Blob.
+ */
+export function getLocalMediaEntries(cache: Cache): Promise<Map<string, Blob>> {
+  return loadMediaEntries(cache, (blob) => blob);
+}
+
+/**
  * Load all cached media entries as filename → object URL string.
  * Caller is responsible for revoking the returned URLs when no longer needed.
  */
-export async function loadMediaObjectUrls(cache: Cache): Promise<Map<string, string>> {
-  const mediaKeys = filterMediaKeys(await cache.keys());
-  const urls = new Map<string, string>();
-  for (const req of mediaKeys) {
-    const resp = await cache.match(req);
-    if (resp) {
-      urls.set(mediaKeyToFilename(req), URL.createObjectURL(await resp.blob()));
-    }
-  }
-  return urls;
+export function loadMediaObjectUrls(cache: Cache): Promise<Map<string, string>> {
+  return loadMediaEntries(cache, (blob) => URL.createObjectURL(blob));
 }
 
 /**
