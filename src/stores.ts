@@ -48,7 +48,7 @@ function revokeOldMediaUrls() {
 }
 
 // View state
-export type AppView = "review" | "browse" | "create" | "sync";
+export type AppView = "review" | "browse" | "create" | "sync" | "duplicates";
 export const activeViewSig = ref<AppView>("review");
 export const reviewModeSig = ref<"deck-list" | "studying">("deck-list");
 
@@ -1645,6 +1645,65 @@ export async function bulkUpdateNoteFields(
         mod,
         noteId,
       ]);
+    }
+
+    const newBytes = new Uint8Array(db.export());
+    const cache = await caches.open("anki-cache");
+    await cache.put("/sync/collection.sqlite", new Response(new Blob([newBytes as BlobPart])));
+    activeDeckInputSig.value = { ...input, bytes: newBytes };
+    markDataChanged();
+  } finally {
+    db.close();
+  }
+}
+
+/**
+ * Delete multiple notes (by guid) and all their cards from the collection.
+ * Removes from in-memory data and persists to SQLite for synced collections.
+ */
+export async function deleteNotesByGuid(guids: string[]): Promise<void> {
+  const data = ankiDataSig.value;
+  if (!data || guids.length === 0) return;
+
+  const guidSet = new Set(guids);
+
+  // Remove from in-memory data
+  for (let i = data.cards.length - 1; i >= 0; i--) {
+    if (guidSet.has(data.cards[i]!.guid)) {
+      data.cards.splice(i, 1);
+    }
+  }
+  triggerRef(ankiDataSig);
+
+  // Persist to SQLite for synced collections
+  const input = activeDeckInputSig.value;
+  if (input?.kind !== "sqlite") return;
+
+  const db = await createDatabase(input.bytes);
+  try {
+    for (const guid of guids) {
+      // Find note ID
+      const result = db.exec("SELECT id FROM notes WHERE guid=?", [guid]);
+      const rawNoteId = result[0]?.values[0]?.[0];
+      if (rawNoteId == null) continue;
+      const noteId = Number(rawNoteId);
+
+      // Delete cards for this note and clean up review data
+      const cardRows = db.exec("SELECT id FROM cards WHERE nid=?", [noteId]);
+      if (cardRows[0]) {
+        for (const row of cardRows[0].values) {
+          const cardId = String(row[0]);
+          await reviewDB.deleteCard(cardId);
+          await reviewDB.deleteReviewLogsForCard(cardId);
+        }
+      }
+      db.run("DELETE FROM cards WHERE nid=?", [noteId]);
+
+      // Record in graves for sync
+      db.run("INSERT INTO graves (usn, oid, type) VALUES (-1, ?, 1)", [noteId]);
+
+      // Delete the note
+      db.run("DELETE FROM notes WHERE id=?", [noteId]);
     }
 
     const newBytes = new Uint8Array(db.export());

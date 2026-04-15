@@ -42,6 +42,7 @@ import {
   Keyboard,
   Undo2,
   Redo2,
+  Copy,
 } from "lucide-vue-next";
 import { useTheme } from "../design-system/hooks/useTheme";
 import { getFlags, getFlagLabel } from "../lib/flags";
@@ -199,6 +200,16 @@ export function useCommands(options: UseCommandsOptions = {}) {
         group: "Settings",
         handler: () => {
           resetScheduler();
+        },
+      },
+      {
+        id: "find-duplicates",
+        title: "Find Duplicates",
+        description: "Detect and manage duplicate notes in your collection",
+        icon: icon(Copy),
+        group: "Tools",
+        handler: () => {
+          activeViewSig.value = "duplicates";
         },
       },
       {
