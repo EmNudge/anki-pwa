@@ -4,7 +4,8 @@ import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import FlashCard from "./components/FlashCard.vue";
 import CardButtons from "./components/CardButtons.vue";
 import type { Answer } from "./scheduler/types";
-import { getRenderedCardString } from "./utils/render";
+import { getRenderedCardString, hasTypeAnswerField, extractExpectedAnswer } from "./utils/render";
+import { renderDiffHtml } from "./utils/typeansDiff";
 import { computeDeckInfo } from "./utils/deckInfo";
 import { pushUndo } from "./undoRedo";
 import { executeUndo, executeRedo } from "./undoRedoExecutor";
@@ -53,6 +54,7 @@ const activeSide = ref<"front" | "back">("front");
 const reviewStartTime = ref<number>(Date.now());
 const editModalOpen = ref(false);
 const shortcutsModalOpen = ref(false);
+const typedAnswer = ref("");
 
 const commands = useCommands({
   onEditCard: () => {
@@ -172,7 +174,31 @@ const renderedCard = computed(() => {
     mediaFiles: mediaFilesSig.value,
   });
 
-  return { frontSideHtml, backSideHtml, cardCss: card.css ?? "" };
+  const isTypeAnswer = hasTypeAnswerField(frontSideHtml);
+  return { frontSideHtml, backSideHtml, cardCss: card.css ?? "", isTypeAnswer };
+});
+
+// Compute the back HTML with type-answer diff when applicable
+const backHtmlWithDiff = computed(() => {
+  const card = renderedCard.value;
+  if (!card) return "";
+  if (!card.isTypeAnswer) return card.backSideHtml;
+
+  const expected = extractExpectedAnswer(card.backSideHtml);
+  if (expected === null) return card.backSideHtml;
+
+  const diffHtml = renderDiffHtml(typedAnswer.value, expected);
+
+  // Replace the typeans span with the diff HTML
+  return card.backSideHtml.replace(
+    /<span id="typeans"[^>]*>[\s\S]*?<\/span>/,
+    diffHtml,
+  );
+});
+
+// Reset typed answer when the card changes
+watch(renderedCard, () => {
+  typedAnswer.value = "";
 });
 
 // Autoplay front-side audio when entering studying mode or when the card changes
@@ -244,6 +270,7 @@ function handleEditKeydown(e: KeyboardEvent) {
     reviewModeSig.value === "studying" &&
     activeViewSig.value === "review" &&
     currentNoteCard.value &&
+    !renderedCard.value?.isTypeAnswer &&
     !(e.target instanceof HTMLInputElement) &&
     !(e.target instanceof HTMLTextAreaElement)
   ) {
@@ -418,12 +445,15 @@ onUnmounted(clearAutoAdvanceTimer);
         <FlashCard
           :active-side="activeSide"
           :front-html="renderedCard.frontSideHtml"
-          :back-html="renderedCard.backSideHtml"
+          :back-html="backHtmlWithDiff"
           :card-css="renderedCard.cardCss"
           :intervals="intervals"
+          :has-type-answer="renderedCard.isTypeAnswer"
           @reveal="handleReveal"
           @choose-answer="handleChooseAnswer"
           @audio-button-click="handleAudioButtonClick"
+          @type-answer-input="(v: string) => (typedAnswer = v)"
+          @type-answer-submit="handleReveal"
         />
         <CardButtons
           :active-side="activeSide"

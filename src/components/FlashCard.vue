@@ -14,15 +14,27 @@ const props = defineProps<{
   backHtml: string;
   cardCss: string;
   intervals?: { again: string; hard: string; good: string; easy: string };
+  hasTypeAnswer?: boolean;
 }>();
 
 const emit = defineEmits<{
   reveal: [];
   chooseAnswer: [answer: Answer];
   audioButtonClick: [src: string];
+  typeAnswerInput: [value: string];
+  typeAnswerSubmit: [];
 }>();
 
 function handleKeyDown(e: KeyboardEvent) {
+  // When there's a type-answer input on the front side, don't intercept
+  // keyboard shortcuts — let the iframe input handle them.
+  // Only allow Enter (which the iframe emits as typeAnswerSubmit) and
+  // Space (which should still reveal for non-type cards).
+  if (props.hasTypeAnswer && props.activeSide === "front") {
+    // On the front side with type answer, only the iframe's Enter triggers reveal
+    return;
+  }
+
   const control = findReviewControl(props.activeSide, e.key);
   if (!control) return;
 
@@ -51,6 +63,8 @@ onUnmounted(() => document.removeEventListener("keydown", handleKeyDown));
         :theme="theme"
         @audio-button-click="(src: string) => emit('audioButtonClick', src)"
         @background-detected="(color: string | null) => (cardBackground = color)"
+        @type-answer-input="(value: string) => emit('typeAnswerInput', value)"
+        @type-answer-submit="emit('typeAnswerSubmit')"
       />
     </div>
   </div>

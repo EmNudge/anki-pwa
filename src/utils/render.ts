@@ -1,5 +1,6 @@
 import katex from "katex";
 import { isClozeNode, parseClozeNodes, renderTemplateString } from "./templateParser";
+import { stripHtmlForComparison } from "./typeansDiff";
 
 type Variables = { [key: string]: string | null };
 
@@ -164,7 +165,7 @@ function stripAvTags(html: string): string {
  * Strip type: input fields from FrontSide HTML when injecting into answer side.
  */
 function stripTypeInputs(html: string): string {
-  return html.replace(/<input type="text" id="typeans"[^>]*>/g, "");
+  return html.replace(/<input[^>]*id="typeans"[^>]*>/g, "").replace(/<input[^>]*class="typeans-input"[^>]*>/g, "");
 }
 
 /**
@@ -246,10 +247,11 @@ function processTypeCloze(text: string, cardOrd: number, isAnswer: boolean): str
     const answers: string[] = [];
     for (const node of parseClozeNodes(text)) {
       if (isClozeNode(node) && node.ordinal === clozeNum) {
-        answers.push(node.answer);
+        answers.push(stripHtmlForComparison(node.answer));
       }
     }
-    return `<span id="typeans">${answers.join(", ")}</span>`;
+    const expectedPlain = answers.join(", ");
+    return `<span id="typeans" data-expected="${expectedPlain.replace(/"/g, "&quot;")}">${expectedPlain}</span>`;
   }
 
   return parseClozeNodes(text)
@@ -258,7 +260,7 @@ function processTypeCloze(text: string, cardOrd: number, isAnswer: boolean): str
         return node.value;
       }
       if (node.ordinal === clozeNum) {
-        return `<input type="text" id="typeans" placeholder="type answer">`;
+        return `<input type="text" id="typeans" class="typeans-input" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="type answer">`;
       }
       return node.answer;
     })
@@ -286,9 +288,10 @@ function applyFilter(
       return `<a class="hint" onclick="this.style.display='none';this.nextSibling.style.display='inline-block';">Show ${fieldName}</a><span style="display:none">${value}</span>`;
     case "type":
       if (isAnswer) {
-        return `<span id="typeans">${value}</span>`;
+        const expectedPlain = stripHtmlForComparison(value);
+        return `<span id="typeans" data-expected="${expectedPlain.replace(/"/g, "&quot;")}">${expectedPlain}</span>`;
       }
-      return `<input type="text" id="typeans" placeholder="type answer">`;
+      return `<input type="text" id="typeans" class="typeans-input" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="type answer">`;
     case "furigana":
       return applyFuriganaFilter(value);
     case "kanji":
@@ -671,4 +674,20 @@ function fieldIsNotEmpty(value: string | null | undefined, isCloze?: boolean): b
     : value;
   const stripped = processed.replace(/<[^>]*>/g, "").trim();
   return stripped.length > 0;
+}
+
+/**
+ * Check if a rendered card HTML contains a type-answer input field.
+ */
+export function hasTypeAnswerField(html: string): boolean {
+  return html.includes('id="typeans"');
+}
+
+/**
+ * Extract the expected answer from the back-side HTML's typeans element.
+ */
+export function extractExpectedAnswer(backHtml: string): string | null {
+  const match = backHtml.match(/id="typeans"\s+data-expected="([^"]*)"/);
+  if (!match) return null;
+  return match[1]!.replace(/&quot;/g, '"').replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
 }
