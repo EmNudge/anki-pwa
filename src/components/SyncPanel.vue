@@ -25,6 +25,7 @@ import {
 import { applyReviewStateToSqlite } from "../lib/syncWrite";
 import { normalSync, FullSyncRequiredError, type SyncSummary } from "../lib/normalSync";
 import { acquireSyncLock, releaseSyncLock } from "../lib/autoSync";
+import { triggerPreSyncBackup } from "../backup/autoBackup";
 import { createProgress, type SyncProgress } from "../lib/syncProgress";
 import SyncProgressBar from "./SyncProgressBar.vue";
 import SyncConflictModal from "./SyncConflictModal.vue";
@@ -107,6 +108,9 @@ async function handleSync() {
     syncError.value = "A sync is already in progress.";
     return;
   }
+
+  // Create a backup before sync (if enabled in backup settings)
+  await triggerPreSyncBackup();
 
   syncError.value = "";
   syncSummary.value = null;

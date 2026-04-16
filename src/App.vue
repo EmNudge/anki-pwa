@@ -42,6 +42,7 @@ import SyncPanel from "./components/SyncPanel.vue";
 import { defineAsyncComponent } from "vue";
 const StatsPanel = defineAsyncComponent(() => import("./components/StatsPanel.vue"));
 const NoteTypeManager = defineAsyncComponent(() => import("./components/NoteTypeManager.vue"));
+const BackupPanel = defineAsyncComponent(() => import("./components/BackupPanel.vue"));
 import CongratsScreen from "./components/CongratsScreen.vue";
 import SchedulerSettings from "./components/SchedulerSettings.vue";
 import FlagSettings from "./components/FlagSettings.vue";
@@ -52,6 +53,7 @@ import { Info } from "lucide-vue-next";
 import Modal from "./design-system/components/primitives/Modal.vue";
 import Tooltip from "./design-system/components/primitives/Tooltip.vue";
 import { markDataChanged, startAutoSync } from "./lib/autoSync";
+import { startAutoBackup } from "./backup/autoBackup";
 import NoteEditModal from "./components/NoteEditModal.vue";
 import { updateNote } from "./stores";
 
@@ -94,6 +96,7 @@ const commands = useCommands({
 
 // Start background auto-sync timer
 startAutoSync();
+startAutoBackup();
 
 // Compute deck info from anki data
 const computedDeckInfo = computed(() => {
@@ -438,6 +441,9 @@ onUnmounted(clearAutoAdvanceTimer);
 
   <!-- SYNC VIEW -->
   <SyncPanel v-else-if="activeViewSig === 'sync'" />
+
+  <!-- BACKUP VIEW -->
+  <BackupPanel v-else-if="activeViewSig === 'backup'" />
 
   <!-- REVIEW VIEW: deck list or studying -->
   <FileLibrary v-else-if="reviewModeSig === 'deck-list'" />

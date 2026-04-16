@@ -15,6 +15,7 @@ const tabs: { id: AppView; label: string }[] = [
   { id: "create", label: "Create Deck" },
   { id: "stats", label: "Stats" },
   { id: "sync", label: "Sync" },
+  { id: "backup", label: "Backup" },
 ];
 
 function handleTabClick(tabId: AppView) {
