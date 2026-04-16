@@ -19,8 +19,15 @@ import {
   adoptSampleDeck,
   removeAdoptedSample,
   SAMPLE_COLLECTION_ID,
+  filteredDecksSig,
+  studyFilteredDeck,
+  rebuildFilteredDeck,
+  deleteFilteredDeck,
+  countFilteredDeckCards,
+  ankiDataSig,
 } from "../stores";
 import type { DeckTreeNode } from "../types";
+import FilteredDeckModal from "./FilteredDeckModal.vue";
 
 const fileInput = ref<HTMLInputElement>();
 
@@ -96,6 +103,21 @@ function handleOpenSettings(node: DeckTreeNode, event: Event) {
   // Compute the card count for this deck to match the storage key used by initializeReviewQueue
   openDeckSettings(`deck-${node.cardCount}`, node);
 }
+
+// Filtered decks
+const filteredDeckModalOpen = ref(false);
+
+const filteredDecksWithCounts = computed(() =>
+  filteredDecksSig.value.map((d) => ({
+    ...d,
+    matchCount: countFilteredDeckCards(d.query),
+  })),
+);
+
+function handleDeleteFiltered(id: string, event: Event) {
+  event.stopPropagation();
+  deleteFilteredDeck(id);
+}
 </script>
 
 <template>
@@ -111,6 +133,55 @@ function handleOpenSettings(node: DeckTreeNode, event: Event) {
       />
       <Button variant="primary" size="sm" @click="fileInput?.click()"> Add File </Button>
     </div>
+
+    <!-- Filtered Decks -->
+    <section v-if="ankiDataSig && filteredDecksWithCounts.length > 0" class="library-section">
+      <div class="section-header">
+        <h3 class="section-title">Filtered Decks</h3>
+        <span class="section-count">{{ filteredDecksWithCounts.length }}</span>
+      </div>
+      <div class="file-grid">
+        <div
+          v-for="fd in filteredDecksWithCounts"
+          :key="fd.id"
+          class="file-card file-card--filtered"
+          @click="studyFilteredDeck(fd.id)"
+        >
+          <div class="file-info">
+            <span class="file-name">
+              <svg class="filtered-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+              </svg>
+              {{ fd.name }}
+            </span>
+            <span class="file-meta">{{ fd.matchCount }} card{{ fd.matchCount === 1 ? "" : "s" }} · {{ fd.reschedule ? "Normal" : "Cram" }}</span>
+          </div>
+          <div class="filtered-actions">
+            <button
+              class="filtered-action-btn"
+              title="Rebuild"
+              @click.stop="rebuildFilteredDeck(fd.id)"
+            >&#8635;</button>
+            <button
+              class="delete-btn"
+              title="Delete"
+              @click.stop="handleDeleteFiltered(fd.id, $event)"
+            >&times;</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div v-if="ankiDataSig" class="create-filtered-row">
+      <Button variant="secondary" size="sm" @click="filteredDeckModalOpen = true">
+        Create Filtered Deck
+      </Button>
+    </div>
+
+    <FilteredDeckModal
+      :is-open="filteredDeckModalOpen"
+      @close="filteredDeckModalOpen = false"
+    />
 
     <section
       v-if="(syncActiveSig || isSampleCollectionActive) && deckInfoSig"
@@ -608,5 +679,52 @@ function handleOpenSettings(node: DeckTreeNode, event: Event) {
   outline: 2px solid var(--color-primary);
   outline-offset: -2px;
   color: var(--color-text-primary);
+}
+
+/* Filtered decks */
+.create-filtered-row {
+  display: flex;
+  justify-content: center;
+  margin-top: var(--spacing-4);
+  margin-bottom: var(--spacing-2);
+}
+
+.file-card--filtered {
+  border-left: 3px solid var(--color-primary);
+}
+
+.filtered-icon {
+  vertical-align: -2px;
+  margin-right: var(--spacing-1);
+  color: var(--color-primary);
+}
+
+.filtered-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-1);
+  flex-shrink: 0;
+}
+
+.filtered-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: var(--font-size-lg);
+  color: var(--color-text-tertiary);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition-colors);
+  box-shadow: none;
+}
+
+.filtered-action-btn:hover {
+  color: var(--color-text-primary);
+  background: var(--color-surface-hover);
 }
 </style>
