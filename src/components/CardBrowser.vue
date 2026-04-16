@@ -331,7 +331,7 @@ const allNoteTypes = computed(() => {
 
 // ── Search parsing ──
 
-type SearchToken =
+type SearchLeaf =
   | { type: "text"; value: string }
   | { type: "deck"; value: string }
   | { type: "tag"; value: string }
@@ -339,7 +339,16 @@ type SearchToken =
   | { type: "flag"; value: number }
   | { type: "card"; value: string }
   | { type: "note"; value: string }
-  | { type: "negate"; inner: SearchToken };
+  | { type: "prop"; prop: string; op: ">" | "<" | ">=" | "<=" | "=" | "!="; value: number }
+  | { type: "added"; days: number }
+  | { type: "edited"; days: number }
+  | { type: "rated"; days: number };
+
+type SearchExpr =
+  | SearchLeaf
+  | { type: "negate"; inner: SearchExpr }
+  | { type: "and"; left: SearchExpr; right: SearchExpr }
+  | { type: "or"; left: SearchExpr; right: SearchExpr };
 
 const IS_VALUES = ["new", "learn", "review", "due", "suspended", "buried"] as const;
 const FLAG_VALUES = computed(() => [
@@ -347,63 +356,193 @@ const FLAG_VALUES = computed(() => [
   ...getFlags().map((f) => ({ value: f.flag, label: f.label.toLowerCase() })),
 ]);
 
-const QUALIFIERS = ["deck:", "tag:", "is:", "flag:", "card:", "note:"] as const;
+const QUALIFIERS = [
+  "deck:", "tag:", "is:", "flag:", "card:", "note:",
+  "prop:", "added:", "edited:", "rated:",
+] as const;
 
-function parseSearch(query: string): SearchToken[] {
-  const tokens: SearchToken[] = [];
-  const regex = /(-?)(?:"([^"]*)"|(deck|tag|is|flag|card|note):(?:"([^"]*)"|(\S*))|(\S+))/gi;
-  let match;
-  while ((match = regex.exec(query)) !== null) {
-    const negate = match[1] === "-";
-    const quoted = match[2];
-    const qualifier = match[3]?.toLowerCase();
-    const qualifierValueQuoted = match[4];
-    const qualifierValue = match[5];
-    const plainWord = match[6];
+// ── Lexer ──
 
-    let token: SearchToken;
-    if (quoted != null) {
-      token = { type: "text", value: quoted };
-    } else if (qualifier) {
-      const val = qualifierValueQuoted ?? qualifierValue ?? "";
-      switch (qualifier) {
-        case "deck":
-          token = { type: "deck", value: val };
-          break;
-        case "tag":
-          token = { type: "tag", value: val };
-          break;
-        case "is":
-          token = { type: "is", value: val.toLowerCase() };
-          break;
-        case "flag": {
-          const parsed = parseInt(val, 10);
-          if (!isNaN(parsed)) {
-            token = { type: "flag", value: parsed };
-          } else {
-            const match = FLAG_VALUES.value.find(
-              (f) => f.label.toLowerCase() === val.toLowerCase(),
-            );
-            token = { type: "flag", value: match?.value ?? 0 };
-          }
-          break;
-        }
-        case "card":
-          token = { type: "card", value: val };
-          break;
-        case "note":
-          token = { type: "note", value: val };
-          break;
-        default:
-          token = { type: "text", value: `${qualifier}:${val}` };
-      }
-    } else {
-      token = { type: "text", value: plainWord ?? "" };
+type LexToken =
+  | { kind: "term"; value: SearchExpr }
+  | { kind: "or" }
+  | { kind: "lparen" }
+  | { kind: "rparen" };
+
+function parseQualifiedTerm(word: string): SearchLeaf {
+  const colonIdx = word.indexOf(":");
+  if (colonIdx === -1) return { type: "text", value: word };
+
+  const qualifier = word.slice(0, colonIdx).toLowerCase();
+  const val = word.slice(colonIdx + 1);
+
+  switch (qualifier) {
+    case "deck":
+      return { type: "deck", value: val };
+    case "tag":
+      return { type: "tag", value: val };
+    case "is":
+      return { type: "is", value: val.toLowerCase() };
+    case "flag": {
+      const parsed = parseInt(val, 10);
+      if (!isNaN(parsed)) return { type: "flag", value: parsed };
+      const m = FLAG_VALUES.value.find((f) => f.label.toLowerCase() === val.toLowerCase());
+      return { type: "flag", value: m?.value ?? 0 };
+    }
+    case "card":
+      return { type: "card", value: val };
+    case "note":
+      return { type: "note", value: val };
+    case "prop": {
+      const opMatch = val.match(/^(ease|ivl|due|reps|lapses)(>=|<=|!=|>|<|=)(.+)$/);
+      if (!opMatch) return { type: "text", value: word };
+      const num = parseFloat(opMatch[3]!);
+      if (isNaN(num)) return { type: "text", value: word };
+      return {
+        type: "prop",
+        prop: opMatch[1]!,
+        op: opMatch[2]! as SearchLeaf & { type: "prop" } extends { op: infer O } ? O : never,
+        value: num,
+      };
+    }
+    case "added":
+      return { type: "added", days: parseInt(val, 10) || 1 };
+    case "edited":
+      return { type: "edited", days: parseInt(val, 10) || 1 };
+    case "rated":
+      return { type: "rated", days: parseInt(val, 10) || 1 };
+    default:
+      return { type: "text", value: word };
+  }
+}
+
+function lex(query: string): LexToken[] {
+  const tokens: LexToken[] = [];
+  let i = 0;
+  const len = query.length;
+
+  while (i < len) {
+    const ch = query[i]!;
+    if (ch === " " || ch === "\t") {
+      i++;
+      continue;
+    }
+    if (ch === "(") {
+      tokens.push({ kind: "lparen" });
+      i++;
+      continue;
+    }
+    if (ch === ")") {
+      tokens.push({ kind: "rparen" });
+      i++;
+      continue;
     }
 
-    tokens.push(negate ? { type: "negate", inner: token } : token);
+    // Check for OR keyword
+    if (
+      (ch === "O" || ch === "o") &&
+      i + 1 < len &&
+      (query[i + 1] === "R" || query[i + 1] === "r") &&
+      (i + 2 >= len || " ()\t".includes(query[i + 2]!))
+    ) {
+      tokens.push({ kind: "or" });
+      i += 2;
+      continue;
+    }
+
+    // Parse a term (possibly negated)
+    const negate = ch === "-" && i + 1 < len && query[i + 1] !== " ";
+    if (negate) i++;
+
+    let leaf: SearchLeaf;
+    if (i < len && query[i] === '"') {
+      // Quoted string
+      i++;
+      const start = i;
+      while (i < len && query[i] !== '"') i++;
+      leaf = { type: "text", value: query.slice(start, i) };
+      if (i < len) i++; // skip closing quote
+    } else {
+      // Unquoted word — but qualifier values may contain quoted portions (e.g. deck:"My Deck")
+      const start = i;
+      while (i < len && !" ()\t".includes(query[i]!)) {
+        if (query[i] === '"') {
+          // scan to closing quote
+          i++;
+          while (i < len && query[i] !== '"') i++;
+          if (i < len) i++; // skip closing quote
+        } else {
+          i++;
+        }
+      }
+      const word = query.slice(start, i);
+      // Strip quotes from qualifier values: deck:"My Deck" → deck:My Deck
+      const stripped = word.replace(/"/g, "");
+      leaf = parseQualifiedTerm(stripped);
+    }
+
+    tokens.push({ kind: "term", value: negate ? { type: "negate", inner: leaf } : leaf });
   }
+
   return tokens;
+}
+
+// ── Recursive descent parser ──
+// Grammar:
+//   expr    = andExpr (OR andExpr)*
+//   andExpr = unary unary*          (implicit AND)
+//   unary   = LPAREN expr RPAREN | term
+
+function parseSearch(query: string): SearchExpr | null {
+  const lexTokens = lex(query);
+  if (lexTokens.length === 0) return null;
+
+  let pos = 0;
+
+  function peek(): LexToken | undefined {
+    return lexTokens[pos];
+  }
+  function advance(): LexToken {
+    return lexTokens[pos++]!;
+  }
+
+  function parseExpr(): SearchExpr {
+    let left = parseAndExpr();
+    while (peek()?.kind === "or") {
+      advance();
+      const right = parseAndExpr();
+      left = { type: "or", left, right };
+    }
+    return left;
+  }
+
+  function parseAndExpr(): SearchExpr {
+    let left = parseUnary();
+    while (peek() && peek()!.kind !== "or" && peek()!.kind !== "rparen") {
+      const right = parseUnary();
+      left = { type: "and", left, right };
+    }
+    return left;
+  }
+
+  function parseUnary(): SearchExpr {
+    const tok = peek();
+    if (tok?.kind === "lparen") {
+      advance();
+      const expr = parseExpr();
+      if (peek()?.kind === "rparen") advance();
+      return expr;
+    }
+    if (tok?.kind === "term") {
+      advance();
+      return tok.value;
+    }
+    // Fallback for unexpected tokens
+    advance();
+    return { type: "text", value: "" };
+  }
+
+  return parseExpr();
 }
 
 // ── Autocomplete ──
@@ -420,7 +559,7 @@ type Suggestion = {
 
 function getCurrentToken(input: string, cursorPos: number): { token: string; start: number } {
   let start = cursorPos;
-  while (start > 0 && input[start - 1] !== " ") {
+  while (start > 0 && !" ()\t".includes(input[start - 1]!)) {
     start--;
   }
   return { token: input.slice(start, cursorPos), start };
@@ -503,6 +642,43 @@ const suggestions = computed<Suggestion[]>(() => {
         }
       }
       break;
+    case "prop:":
+      for (const p of [
+        "ease>",
+        "ease<",
+        "ease=",
+        "ivl>",
+        "ivl<",
+        "due>",
+        "due<",
+        "reps>",
+        "reps<",
+        "lapses>",
+        "lapses<",
+      ]) {
+        if (p.startsWith(valuePart)) {
+          results.push({
+            insert: `${prefix}prop:${p}`,
+            label: `prop:${p}`,
+            description: "numeric comparison",
+          });
+        }
+      }
+      break;
+    case "added:":
+    case "edited:":
+    case "rated:":
+      for (const n of [1, 3, 7, 14, 30, 365]) {
+        const s = String(n);
+        if (s.startsWith(valuePart)) {
+          results.push({
+            insert: `${prefix}${qualifier}${s}`,
+            label: s,
+            description: `last ${n} day${n > 1 ? "s" : ""}`,
+          });
+        }
+      }
+      break;
   }
 
   return results.slice(0, 10);
@@ -522,6 +698,14 @@ function getQualifierHint(q: string): string {
       return "card/template name";
     case "note:":
       return "note type name";
+    case "prop:":
+      return "numeric property (ease, ivl, due, reps, lapses)";
+    case "added:":
+      return "cards added in last N days";
+    case "edited:":
+      return "notes edited in last N days";
+    case "rated:":
+      return "cards reviewed in last N days";
     default:
       return "";
   }
@@ -631,6 +815,8 @@ type NoteRow = {
   templateNames: string;
   guid: string;
   indices: number[];
+  cardCreatedMs: number;
+  noteModSec: number;
 };
 
 type CardRow = {
@@ -651,6 +837,13 @@ type CardRow = {
   reps: number;
   lapses: number;
   guid: string;
+  rawEase: number | null;
+  rawIvl: number;
+  rawDue: number;
+  rawDueType: string;
+  cardCreatedMs: number;
+  noteModSec: number;
+  cardModSec: number;
 };
 
 type Row = NoteRow | CardRow;
@@ -696,6 +889,8 @@ const rows = computed<Row[]>(() => {
         templateNames: Array.from(tplNames).join(", "),
         guid,
         indices,
+        cardCreatedMs: firstCard.ankiCardId ?? 0,
+        noteModSec: firstCard.noteMod ?? 0,
       });
     }
     return result;
@@ -728,6 +923,13 @@ const rows = computed<Row[]>(() => {
       reps: sched?.reps ?? 0,
       lapses: sched?.lapses ?? 0,
       guid: card.guid,
+      rawEase: sched?.easeFactor ?? null,
+      rawIvl: sched?.ivl ?? 0,
+      rawDue: sched?.due ?? 0,
+      rawDueType: sched?.dueType ?? "position",
+      cardCreatedMs: card.ankiCardId ?? 0,
+      noteModSec: card.noteMod ?? 0,
+      cardModSec: card.cardMod ?? 0,
     });
   }
   return result;
@@ -754,14 +956,87 @@ function formatInterval(ivl: number, unit: string): string {
 
 // ── Filtering ──
 
-function matchToken(row: Row, token: SearchToken): boolean {
-  if (token.type === "negate") {
-    return !matchToken(row, token.inner);
+function compareNumeric(actual: number, op: string, target: number): boolean {
+  switch (op) {
+    case ">":
+      return actual > target;
+    case "<":
+      return actual < target;
+    case ">=":
+      return actual >= target;
+    case "<=":
+      return actual <= target;
+    case "=":
+      return actual === target;
+    case "!=":
+      return actual !== target;
+    default:
+      return false;
   }
+}
 
-  switch (token.type) {
+function getDueDaysFromNow(row: CardRow): number | null {
+  if (row.rawDueType === "position") return null;
+  if (row.rawDueType === "timestamp") {
+    return (row.rawDue - Date.now() / 1000) / 86400;
+  }
+  // dayOffset or dayLearningOffset: due is days since collection creation
+  const data = ankiDataSig.value;
+  if (!data) return null;
+  const todayDay = Math.floor((Date.now() / 1000 - data.collectionCreationTime) / 86400);
+  return row.rawDue - todayDay;
+}
+
+function matchProp(row: Row, expr: SearchLeaf & { type: "prop" }): boolean {
+  if (row.kind === "note") return false;
+  let actual: number | null;
+  switch (expr.prop) {
+    case "ease":
+      actual = row.rawEase;
+      break;
+    case "ivl":
+      actual = row.rawIvl;
+      break;
+    case "due":
+      actual = getDueDaysFromNow(row);
+      break;
+    case "reps":
+      actual = row.reps;
+      break;
+    case "lapses":
+      actual = row.lapses;
+      break;
+    default:
+      return false;
+  }
+  if (actual == null) return false;
+  return compareNumeric(actual, expr.op, expr.value);
+}
+
+function matchDateRange(row: Row, field: "added" | "edited" | "rated", days: number): boolean {
+  const cutoffMs = Date.now() - days * 86400_000;
+  switch (field) {
+    case "added":
+      return row.cardCreatedMs > 0 && row.cardCreatedMs >= cutoffMs;
+    case "edited":
+      return row.noteModSec > 0 && row.noteModSec * 1000 >= cutoffMs;
+    case "rated": {
+      if (row.kind === "note") return false;
+      return row.cardModSec > 0 && row.cardModSec * 1000 >= cutoffMs;
+    }
+  }
+}
+
+function matchExpr(row: Row, expr: SearchExpr): boolean {
+  switch (expr.type) {
+    case "negate":
+      return !matchExpr(row, expr.inner);
+    case "and":
+      return matchExpr(row, expr.left) && matchExpr(row, expr.right);
+    case "or":
+      return matchExpr(row, expr.left) || matchExpr(row, expr.right);
     case "text": {
-      const q = token.value.toLowerCase();
+      const q = expr.value.toLowerCase();
       if (!q) return true;
       for (const v of Object.values(row.fields)) {
         if (v.toLowerCase().includes(q)) return true;
@@ -773,18 +1048,18 @@ function matchToken(row: Row, token: SearchToken): boolean {
       return false;
     }
     case "deck": {
-      const v = token.value.toLowerCase();
+      const v = expr.value.toLowerCase();
       const deck = row.deck.toLowerCase();
       return deck === v || deck.startsWith(v + "::");
     }
     case "tag": {
-      const v = token.value.toLowerCase();
+      const v = expr.value.toLowerCase();
       return row.tags.some((t) => t.toLowerCase() === v || t.toLowerCase().startsWith(v + "::"));
     }
     case "is": {
       if (row.kind === "note") return false;
       const q = row.queueName;
-      switch (token.value) {
+      switch (expr.value) {
         case "new":
           return q === "new";
         case "learn":
@@ -803,20 +1078,28 @@ function matchToken(row: Row, token: SearchToken): boolean {
     }
     case "flag": {
       if (row.kind === "note") return false;
-      return row.flags === token.value;
+      return row.flags === expr.value;
     }
     case "card":
     case "note": {
-      const v = token.value.toLowerCase();
+      const v = expr.value.toLowerCase();
       if (row.kind === "card") return row.templateName.toLowerCase().includes(v);
       return row.templateNames.toLowerCase().includes(v);
     }
+    case "prop":
+      return matchProp(row, expr);
+    case "added":
+      return matchDateRange(row, "added", expr.days);
+    case "edited":
+      return matchDateRange(row, "edited", expr.days);
+    case "rated":
+      return matchDateRange(row, "rated", expr.days);
   }
 }
 
 /** Filtered + sorted rows */
 const filteredRows = computed(() => {
-  const tokens = parseSearch(searchQuery.value);
+  const expr = parseSearch(searchQuery.value);
   let result = rows.value;
 
   // Apply tag sidebar filter
@@ -827,8 +1110,8 @@ const filteredRows = computed(() => {
     );
   }
 
-  if (tokens.length > 0) {
-    result = result.filter((row) => tokens.every((token) => matchToken(row, token)));
+  if (expr) {
+    result = result.filter((row) => matchExpr(row, expr));
   }
 
   const col = sortColumn.value;
