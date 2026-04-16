@@ -111,6 +111,14 @@ const BASE_STYLES = `
   }
   .audio-container button svg { pointer-events: none; }
   audio { display: none; }
+  .io-container { position: relative; display: inline-block; max-width: 100%; }
+  .io-container img { display: block; max-width: 100%; height: auto; }
+  .io-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+  .io-mask { fill: #ffeba2; stroke: none; opacity: 0.95; }
+  .io-mask-active { fill: #ff8c00; }
+  .io-mask-reveal { fill: transparent; stroke: #4caf50; stroke-width: 2; stroke-dasharray: 6 3; }
+  .io-header { text-align: center; font-size: 1.1em; font-weight: 600; margin-bottom: 0.5rem; }
+  .io-back-extra { margin-top: 0.5rem; }
   ${TYPEANS_STYLES}
 `;
 

@@ -13,7 +13,8 @@ import {
   repositionNewCards,
 } from "../stores";
 import FindReplaceModal from "./FindReplaceModal.vue";
-import { getRenderedCardString } from "../utils/render";
+import { getRenderedCardString, replaceMediaFiles } from "../utils/render";
+import { isImageOcclusionCard, renderImageOcclusion } from "../utils/imageOcclusion";
 import { sanitizeHtmlForPreview } from "../utils/sanitize";
 import { playAudio } from "../utils/sound";
 import Button from "../design-system/components/primitives/Button.vue";
@@ -1292,6 +1293,14 @@ const selectedCard = computed(() => {
 const selectedPreviewFront = computed(() => {
   const card = selectedCard.value;
   if (!card || card.templates.length === 0) return null;
+  if (isImageOcclusionCard(card)) {
+    return sanitizeHtmlForPreview(
+      replaceMediaFiles(
+        renderImageOcclusion({ values: card.values, cardOrd: 0, isAnswer: false }),
+        mediaFilesSig.value,
+      ),
+    );
+  }
   const template = card.templates[0]!;
   return sanitizeHtmlForPreview(
     getRenderedCardString({
@@ -1305,6 +1314,14 @@ const selectedPreviewFront = computed(() => {
 const selectedPreviewBack = computed(() => {
   const card = selectedCard.value;
   if (!card || card.templates.length === 0) return null;
+  if (isImageOcclusionCard(card)) {
+    return sanitizeHtmlForPreview(
+      replaceMediaFiles(
+        renderImageOcclusion({ values: card.values, cardOrd: 0, isAnswer: true }),
+        mediaFilesSig.value,
+      ),
+    );
+  }
   const template = card.templates[0]!;
   if (!template.afmt) return null;
   const frontHtml = getRenderedCardString({

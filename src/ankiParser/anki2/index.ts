@@ -145,6 +145,7 @@ export type AnkiDB2Data = {
     guid: string;
     scheduling: CardScheduling | null;
     noteType: number; // 0=MODEL_STD, 1=MODEL_CLOZE
+    originalStockKind?: number;
     latexSvg: boolean;
     latexPre: string;
     latexPost: string;

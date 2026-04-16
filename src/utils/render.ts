@@ -369,7 +369,7 @@ function processClozeOnly(text: string, cardOrd: number): string {
  * Performs case-insensitive and NFC-normalized matching
  * Falls back to Anki's 120-byte filename truncation if no match
  */
-function replaceMediaFiles(renderedString: string, mediaFiles: Map<string, string>) {
+export function replaceMediaFiles(renderedString: string, mediaFiles: Map<string, string>) {
   if (mediaFiles.size === 0) return renderedString;
 
   // Build a normalized lookup map for case-insensitive + NFC matching
