@@ -4,7 +4,8 @@ import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import FlashCard from "./components/FlashCard.vue";
 import CardButtons from "./components/CardButtons.vue";
 import type { Answer } from "./scheduler/types";
-import { getRenderedCardString, hasTypeAnswerField, extractExpectedAnswer } from "./utils/render";
+import { getRenderedCardString, hasTypeAnswerField, extractExpectedAnswer, replaceMediaFiles } from "./utils/render";
+import { isImageOcclusionCard, renderImageOcclusion } from "./utils/imageOcclusion";
 import { renderDiffHtml } from "./utils/typeansDiff";
 import { computeDeckInfo } from "./utils/deckInfo";
 import { pushUndo } from "./undoRedo";
@@ -173,6 +174,20 @@ const renderedCard = computed(() => {
   const card = cardsSig.value[data.cardIndex];
 
   if (!template || !card) return null;
+
+  // Image occlusion cards use a dedicated renderer
+  if (isImageOcclusionCard(card)) {
+    const cardOrd = data.templateIndex;
+    const frontSideHtml = replaceMediaFiles(
+      renderImageOcclusion({ values: card.values, cardOrd, isAnswer: false }),
+      mediaFilesSig.value,
+    );
+    const backSideHtml = replaceMediaFiles(
+      renderImageOcclusion({ values: card.values, cardOrd, isAnswer: true }),
+      mediaFilesSig.value,
+    );
+    return { frontSideHtml, backSideHtml, cardCss: card.css ?? "", isTypeAnswer: false };
+  }
 
   const frontSideHtml = getRenderedCardString({
     templateString: template.qfmt,

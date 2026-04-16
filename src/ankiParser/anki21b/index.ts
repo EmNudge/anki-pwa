@@ -46,6 +46,7 @@ export type AnkiDB21bData = {
     guid: string;
     scheduling: CardScheduling | null;
     noteType: number;
+    originalStockKind?: number;
     latexSvg: boolean;
     latexPre: string;
     latexPost: string;
@@ -287,6 +288,7 @@ export function getDataFromAnki21b(db: Database): AnkiDB21bData {
           deckName: cardDeckName,
           guid: note.guid,
           noteType: noteTypeInfo?.kind ?? 0,
+          originalStockKind: noteTypeInfo?.originalStockKind ?? 0,
           latexSvg: noteTypeInfo?.latexSvg ?? false,
           latexPre: noteTypeInfo?.latexPre ?? "",
           latexPost: noteTypeInfo?.latexPost ?? "",
