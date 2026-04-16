@@ -38,6 +38,8 @@ import DeckCreator from "./components/DeckCreator.vue";
 import CardBrowser from "./components/CardBrowser.vue";
 import FindDuplicates from "./components/FindDuplicates.vue";
 import SyncPanel from "./components/SyncPanel.vue";
+import { defineAsyncComponent } from "vue";
+const StatsPanel = defineAsyncComponent(() => import("./components/StatsPanel.vue"));
 import CongratsScreen from "./components/CongratsScreen.vue";
 import SchedulerSettings from "./components/SchedulerSettings.vue";
 import FlagSettings from "./components/FlagSettings.vue";
@@ -428,6 +430,9 @@ onUnmounted(clearAutoAdvanceTimer);
 
   <!-- CREATE DECK VIEW -->
   <DeckCreator v-else-if="activeViewSig === 'create'" />
+
+  <!-- STATS VIEW -->
+  <StatsPanel v-else-if="activeViewSig === 'stats'" />
 
   <!-- SYNC VIEW -->
   <SyncPanel v-else-if="activeViewSig === 'sync'" />

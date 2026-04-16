@@ -48,7 +48,7 @@ function revokeOldMediaUrls() {
 }
 
 // View state
-export type AppView = "review" | "browse" | "create" | "sync" | "duplicates";
+export type AppView = "review" | "browse" | "create" | "sync" | "duplicates" | "stats";
 export const activeViewSig = ref<AppView>("review");
 export const reviewModeSig = ref<"deck-list" | "studying">("deck-list");
 
