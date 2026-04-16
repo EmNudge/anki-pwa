@@ -1395,6 +1395,145 @@ export async function withDbMutation(mutate: (db: import("sql.js").Database) => 
   }
 }
 
+// --- Image Occlusion Note Creation ---
+
+const BASE91_CHARS =
+  "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!#$%&()*+,-.:;<=>?@[]^_`{|}~";
+
+function generateGuid(): string {
+  let result = "";
+  for (let i = 0; i < 10; i++) {
+    result += BASE91_CHARS[Math.floor(Math.random() * BASE91_CHARS.length)];
+  }
+  return result;
+}
+
+/**
+ * Find an existing IO notetype, or create one if missing.
+ * Returns the notetype ID.
+ */
+export async function getOrCreateIONotetype(): Promise<string> {
+  const data = ankiDataSig.value;
+  if (!data) throw new Error("No deck loaded");
+
+  // Check existing notetypes for IO
+  for (const nt of data.notesTypes) {
+    if ("originalStockKind" in nt && (nt as { originalStockKind?: number }).originalStockKind === 6) {
+      return String(nt.id);
+    }
+  }
+
+  // Check by name as fallback
+  for (const nt of data.notesTypes) {
+    if ("name" in nt && (nt as { name?: string }).name?.toLowerCase().includes("image occlusion")) {
+      return String(nt.id);
+    }
+  }
+
+  // Create new IO notetype
+  let ntId = "";
+  const { createNotetype } = await import("./lib/notetypeOps");
+  await withDbMutation((db) => {
+    ntId = createNotetype(db, {
+      name: "Image Occlusion",
+      kind: 1, // cloze
+      originalStockKind: 6,
+      css: `.card {
+  font-family: arial;
+  font-size: 20px;
+  text-align: center;
+  color: black;
+  background-color: white;
+}
+`,
+      fields: [
+        { name: "Image Occlusion" },
+        { name: "Header" },
+        { name: "Back Extra" },
+        { name: "Occlusions" },
+      ],
+      templates: [
+        {
+          name: "Card 1",
+          qfmt: '{{#Image Occlusion}}<div class="io-header">{{Header}}</div>{{Image Occlusion}}{{/Image Occlusion}}',
+          afmt: '{{#Image Occlusion}}<div class="io-header">{{Header}}</div>{{Image Occlusion}}<hr id="answer"><div class="io-back-extra">{{Back Extra}}</div>{{/Image Occlusion}}',
+        },
+      ],
+    });
+  });
+
+  return ntId;
+}
+
+/**
+ * Add a new note to the current synced collection.
+ */
+export async function addNote(options: {
+  notetypeId: string;
+  deckId: string;
+  fields: Record<string, string | null>;
+  tags: string[];
+  numCards?: number;
+}): Promise<void> {
+  const input = activeDeckInputSig.value;
+  if (input?.kind !== "sqlite") throw new Error("Can only add notes to synced collections");
+
+  const { executeQueryAll } = await import("./utils/sql");
+  const db = await createDatabase(input.bytes);
+
+  try {
+    const noteId = Date.now() * 1000 + Math.floor(Math.random() * 1000);
+    const guid = generateGuid();
+    const mod = Math.floor(Date.now() / 1000);
+
+    // Get field order from DB
+    const fieldRows = executeQueryAll<{ name: string; ord: number }>(
+      db,
+      "SELECT name, ord FROM fields WHERE ntid=? ORDER BY ord",
+      [options.notetypeId] as unknown as Record<string, string>,
+    );
+
+    // Build flds string (field values joined by \x1f in field order)
+    const flds = fieldRows
+      .map((f) => options.fields[f.name] ?? "")
+      .join("\x1f");
+
+    // Sort field and checksum
+    const sfld = (options.fields[fieldRows[0]?.name ?? ""] ?? "").replace(/<[^>]*>/g, "").trim();
+    const csum = stringHash(sfld);
+
+    const tagsStr = options.tags.length > 0 ? ` ${options.tags.join(" ")} ` : "";
+
+    // Insert note
+    db.run(
+      "INSERT INTO notes (id, guid, mid, mod, usn, tags, flds, sfld, csum, flags, data) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+      [noteId, guid, options.notetypeId, mod, -1, tagsStr, flds, sfld, csum, 0, ""],
+    );
+
+    // Insert cards (one per template, or numCards for cloze)
+    const numCards = options.numCards ?? 1;
+    for (let ord = 0; ord < numCards; ord++) {
+      const cardId = noteId + ord + 1;
+      db.run(
+        "INSERT INTO cards (id, nid, did, ord, mod, usn, type, queue, due, ivl, factor, reps, lapses, left, odue, odid, flags, data) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        [cardId, noteId, options.deckId, ord, mod, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, ""],
+      );
+    }
+
+    // Persist and re-parse
+    const newBytes = new Uint8Array(db.export());
+    const cache = await caches.open("anki-cache");
+    await cache.put("/sync/collection.sqlite", new Response(new Blob([newBytes as BlobPart])));
+
+    activeDeckInputSig.value = { ...input, bytes: newBytes };
+    const { getAnkiDataFromSqlite } = await import("./ankiParser");
+    ankiDataSig.value = await getAnkiDataFromSqlite(newBytes, input.mediaFiles);
+    markDataChanged();
+  } finally {
+    db.close();
+  }
+}
+
 // --- Option Presets ---
 
 export const presetsSig = ref<OptionPreset[]>([]);

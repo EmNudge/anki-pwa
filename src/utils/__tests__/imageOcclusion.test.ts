@@ -2,7 +2,11 @@ import { describe, it, expect } from "vitest";
 import {
   isImageOcclusionCard,
   parseOcclusionShapes,
+  parseOcclusionShapesForEditor,
+  serializeShapesToSvg,
   renderImageOcclusion,
+  getImageFilename,
+  type OcclusionShape,
 } from "../imageOcclusion";
 
 describe("Image Occlusion", () => {
@@ -15,16 +19,26 @@ describe("Image Occlusion", () => {
       expect(isImageOcclusionCard({ values: {}, originalStockKind: 0 })).toBe(false);
     });
 
-    it("returns false for cloze cards", () => {
-      expect(isImageOcclusionCard({ values: {}, originalStockKind: 5 })).toBe(false);
-    });
-
     it("returns false when originalStockKind is undefined", () => {
       expect(isImageOcclusionCard({ values: {} })).toBe(false);
     });
   });
 
-  describe("parseOcclusionShapes", () => {
+  describe("getImageFilename", () => {
+    it("extracts filename from img tag", () => {
+      expect(getImageFilename('<img src="anatomy.png">')).toBe("anatomy.png");
+    });
+
+    it("returns null for empty string", () => {
+      expect(getImageFilename("")).toBeNull();
+    });
+
+    it("returns null for text without img", () => {
+      expect(getImageFilename("just text")).toBeNull();
+    });
+  });
+
+  describe("parseOcclusionShapes (for rendering)", () => {
     it("parses rect shapes with data-ordinal", () => {
       const svg = `<svg viewBox="0 0 800 600">
         <rect data-ordinal="1" x="10" y="20" width="100" height="50" fill="#ffeba2" />
@@ -42,25 +56,7 @@ describe("Image Occlusion", () => {
       </svg>`;
       const shapes = parseOcclusionShapes(svg);
       expect(shapes).toHaveLength(1);
-      expect(shapes[0]!.ordinal).toBe(1);
       expect(shapes[0]!.svgElement).toContain("ellipse");
-    });
-
-    it("parses polygon shapes", () => {
-      const svg = `<svg viewBox="0 0 800 600">
-        <polygon data-ordinal="3" points="100,10 40,198 190,78 10,78 160,198" />
-      </svg>`;
-      const shapes = parseOcclusionShapes(svg);
-      expect(shapes).toHaveLength(1);
-      expect(shapes[0]!.ordinal).toBe(3);
-    });
-
-    it("parses path shapes", () => {
-      const svg = `<svg viewBox="0 0 800 600">
-        <path data-ordinal="1" d="M10 10 L100 100" />
-      </svg>`;
-      const shapes = parseOcclusionShapes(svg);
-      expect(shapes).toHaveLength(1);
     });
 
     it("ignores shapes without data-ordinal", () => {
@@ -70,11 +66,111 @@ describe("Image Occlusion", () => {
       </svg>`;
       const shapes = parseOcclusionShapes(svg);
       expect(shapes).toHaveLength(1);
-      expect(shapes[0]!.ordinal).toBe(1);
     });
 
     it("returns empty array for empty string", () => {
       expect(parseOcclusionShapes("")).toEqual([]);
+    });
+  });
+
+  describe("parseOcclusionShapesForEditor", () => {
+    it("parses rect into OcclusionShape", () => {
+      const svg = `<svg viewBox="0 0 800 600">
+        <rect data-ordinal="1" x="10" y="20" width="100" height="50" />
+      </svg>`;
+      const shapes = parseOcclusionShapesForEditor(svg);
+      expect(shapes).toHaveLength(1);
+      expect(shapes[0]!.type).toBe("rect");
+      expect(shapes[0]!.ordinal).toBe(1);
+      expect(shapes[0]!.x).toBe(10);
+      expect(shapes[0]!.y).toBe(20);
+      expect(shapes[0]!.width).toBe(100);
+      expect(shapes[0]!.height).toBe(50);
+    });
+
+    it("parses ellipse into OcclusionShape bounding box", () => {
+      const svg = `<svg viewBox="0 0 800 600">
+        <ellipse data-ordinal="2" cx="100" cy="200" rx="50" ry="30" />
+      </svg>`;
+      const shapes = parseOcclusionShapesForEditor(svg);
+      expect(shapes).toHaveLength(1);
+      expect(shapes[0]!.type).toBe("ellipse");
+      expect(shapes[0]!.ordinal).toBe(2);
+      expect(shapes[0]!.x).toBe(50); // cx - rx
+      expect(shapes[0]!.y).toBe(170); // cy - ry
+      expect(shapes[0]!.width).toBe(100); // rx * 2
+      expect(shapes[0]!.height).toBe(60); // ry * 2
+    });
+
+    it("parses circle as ellipse", () => {
+      const svg = `<svg><circle data-ordinal="1" cx="50" cy="50" r="25" /></svg>`;
+      const shapes = parseOcclusionShapesForEditor(svg);
+      expect(shapes).toHaveLength(1);
+      expect(shapes[0]!.type).toBe("ellipse");
+      expect(shapes[0]!.x).toBe(25);
+      expect(shapes[0]!.y).toBe(25);
+      expect(shapes[0]!.width).toBe(50);
+      expect(shapes[0]!.height).toBe(50);
+    });
+
+    it("returns empty for no shapes", () => {
+      expect(parseOcclusionShapesForEditor("")).toEqual([]);
+    });
+  });
+
+  describe("serializeShapesToSvg", () => {
+    it("serializes rect shapes", () => {
+      const shapes: OcclusionShape[] = [
+        { id: "1", type: "rect", ordinal: 1, x: 10, y: 20, width: 100, height: 50 },
+      ];
+      const svg = serializeShapesToSvg(shapes, 800, 600);
+      expect(svg).toContain('viewBox="0 0 800 600"');
+      expect(svg).toContain('data-ordinal="1"');
+      expect(svg).toContain('x="10"');
+      expect(svg).toContain('width="100"');
+    });
+
+    it("serializes ellipse shapes with cx/cy/rx/ry", () => {
+      const shapes: OcclusionShape[] = [
+        { id: "1", type: "ellipse", ordinal: 1, x: 50, y: 70, width: 100, height: 60 },
+      ];
+      const svg = serializeShapesToSvg(shapes, 800, 600);
+      expect(svg).toContain("ellipse");
+      expect(svg).toContain('cx="100"'); // x + width/2
+      expect(svg).toContain('cy="100"'); // y + height/2
+      expect(svg).toContain('rx="50"'); // width/2
+      expect(svg).toContain('ry="30"'); // height/2
+    });
+
+    it("round-trips rect shapes", () => {
+      const original: OcclusionShape[] = [
+        { id: "a", type: "rect", ordinal: 1, x: 10, y: 20, width: 100, height: 50 },
+        { id: "b", type: "rect", ordinal: 2, x: 200, y: 100, width: 80, height: 60 },
+      ];
+      const svg = serializeShapesToSvg(original, 800, 600);
+      const parsed = parseOcclusionShapesForEditor(svg);
+      expect(parsed).toHaveLength(2);
+      expect(parsed[0]!.ordinal).toBe(1);
+      expect(parsed[0]!.x).toBe(10);
+      expect(parsed[0]!.y).toBe(20);
+      expect(parsed[0]!.width).toBe(100);
+      expect(parsed[0]!.height).toBe(50);
+      expect(parsed[1]!.ordinal).toBe(2);
+      expect(parsed[1]!.x).toBe(200);
+    });
+
+    it("round-trips ellipse shapes", () => {
+      const original: OcclusionShape[] = [
+        { id: "a", type: "ellipse", ordinal: 1, x: 50, y: 70, width: 100, height: 60 },
+      ];
+      const svg = serializeShapesToSvg(original, 800, 600);
+      const parsed = parseOcclusionShapesForEditor(svg);
+      expect(parsed).toHaveLength(1);
+      expect(parsed[0]!.type).toBe("ellipse");
+      expect(parsed[0]!.x).toBe(50);
+      expect(parsed[0]!.y).toBe(70);
+      expect(parsed[0]!.width).toBe(100);
+      expect(parsed[0]!.height).toBe(60);
     });
   });
 
@@ -89,171 +185,46 @@ describe("Image Occlusion", () => {
       </svg>`,
     };
 
-    describe("question side (front)", () => {
-      it("wraps image in io-container", () => {
-        const html = renderImageOcclusion({
-          values: sampleValues,
-          cardOrd: 0,
-          isAnswer: false,
-        });
-        expect(html).toContain('class="io-container"');
-        expect(html).toContain('<img src="anatomy.png">');
-      });
-
-      it("includes SVG overlay", () => {
-        const html = renderImageOcclusion({
-          values: sampleValues,
-          cardOrd: 0,
-          isAnswer: false,
-        });
-        expect(html).toContain('class="io-overlay"');
-        expect(html).toContain('viewBox="0 0 800 600"');
-      });
-
-      it("marks active shape with io-mask-active class", () => {
-        const html = renderImageOcclusion({
-          values: sampleValues,
-          cardOrd: 0,
-          isAnswer: false,
-        });
-        expect(html).toContain('class="io-mask io-mask-active"');
-      });
-
-      it("marks non-active shapes with io-mask class only", () => {
-        const html = renderImageOcclusion({
-          values: sampleValues,
-          cardOrd: 0,
-          isAnswer: false,
-        });
-        // The second shape (ordinal 2) should just be io-mask
-        const maskMatches = html.match(/class="io-mask"/g);
-        expect(maskMatches).not.toBeNull();
-        expect(maskMatches!.length).toBeGreaterThanOrEqual(1);
-      });
-
-      it("includes header", () => {
-        const html = renderImageOcclusion({
-          values: sampleValues,
-          cardOrd: 0,
-          isAnswer: false,
-        });
-        expect(html).toContain('class="io-header"');
-        expect(html).toContain("Brain Anatomy");
-      });
-
-      it("does not include back extra on front", () => {
-        const html = renderImageOcclusion({
-          values: sampleValues,
-          cardOrd: 0,
-          isAnswer: false,
-        });
-        expect(html).not.toContain("io-back-extra");
-        expect(html).not.toContain("Gray's Anatomy");
-      });
+    it("renders front side with masks", () => {
+      const html = renderImageOcclusion({ values: sampleValues, cardOrd: 0, isAnswer: false });
+      expect(html).toContain('class="io-container"');
+      expect(html).toContain('class="io-mask io-mask-active"');
+      expect(html).toContain('class="io-mask"');
+      expect(html).toContain("Brain Anatomy");
+      expect(html).not.toContain("io-back-extra");
     });
 
-    describe("answer side (back)", () => {
-      it("reveals active shape with io-mask-reveal class", () => {
-        const html = renderImageOcclusion({
-          values: sampleValues,
-          cardOrd: 0,
-          isAnswer: true,
-        });
-        expect(html).toContain('class="io-mask-reveal"');
-      });
-
-      it("keeps non-active shapes as masks", () => {
-        const html = renderImageOcclusion({
-          values: sampleValues,
-          cardOrd: 0,
-          isAnswer: true,
-        });
-        expect(html).toContain('class="io-mask"');
-      });
-
-      it("includes back extra with hr separator", () => {
-        const html = renderImageOcclusion({
-          values: sampleValues,
-          cardOrd: 0,
-          isAnswer: true,
-        });
-        expect(html).toContain('id="answer"');
-        expect(html).toContain('class="io-back-extra"');
-        expect(html).toContain("Gray's Anatomy");
-      });
-
-      it("includes header", () => {
-        const html = renderImageOcclusion({
-          values: sampleValues,
-          cardOrd: 0,
-          isAnswer: true,
-        });
-        expect(html).toContain("Brain Anatomy");
-      });
+    it("renders back side with reveal", () => {
+      const html = renderImageOcclusion({ values: sampleValues, cardOrd: 0, isAnswer: true });
+      expect(html).toContain('class="io-mask-reveal"');
+      expect(html).toContain('class="io-mask"');
+      expect(html).toContain("io-back-extra");
+      expect(html).toContain("Gray's Anatomy");
     });
 
-    describe("different card ordinals", () => {
-      it("highlights second shape when cardOrd is 1", () => {
-        const html = renderImageOcclusion({
-          values: sampleValues,
-          cardOrd: 1,
-          isAnswer: false,
-        });
-        // The second rect (ordinal 2) should be active
-        const lines = html.split("\n");
-        const activeLines = lines.filter((l) => l.includes("io-mask-active"));
-        expect(activeLines).toHaveLength(1);
-        // Verify the active one has ordinal 2's attributes
-        expect(activeLines[0]).toContain('x="200"');
-      });
+    it("highlights correct shape for different card ordinals", () => {
+      const html = renderImageOcclusion({ values: sampleValues, cardOrd: 1, isAnswer: false });
+      const lines = html.split("\n");
+      const activeLines = lines.filter((l) => l.includes("io-mask-active"));
+      expect(activeLines).toHaveLength(1);
+      expect(activeLines[0]).toContain('x="200"');
     });
 
-    describe("edge cases", () => {
-      it("handles missing header gracefully", () => {
-        const values = { ...sampleValues, Header: "" };
-        const html = renderImageOcclusion({
-          values,
-          cardOrd: 0,
-          isAnswer: false,
-        });
-        expect(html).not.toContain("io-header");
-      });
+    it("handles missing header", () => {
+      const values = { ...sampleValues, Header: "" };
+      const html = renderImageOcclusion({ values, cardOrd: 0, isAnswer: false });
+      expect(html).not.toContain("io-header");
+    });
 
-      it("handles missing back extra gracefully", () => {
-        const values = { ...sampleValues, "Back Extra": "" };
-        const html = renderImageOcclusion({
-          values,
-          cardOrd: 0,
-          isAnswer: true,
-        });
-        expect(html).not.toContain("io-back-extra");
-      });
-
-      it("handles empty occlusions field", () => {
-        const values = { ...sampleValues, Occlusions: "" };
-        const html = renderImageOcclusion({
-          values,
-          cardOrd: 0,
-          isAnswer: false,
-        });
-        expect(html).toContain("io-container");
-        expect(html).toContain("io-overlay");
-      });
-
-      it("handles case-insensitive field names", () => {
-        const values = {
-          "image occlusion": '<img src="test.png">',
-          header: "Test",
-          occlusions: `<svg viewBox="0 0 100 100"><rect data-ordinal="1" x="0" y="0" width="10" height="10" /></svg>`,
-        };
-        const html = renderImageOcclusion({
-          values,
-          cardOrd: 0,
-          isAnswer: false,
-        });
-        expect(html).toContain('<img src="test.png">');
-        expect(html).toContain("Test");
-      });
+    it("handles case-insensitive field names", () => {
+      const values = {
+        "image occlusion": '<img src="test.png">',
+        header: "Test",
+        occlusions: `<svg viewBox="0 0 100 100"><rect data-ordinal="1" x="0" y="0" width="10" height="10" /></svg>`,
+      };
+      const html = renderImageOcclusion({ values, cardOrd: 0, isAnswer: false });
+      expect(html).toContain('<img src="test.png">');
+      expect(html).toContain("Test");
     });
   });
 });

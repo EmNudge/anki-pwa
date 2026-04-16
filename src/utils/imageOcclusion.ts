@@ -1,7 +1,6 @@
 /**
- * Image Occlusion rendering utilities.
+ * Image Occlusion utilities for rendering and editing.
  *
- * Handles detection and rendering of Anki image occlusion notes.
  * IO notes have originalStockKind === 6 and contain:
  *   - "Image Occlusion" field: <img> tag referencing the base image
  *   - "Occlusions" field: SVG markup with shapes having data-ordinal attributes
@@ -11,30 +10,40 @@
 
 const ORIGINAL_STOCK_KIND_IMAGE_OCCLUSION = 6;
 
-/** Known field names for IO notes (case-insensitive lookup). */
-const IO_FIELD_NAMES = {
+export const IO_FIELD_NAMES = {
   image: "Image Occlusion",
   header: "Header",
   backExtra: "Back Extra",
   occlusions: "Occlusions",
 } as const;
 
+// --- Types ---
+
+export type OcclusionShape = {
+  id: string;
+  type: "rect" | "ellipse";
+  ordinal: number; // 1-based, maps to cloze number
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
 type CardLike = {
   values: Record<string, string | null>;
   originalStockKind?: number;
 };
 
+// --- Detection ---
+
 export function isImageOcclusionCard(card: CardLike): boolean {
   return card.originalStockKind === ORIGINAL_STOCK_KIND_IMAGE_OCCLUSION;
 }
 
-/**
- * Find a field value by name, case-insensitive.
- */
+// --- Field helpers ---
+
 function getField(values: Record<string, string | null>, name: string): string {
-  // Try exact match first
   if (values[name] != null) return values[name]!;
-  // Case-insensitive fallback
   const lower = name.toLowerCase();
   for (const [key, value] of Object.entries(values)) {
     if (key.toLowerCase() === lower && value != null) return value;
@@ -43,18 +52,21 @@ function getField(values: Record<string, string | null>, name: string): string {
 }
 
 /**
- * Parse shape elements from the Occlusions SVG field.
- * Returns an array of shape descriptors with their ordinals.
+ * Extract the image filename from the Image Occlusion field HTML.
  */
+export function getImageFilename(imageFieldHtml: string): string | null {
+  const match = imageFieldHtml.match(/src="([^"]+)"/);
+  return match ? match[1]! : null;
+}
+
+// --- Shape parsing (for rendering) ---
+
 export function parseOcclusionShapes(
   svgString: string,
 ): { ordinal: number; svgElement: string }[] {
   if (!svgString.trim()) return [];
 
   const shapes: { ordinal: number; svgElement: string }[] = [];
-
-  // Match SVG shape elements with data-ordinal attributes
-  // Supports: rect, ellipse, circle, polygon, path
   const shapeRegex =
     /<(rect|ellipse|circle|polygon|path)\b([^>]*?)\/?>(?:<\/\1>)?/gi;
 
@@ -62,11 +74,8 @@ export function parseOcclusionShapes(
   while ((match = shapeRegex.exec(svgString)) !== null) {
     const fullElement = match[0];
     const attrs = match[2] ?? "";
-
-    // Extract ordinal from data-ordinal attribute
     const ordinalMatch = attrs.match(/data-ordinal="(\d+)"/);
     if (!ordinalMatch) continue;
-
     const ordinal = parseInt(ordinalMatch[1]!, 10);
     shapes.push({ ordinal, svgElement: fullElement });
   }
@@ -74,21 +83,113 @@ export function parseOcclusionShapes(
   return shapes;
 }
 
+// --- Shape parsing (for editor) ---
+
+let shapeIdCounter = 0;
+
+function generateShapeId(): string {
+  return `shape-${Date.now()}-${++shapeIdCounter}`;
+}
+
 /**
- * Extract the viewBox from the Occlusions SVG, or return a default.
+ * Parse SVG occlusion data into editable OcclusionShape objects.
  */
+export function parseOcclusionShapesForEditor(svgString: string): OcclusionShape[] {
+  if (!svgString.trim()) return [];
+
+  const shapes: OcclusionShape[] = [];
+  const shapeRegex =
+    /<(rect|ellipse|circle|polygon|path)\b([^>]*?)\/?>(?:<\/\1>)?/gi;
+
+  let match;
+  while ((match = shapeRegex.exec(svgString)) !== null) {
+    const tag = match[1]!.toLowerCase();
+    const attrs = match[2] ?? "";
+
+    const ordinalMatch = attrs.match(/data-ordinal="(\d+)"/);
+    if (!ordinalMatch) continue;
+    const ordinal = parseInt(ordinalMatch[1]!, 10);
+
+    if (tag === "rect") {
+      const x = parseAttr(attrs, "x");
+      const y = parseAttr(attrs, "y");
+      const w = parseAttr(attrs, "width");
+      const h = parseAttr(attrs, "height");
+      shapes.push({ id: generateShapeId(), type: "rect", ordinal, x, y, width: w, height: h });
+    } else if (tag === "ellipse") {
+      const cx = parseAttr(attrs, "cx");
+      const cy = parseAttr(attrs, "cy");
+      const rx = parseAttr(attrs, "rx");
+      const ry = parseAttr(attrs, "ry");
+      shapes.push({
+        id: generateShapeId(),
+        type: "ellipse",
+        ordinal,
+        x: cx - rx,
+        y: cy - ry,
+        width: rx * 2,
+        height: ry * 2,
+      });
+    } else if (tag === "circle") {
+      const cx = parseAttr(attrs, "cx");
+      const cy = parseAttr(attrs, "cy");
+      const r = parseAttr(attrs, "r");
+      shapes.push({
+        id: generateShapeId(),
+        type: "ellipse",
+        ordinal,
+        x: cx - r,
+        y: cy - r,
+        width: r * 2,
+        height: r * 2,
+      });
+    }
+    // polygon and path are read-only for now (rendered but not editable)
+  }
+
+  return shapes;
+}
+
+function parseAttr(attrs: string, name: string): number {
+  const match = attrs.match(new RegExp(`${name}="([^"]+)"`));
+  return match ? parseFloat(match[1]!) : 0;
+}
+
+// --- Shape serialization ---
+
+/**
+ * Serialize OcclusionShape array to SVG string matching Anki desktop format.
+ */
+export function serializeShapesToSvg(
+  shapes: OcclusionShape[],
+  imageWidth: number,
+  imageHeight: number,
+): string {
+  const elements = shapes.map((shape) => {
+    if (shape.type === "ellipse") {
+      const cx = shape.x + shape.width / 2;
+      const cy = shape.y + shape.height / 2;
+      const rx = shape.width / 2;
+      const ry = shape.height / 2;
+      return `<ellipse data-ordinal="${shape.ordinal}" cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" fill="#ffeba2" fill-opacity="1" stroke="#2d2d2d" stroke-width="1"/>`;
+    }
+    return `<rect data-ordinal="${shape.ordinal}" x="${shape.x}" y="${shape.y}" width="${shape.width}" height="${shape.height}" fill="#ffeba2" fill-opacity="1" stroke="#2d2d2d" stroke-width="1"/>`;
+  });
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${imageWidth} ${imageHeight}">\n  ${elements.join("\n  ")}\n</svg>`;
+}
+
+// --- SVG viewBox extraction ---
+
 function extractViewBox(svgString: string): string | null {
   const match = svgString.match(/viewBox="([^"]+)"/);
   return match ? match[1]! : null;
 }
 
+// --- Rendering ---
+
 /**
- * Render an image occlusion card to HTML.
- *
- * @param values - The card field values
- * @param cardOrd - The 0-based card ordinal (determines which shape is active)
- * @param isAnswer - Whether rendering the answer (back) side
- * @returns HTML string for the card content
+ * Render an image occlusion card to HTML for review.
  */
 export function renderImageOcclusion({
   values,
@@ -104,17 +205,15 @@ export function renderImageOcclusion({
   const backExtra = getField(values, IO_FIELD_NAMES.backExtra);
   const occlusionsSvg = getField(values, IO_FIELD_NAMES.occlusions);
 
-  const activeOrdinal = cardOrd + 1; // Anki ordinals are 1-based
+  const activeOrdinal = cardOrd + 1;
   const shapes = parseOcclusionShapes(occlusionsSvg);
   const viewBox = extractViewBox(occlusionsSvg);
 
-  // Build the SVG overlay with shapes
   const svgShapes = shapes
     .map(({ ordinal, svgElement }) => {
       const isActive = ordinal === activeOrdinal;
 
       if (isAnswer) {
-        // Answer side: active shape gets reveal styling, others stay as masks
         if (isActive) {
           return svgElement
             .replace(/class="[^"]*"/, "")
@@ -124,7 +223,6 @@ export function renderImageOcclusion({
           .replace(/class="[^"]*"/, "")
           .replace(/<(rect|ellipse|circle|polygon|path)\b/, `<$1 class="io-mask"`);
       } else {
-        // Question side: all shapes shown as masks, active one highlighted
         const cssClass = isActive ? "io-mask io-mask-active" : "io-mask";
         return svgElement
           .replace(/class="[^"]*"/, "")

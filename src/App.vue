@@ -60,11 +60,13 @@ import Tooltip from "./design-system/components/primitives/Tooltip.vue";
 import { markDataChanged, startAutoSync } from "./lib/autoSync";
 import { startAutoBackup } from "./backup/autoBackup";
 import NoteEditModal from "./components/NoteEditModal.vue";
-import { updateNote } from "./stores";
+import ImageOcclusionNoteEditor from "./components/ImageOcclusionNoteEditor.vue";
+import { updateNote, isSyncedCollection, addNote, getOrCreateIONotetype, addMediaToCache, getActiveDeckId } from "./stores";
 
 const activeSide = ref<"front" | "back">("front");
 const reviewStartTime = ref<number>(Date.now());
 const editModalOpen = ref(false);
+const ioCreateModalOpen = ref(false);
 const shortcutsModalOpen = ref(false);
 const typedAnswer = ref("");
 
@@ -286,6 +288,40 @@ async function handleNoteSave(payload: { fields: Record<string, string | null>; 
   editModalOpen.value = false;
 }
 
+async function handleIONoteCreate(payload: { fields: Record<string, string | null>; tags: string[]; imageFile?: File }) {
+  try {
+    // Cache image file if provided
+    if (payload.imageFile) {
+      const imgField = payload.fields["Image Occlusion"] ?? "";
+      const match = imgField.match(/src="([^"]+)"/);
+      const filename = match?.[1];
+      if (filename) {
+        await addMediaToCache(new Map([[filename, payload.imageFile]]));
+      }
+    }
+
+    const ntId = await getOrCreateIONotetype();
+    const deckId = getActiveDeckId();
+
+    // Count shapes to determine number of cards
+    const occSvg = payload.fields.Occlusions ?? "";
+    const ordinals = [...occSvg.matchAll(/data-ordinal="(\d+)"/g)].map((m) => parseInt(m[1]!));
+    const numCards = ordinals.length > 0 ? Math.max(...ordinals) : 1;
+
+    await addNote({
+      notetypeId: ntId,
+      deckId,
+      fields: payload.fields,
+      tags: payload.tags,
+      numCards,
+    });
+
+    ioCreateModalOpen.value = false;
+  } catch (err) {
+    console.error("Failed to create IO note:", err);
+  }
+}
+
 // Handle 'E' key for edit - only on front side to avoid conflict with 'Easy' answer
 function handleEditKeydown(e: KeyboardEvent) {
   if (
@@ -504,6 +540,12 @@ onUnmounted(clearAutoAdvanceTimer);
             </button>
           </Tooltip>
           <span>{{ selectedDeckName }}</span>
+          <button
+            v-if="isSyncedCollection()"
+            class="deck-info-btn io-add-btn"
+            title="Add Image Occlusion Note"
+            @click="ioCreateModalOpen = true"
+          >+IO</button>
         </div>
         <FlashCard
           :active-side="activeSide"
@@ -576,6 +618,21 @@ onUnmounted(clearAutoAdvanceTimer);
     @close="editModalOpen = false"
     @save="handleNoteSave"
   />
+
+  <Modal
+    :is-open="ioCreateModalOpen"
+    title="New Image Occlusion"
+    size="xl"
+    @close="ioCreateModalOpen = false"
+  >
+    <ImageOcclusionNoteEditor
+      :card="null"
+      :media-files="mediaFilesSig"
+      :is-new="true"
+      @save="handleIONoteCreate"
+      @close="ioCreateModalOpen = false"
+    />
+  </Modal>
 
   <Modal
     :is-open="shortcutsModalOpen"
@@ -765,6 +822,13 @@ main {
 .deck-info-btn:hover {
   color: var(--color-text-primary);
   background: var(--color-surface-hover);
+}
+
+.io-add-btn {
+  margin-left: auto;
+  padding: 2px 6px;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
 }
 
 .deck-info-content {
