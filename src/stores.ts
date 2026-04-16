@@ -59,6 +59,12 @@ export const selectedDeckIdSig = ref<string | null>(null);
 const ankiCachePromise = caches.open("anki-cache");
 const sampleDeckIds = new Set(sampleDecks.map((deck) => deck.id));
 const activeDeckInputSig = shallowRef<DeckInput | null>(null);
+
+/** Returns the current SQLite deck bytes if available, or null. */
+export function getActiveSqliteBytes(): Uint8Array | null {
+  const input = activeDeckInputSig.value;
+  return input?.kind === "sqlite" ? input.bytes : null;
+}
 export const cachedFilesSig = ref<CachedFileEntry[]>(readCachedFiles());
 export const activeDeckSourceIdSig = ref<string | null>(null);
 
@@ -476,6 +482,7 @@ export const currentReviewCardSig = shallowRef<ReviewCard | null>(null);
 
 export const schedulerSettingsModalOpenSig = ref(false);
 export const flagSettingsModalOpenSig = ref(false);
+export const notetypeManagerOpenSig = ref(false);
 /** The deck ID whose settings are being edited in the modal */
 export const settingsTargetDeckIdSig = ref<string | null>(null);
 /** The deck tree node whose settings are being edited */
@@ -1355,6 +1362,33 @@ export async function updateNote(
 
     // Update in-place without triggering re-parse
     activeDeckInputSig.value = { ...input, bytes: newBytes };
+    markDataChanged();
+  } finally {
+    db.close();
+  }
+}
+
+// --- Notetype Management ---
+
+/**
+ * Open the DB from current deck input, run a mutation callback, then persist and re-parse.
+ * This is the standard pattern for all notetype (and other schema) mutations.
+ */
+export async function withDbMutation(mutate: (db: import("sql.js").Database) => void): Promise<void> {
+  const input = activeDeckInputSig.value;
+  if (input?.kind !== "sqlite") return;
+
+  const db = await createDatabase(input.bytes);
+  try {
+    mutate(db);
+
+    const newBytes = new Uint8Array(db.export());
+    const cache = await caches.open("anki-cache");
+    await cache.put("/sync/collection.sqlite", new Response(new Blob([newBytes as BlobPart])));
+
+    activeDeckInputSig.value = { ...input, bytes: newBytes };
+    const { getAnkiDataFromSqlite } = await import("./ankiParser");
+    ankiDataSig.value = await getAnkiDataFromSqlite(newBytes, input.mediaFiles);
     markDataChanged();
   } finally {
     db.close();
