@@ -77,6 +77,7 @@ export function getTemplatesForNotetype(db: Database, ntid: string): TemplateRow
 interface CreateNotetypeOptions {
   name: string;
   kind?: number; // 0=normal, 1=cloze
+  originalStockKind?: number; // 6=image occlusion
   css?: string;
   fields: { name: string; config?: Partial<Anki21bFieldConfig> }[];
   templates: { name: string; qfmt: string; afmt: string }[];
@@ -89,6 +90,7 @@ export function createNotetype(db: Database, options: CreateNotetypeOptions): st
 
   const configBlob = encodeNotesTypeConfig({
     kind: options.kind ?? 0,
+    originalStockKind: options.originalStockKind ?? 0,
     css: options.css ?? ".card {\n  font-family: arial;\n  font-size: 20px;\n  text-align: center;\n  color: black;\n  background-color: white;\n}\n",
   });
 

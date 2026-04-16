@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { ref, computed, watch } from "vue";
 import Modal from "../design-system/components/primitives/Modal.vue";
 import Button from "../design-system/components/primitives/Button.vue";
 import TiptapEditor from "./TiptapEditor.vue";
+import ImageOcclusionNoteEditor from "./ImageOcclusionNoteEditor.vue";
 import type { AnkiDB2Data } from "../ankiParser/anki2";
+import { IO_FIELD_NAMES } from "../utils/imageOcclusion";
 
 type Card = AnkiDB2Data["cards"][number];
 
@@ -21,6 +23,15 @@ const emit = defineEmits<{
 const editFields = ref<Record<string, string>>({});
 const editTags = ref<string[]>([]);
 const newTagInput = ref("");
+
+const isIONote = computed(() => {
+  if (!props.card) return false;
+  const keys = Object.keys(props.card.values).map((k) => k.toLowerCase());
+  return (
+    keys.includes(IO_FIELD_NAMES.image.toLowerCase()) &&
+    keys.includes(IO_FIELD_NAMES.occlusions.toLowerCase())
+  );
+});
 
 watch(
   () => props.isOpen,
@@ -66,39 +77,51 @@ function handleSave() {
 </script>
 
 <template>
-  <Modal :is-open="isOpen" title="Edit Note" size="lg" @close="emit('close')">
-    <div class="edit-form">
-      <div v-for="(val, key) in editFields" :key="key" class="field-group">
-        <label class="field-label">{{ key }}</label>
-        <TiptapEditor
-          v-model="editFields[key]"
-          :media-files="mediaFiles"
-          :field-description="card?.fieldDescriptions?.[key as string]"
-        />
-      </div>
+  <Modal :is-open="isOpen" :title="isIONote ? 'Edit Image Occlusion' : 'Edit Note'" :size="isIONote ? 'xl' : 'lg'" @close="emit('close')">
+    <!-- Image Occlusion editor -->
+    <ImageOcclusionNoteEditor
+      v-if="isIONote"
+      :card="card"
+      :media-files="mediaFiles"
+      @save="(payload) => emit('save', payload)"
+      @close="emit('close')"
+    />
 
-      <div class="tags-section">
-        <label class="field-label">Tags</label>
-        <div class="tags-list">
-          <span v-for="(tag, i) in editTags" :key="tag" class="tag-badge">
-            {{ tag }}
-            <button class="tag-remove" @click="removeTag(i)">&times;</button>
-          </span>
-        </div>
-        <div class="tag-add">
-          <input
-            v-model="newTagInput"
-            type="text"
-            class="tag-input"
-            placeholder="Add tag..."
-            @keydown="handleTagKeydown"
+    <!-- Standard note editor -->
+    <template v-else>
+      <div class="edit-form">
+        <div v-for="(val, key) in editFields" :key="key" class="field-group">
+          <label class="field-label">{{ key }}</label>
+          <TiptapEditor
+            v-model="editFields[key]"
+            :media-files="mediaFiles"
+            :field-description="card?.fieldDescriptions?.[key as string]"
           />
-          <Button variant="secondary" size="sm" @click="addTag">Add</Button>
+        </div>
+
+        <div class="tags-section">
+          <label class="field-label">Tags</label>
+          <div class="tags-list">
+            <span v-for="(tag, i) in editTags" :key="tag" class="tag-badge">
+              {{ tag }}
+              <button class="tag-remove" @click="removeTag(i)">&times;</button>
+            </span>
+          </div>
+          <div class="tag-add">
+            <input
+              v-model="newTagInput"
+              type="text"
+              class="tag-input"
+              placeholder="Add tag..."
+              @keydown="handleTagKeydown"
+            />
+            <Button variant="secondary" size="sm" @click="addTag">Add</Button>
+          </div>
         </div>
       </div>
-    </div>
+    </template>
 
-    <template #footer>
+    <template v-if="!isIONote" #footer>
       <Button variant="secondary" @click="emit('close')">Cancel</Button>
       <Button variant="primary" @click="handleSave">Save</Button>
     </template>
