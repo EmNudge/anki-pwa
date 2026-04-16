@@ -43,6 +43,7 @@ import { defineAsyncComponent } from "vue";
 const StatsPanel = defineAsyncComponent(() => import("./components/StatsPanel.vue"));
 const NoteTypeManager = defineAsyncComponent(() => import("./components/NoteTypeManager.vue"));
 const BackupPanel = defineAsyncComponent(() => import("./components/BackupPanel.vue"));
+const DatabaseCheckPanel = defineAsyncComponent(() => import("./components/DatabaseCheckPanel.vue"));
 import CongratsScreen from "./components/CongratsScreen.vue";
 import SchedulerSettings from "./components/SchedulerSettings.vue";
 import FlagSettings from "./components/FlagSettings.vue";
@@ -444,6 +445,9 @@ onUnmounted(clearAutoAdvanceTimer);
 
   <!-- BACKUP VIEW -->
   <BackupPanel v-else-if="activeViewSig === 'backup'" />
+
+  <!-- DATABASE CHECK VIEW -->
+  <DatabaseCheckPanel v-else-if="activeViewSig === 'check-db'" />
 
   <!-- REVIEW VIEW: deck list or studying -->
   <FileLibrary v-else-if="reviewModeSig === 'deck-list'" />
