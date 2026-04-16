@@ -425,6 +425,29 @@ class ReviewDB {
   }
 
   /**
+   * Get all cards across all decks.
+   */
+  async getAllCards(): Promise<CardReviewState[]> {
+    return this.run(["cards"], "readonly", (tx) => tx.objectStore("cards").getAll());
+  }
+
+  /**
+   * Get all review logs within a timestamp range using the "date" index.
+   */
+  async getAllReviewLogsInRange(startMs: number, endMs: number): Promise<StoredReviewLog[]> {
+    return this.run(["reviewLogs"], "readonly", (tx) =>
+      tx.objectStore("reviewLogs").index("date").getAll(IDBKeyRange.bound(startMs, endMs)),
+    );
+  }
+
+  /**
+   * Get all daily stats entries.
+   */
+  async getAllDailyStats(): Promise<DailyStats[]> {
+    return this.run(["dailyStats"], "readonly", (tx) => tx.objectStore("dailyStats").getAll());
+  }
+
+  /**
    * Clear all review data (for testing or reset)
    */
   async clearAll(): Promise<void> {
