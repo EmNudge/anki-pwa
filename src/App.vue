@@ -25,6 +25,7 @@ import {
   schedulerSettingsModalOpenSig,
   schedulerSettingsSig,
   flagSettingsModalOpenSig,
+  notetypeManagerOpenSig,
   selectedCardSig,
   selectedDeckIdSig,
   selectedTemplateSig,
@@ -40,6 +41,7 @@ import FindDuplicates from "./components/FindDuplicates.vue";
 import SyncPanel from "./components/SyncPanel.vue";
 import { defineAsyncComponent } from "vue";
 const StatsPanel = defineAsyncComponent(() => import("./components/StatsPanel.vue"));
+const NoteTypeManager = defineAsyncComponent(() => import("./components/NoteTypeManager.vue"));
 import CongratsScreen from "./components/CongratsScreen.vue";
 import SchedulerSettings from "./components/SchedulerSettings.vue";
 import FlagSettings from "./components/FlagSettings.vue";
@@ -486,6 +488,8 @@ onUnmounted(clearAutoAdvanceTimer);
   />
 
   <FlagSettings :is-open="flagSettingsModalOpenSig" @close="flagSettingsModalOpenSig = false" />
+
+  <NoteTypeManager :is-open="notetypeManagerOpenSig" @close="notetypeManagerOpenSig = false" />
 
   <Modal
     :is-open="deckInfoModalOpen"

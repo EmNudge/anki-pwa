@@ -53,7 +53,7 @@ type Anki21bNotesTypeConfig = {
   targetDeckIdUnused: number;
 };
 
-function parseNotesTypeConfigProto(proto: Uint8Array): Anki21bNotesTypeConfig {
+export function parseNotesTypeConfigProto(proto: Uint8Array): Anki21bNotesTypeConfig {
   const root = getProtoRoot("notestype", notesTypeProto);
   const NotesTypeConfig = root.lookupType("NotesTypeConfig");
 
@@ -82,7 +82,7 @@ export function parseTemplatesProto(proto: Uint8Array): Anki21bTemplate {
   }) as Anki21bTemplate;
 }
 
-type Anki21bFieldConfig = {
+export type Anki21bFieldConfig = {
   sticky: boolean;
   rtl: boolean;
   fontName: string;
@@ -181,4 +181,65 @@ export function parseDeckConfigProto(proto: Uint8Array): Anki21bDeckConfig {
     longs: Number,
     defaults: true,
   }) as Anki21bDeckConfig;
+}
+
+// --- Protobuf encode functions ---
+
+export function encodeNotesTypeConfig(config: Partial<Anki21bNotesTypeConfig>): Uint8Array {
+  const root = getProtoRoot("notestype", notesTypeProto);
+  const NotesTypeConfig = root.lookupType("NotesTypeConfig");
+  const message = NotesTypeConfig.create({
+    kind: config.kind ?? 0,
+    sortFieldIdx: config.sortFieldIdx ?? 0,
+    css: config.css ?? "",
+    targetDeckIdUnused: config.targetDeckIdUnused ?? 0,
+    latexPre: config.latexPre ?? "",
+    latexPost: config.latexPost ?? "",
+    latexSvg: config.latexSvg ?? false,
+    reqs: config.reqs ?? [],
+    originalStockKind: config.originalStockKind ?? 0,
+    originalId: config.originalId ?? 0,
+    other: new Uint8Array(),
+  });
+  return NotesTypeConfig.encode(message).finish();
+}
+
+export function encodeFieldConfig(config: Partial<Anki21bFieldConfig>): Uint8Array {
+  const root = getProtoRoot("field", fieldConfigProto);
+  const FieldConfig = root.lookupType("FieldConfig");
+  return FieldConfig.encode({
+    sticky: config.sticky ?? false,
+    rtl: config.rtl ?? false,
+    fontName: config.fontName ?? "Arial",
+    fontSize: config.fontSize ?? 20,
+    description: config.description ?? "",
+    plainText: config.plainText ?? false,
+    collapsed: config.collapsed ?? false,
+    excludeFromSearch: config.excludeFromSearch ?? false,
+    preventDeletion: config.preventDeletion ?? false,
+    other: new Uint8Array(),
+  }).finish();
+}
+
+export function encodeTemplateConfig(config: {
+  qFormat: string;
+  aFormat: string;
+  qFormatBrowser?: string;
+  aFormatBrowser?: string;
+  targetDeckId?: number;
+  browserFontName?: string;
+  browserFontSize?: number;
+}): Uint8Array {
+  const root = getProtoRoot("templates", templatesProto);
+  const TemplateConfig = root.lookupType("TemplateConfig");
+  return TemplateConfig.encode({
+    qFormat: config.qFormat,
+    aFormat: config.aFormat,
+    qFormatBrowser: config.qFormatBrowser ?? "",
+    aFormatBrowser: config.aFormatBrowser ?? "",
+    targetDeckId: config.targetDeckId ?? 0,
+    browserFontName: config.browserFontName ?? "",
+    browserFontSize: config.browserFontSize ?? 0,
+    id: 0,
+  }).finish();
 }

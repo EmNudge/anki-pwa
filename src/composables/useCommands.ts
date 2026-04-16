@@ -9,6 +9,7 @@ import {
   toggleSoundEffects,
   schedulerSettingsModalOpenSig,
   flagSettingsModalOpenSig,
+  notetypeManagerOpenSig,
   resetScheduler,
   currentReviewCardSig,
   reviewQueueSig,
@@ -43,6 +44,7 @@ import {
   Undo2,
   Redo2,
   Copy,
+  Layers,
 } from "lucide-vue-next";
 import { useTheme } from "../design-system/hooks/useTheme";
 import { getFlags, getFlagLabel } from "../lib/flags";
@@ -210,6 +212,16 @@ export function useCommands(options: UseCommandsOptions = {}) {
         group: "Tools",
         handler: () => {
           activeViewSig.value = "duplicates";
+        },
+      },
+      {
+        id: "manage-note-types",
+        title: "Manage Note Types",
+        description: "Create, edit, and manage note type definitions",
+        icon: icon(Layers),
+        group: "Tools",
+        handler: () => {
+          notetypeManagerOpenSig.value = true;
         },
       },
       {
