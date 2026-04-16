@@ -45,6 +45,7 @@ import {
   Redo2,
   Copy,
   Layers,
+  ShieldCheck,
 } from "lucide-vue-next";
 import { useTheme } from "../design-system/hooks/useTheme";
 import { getFlags, getFlagLabel } from "../lib/flags";
@@ -222,6 +223,16 @@ export function useCommands(options: UseCommandsOptions = {}) {
         group: "Tools",
         handler: () => {
           notetypeManagerOpenSig.value = true;
+        },
+      },
+      {
+        id: "check-database",
+        title: "Check Database",
+        description: "Verify collection integrity and repair common issues",
+        icon: icon(ShieldCheck),
+        group: "Tools",
+        handler: () => {
+          activeViewSig.value = "check-db";
         },
       },
       {

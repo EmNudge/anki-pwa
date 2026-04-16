@@ -43,7 +43,7 @@ async function handleRedo() {
       <button
         v-for="tab in tabs"
         :key="tab.id"
-        :class="['tab', { 'tab--active': activeViewSig === tab.id || (tab.id === 'browse' && activeViewSig === 'duplicates') }]"
+        :class="['tab', { 'tab--active': activeViewSig === tab.id || (tab.id === 'browse' && (activeViewSig === 'duplicates' || activeViewSig === 'check-db')) }]"
         @click="handleTabClick(tab.id)"
       >
         {{ tab.label }}
