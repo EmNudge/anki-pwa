@@ -1501,6 +1501,228 @@ export async function importPresetJson(json: string): Promise<string | null> {
 // Load presets on startup
 loadPresets();
 
+// ── Filtered Decks (Custom Study) ──
+
+import type { FilteredDeckConfig, FilteredDeckSortOrder } from "./scheduler/types";
+import { parseSearch, matchExpr, ankiCardToSearchable } from "./search/engine";
+
+export const filteredDecksSig = ref<FilteredDeckConfig[]>([]);
+export const activeFilteredDeckIdSig = ref<string | null>(null);
+
+export const activeFilteredDeckSig = computed(() => {
+  const id = activeFilteredDeckIdSig.value;
+  if (!id) return null;
+  return filteredDecksSig.value.find((d) => d.id === id) ?? null;
+});
+
+async function loadFilteredDecks(): Promise<void> {
+  filteredDecksSig.value = await reviewDB.getAllFilteredDecks();
+}
+
+/**
+ * Count cards matching a filtered deck query (for preview).
+ */
+export function countFilteredDeckCards(query: string): number {
+  const data = ankiDataSig.value;
+  if (!data || !query.trim()) return 0;
+  const expr = parseSearch(query);
+  if (!expr) return data.cards.length;
+  let count = 0;
+  for (let i = 0; i < data.cards.length; i++) {
+    const card = data.cards[i]!;
+    const searchable = ankiCardToSearchable(card);
+    if (matchExpr(searchable, expr, data.collectionCreationTime)) count++;
+  }
+  return count;
+}
+
+/**
+ * Gather card indices matching a filtered deck config.
+ */
+function gatherFilteredCards(config: FilteredDeckConfig): number[] {
+  const data = ankiDataSig.value;
+  if (!data) return [];
+
+  const expr = parseSearch(config.query);
+  const matching: { index: number; card: (typeof data.cards)[number] }[] = [];
+
+  for (let i = 0; i < data.cards.length; i++) {
+    const card = data.cards[i]!;
+    if (expr) {
+      const searchable = ankiCardToSearchable(card);
+      if (!matchExpr(searchable, expr, data.collectionCreationTime)) continue;
+    }
+    matching.push({ index: i, card });
+  }
+
+  // Sort
+  switch (config.sortOrder) {
+    case "random":
+      for (let i = matching.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [matching[i], matching[j]] = [matching[j]!, matching[i]!];
+      }
+      break;
+    case "orderAdded":
+      matching.sort((a, b) => (a.card.ankiCardId ?? 0) - (b.card.ankiCardId ?? 0));
+      break;
+    case "orderDue":
+      matching.sort((a, b) => (a.card.scheduling?.due ?? 0) - (b.card.scheduling?.due ?? 0));
+      break;
+    case "intervalAsc":
+      matching.sort((a, b) => (a.card.scheduling?.ivl ?? 0) - (b.card.scheduling?.ivl ?? 0));
+      break;
+    case "intervalDesc":
+      matching.sort((a, b) => (b.card.scheduling?.ivl ?? 0) - (a.card.scheduling?.ivl ?? 0));
+      break;
+    case "easeAsc":
+      matching.sort(
+        (a, b) => (a.card.scheduling?.easeFactor ?? 0) - (b.card.scheduling?.easeFactor ?? 0),
+      );
+      break;
+    case "easeDesc":
+      matching.sort(
+        (a, b) => (b.card.scheduling?.easeFactor ?? 0) - (a.card.scheduling?.easeFactor ?? 0),
+      );
+      break;
+    case "lapsesDesc":
+      matching.sort((a, b) => (b.card.scheduling?.lapses ?? 0) - (a.card.scheduling?.lapses ?? 0));
+      break;
+  }
+
+  return matching.slice(0, config.limit).map((m) => m.index);
+}
+
+/**
+ * Create a new filtered deck and start studying it.
+ */
+export async function createFilteredDeck(params: {
+  name: string;
+  query: string;
+  limit: number;
+  sortOrder: FilteredDeckSortOrder;
+  reschedule: boolean;
+}): Promise<string> {
+  const config: FilteredDeckConfig = {
+    id: `filtered-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    name: params.name,
+    query: params.query,
+    limit: params.limit,
+    sortOrder: params.sortOrder,
+    reschedule: params.reschedule,
+    createdAt: Date.now(),
+    modifiedAt: Date.now(),
+  };
+  await reviewDB.saveFilteredDeck(config);
+  filteredDecksSig.value = [...filteredDecksSig.value, config];
+  await studyFilteredDeck(config.id);
+  return config.id;
+}
+
+/**
+ * Start studying a filtered deck.
+ */
+export async function studyFilteredDeck(id: string): Promise<void> {
+  const config = filteredDecksSig.value.find((d) => d.id === id);
+  if (!config) return;
+
+  const data = ankiDataSig.value;
+  if (!data) return;
+
+  const cardIndices = gatherFilteredCards(config);
+  if (cardIndices.length === 0) {
+    activeFilteredDeckIdSig.value = id;
+    reviewModeSig.value = "studying";
+    clearReviewQueueState();
+    return;
+  }
+
+  // Build review queue for these specific cards
+  const deckId = `filtered-${id}`;
+  const settings = await reviewDB.getSettings(deckId);
+  const effectiveSettings = {
+    ...settings,
+    enabled: true,
+    // For filtered decks, remove daily limits — show all gathered cards
+    dailyNewLimit: cardIndices.length,
+    dailyReviewLimit: cardIndices.length,
+  };
+  schedulerSettingsSig.value = effectiveSettings;
+
+  const queue = new ReviewQueue(deckId, effectiveSettings);
+  await queue.init();
+
+  // Map card indices to ankiCardIds
+  const ankiCardIds: number[] = [];
+  for (const idx of cardIndices) {
+    const card = data.cards[idx]!;
+    ankiCardIds.push(card.ankiCardId ?? idx);
+  }
+
+  // Build queue with all templates = 1 since we address individual cards
+  const fullQueue = await queue.buildQueue(cardIndices.length, 1, ankiCardIds);
+
+  let dueCards: ReviewCard[];
+  if (config.reschedule) {
+    dueCards = queue.getDueCards(fullQueue);
+  } else {
+    // Cram mode: show all cards regardless of scheduling
+    dueCards = [...fullQueue];
+  }
+
+  // Patch cardIndex to match position in original ankiData.cards
+  for (let i = 0; i < dueCards.length; i++) {
+    dueCards[i] = { ...dueCards[i]!, cardIndex: cardIndices[dueCards[i]!.cardIndex] ?? 0 };
+  }
+
+  reviewQueueSig.value = queue;
+  fullQueueSig.value = fullQueue;
+  dueCardsSig.value = dueCards;
+  currentReviewCardSig.value = dueCards[0] ?? null;
+  activeFilteredDeckIdSig.value = id;
+
+  // Set selectedDeckIdSig to null so cardsSig returns all cards (filtered deck draws from all)
+  selectedDeckIdSig.value = null;
+  reviewModeSig.value = "studying";
+}
+
+/**
+ * Rebuild a filtered deck (re-run query and rebuild queue).
+ */
+export async function rebuildFilteredDeck(id: string): Promise<void> {
+  await studyFilteredDeck(id);
+}
+
+/**
+ * Empty a filtered deck (stop studying, return to deck list).
+ */
+export function emptyFilteredDeck(id: string): void {
+  if (activeFilteredDeckIdSig.value === id) {
+    activeFilteredDeckIdSig.value = null;
+    clearReviewQueueState();
+    reviewModeSig.value = "deck-list";
+  }
+}
+
+/**
+ * Delete a filtered deck permanently.
+ */
+export async function deleteFilteredDeck(id: string): Promise<void> {
+  emptyFilteredDeck(id);
+  await reviewDB.deleteFilteredDeck(id);
+  filteredDecksSig.value = filteredDecksSig.value.filter((d) => d.id !== id);
+}
+
+// Load filtered decks on startup
+loadFilteredDecks();
+
+// Clear active filtered deck when returning to deck list
+watch(reviewModeSig, (mode) => {
+  if (mode === "deck-list" && activeFilteredDeckIdSig.value) {
+    activeFilteredDeckIdSig.value = null;
+  }
+});
+
 /**
  * Bulk add a tag to multiple notes (by guid).
  * Persists to SQLite for synced collections.

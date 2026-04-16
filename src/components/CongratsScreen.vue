@@ -1,11 +1,18 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import {
   reviewQueueSig,
   fullQueueSig,
   reviewModeSig,
+  activeFilteredDeckIdSig,
+  activeFilteredDeckSig,
+  emptyFilteredDeck,
+  rebuildFilteredDeck,
+  createFilteredDeck,
 } from "../stores";
 import { Button } from "../design-system";
+import CustomStudyModal from "./CustomStudyModal.vue";
+import FilteredDeckModal from "./FilteredDeckModal.vue";
 
 const stats = computed(() => {
   const queue = reviewQueueSig.value;
@@ -46,6 +53,28 @@ const reviewed = computed(() => {
   if (!stats.value) return 0;
   return stats.value.newCount + stats.value.reviewCount;
 });
+
+const isFilteredDeck = computed(() => activeFilteredDeckIdSig.value !== null);
+const filteredDeck = computed(() => activeFilteredDeckSig.value);
+
+const customStudyOpen = ref(false);
+const filteredDeckModalOpen = ref(false);
+const filteredDeckPreset = ref<{ name: string; query: string; reschedule: boolean } | null>(null);
+
+function handleCustomStudyCreate(preset: { name: string; query: string; reschedule: boolean }) {
+  filteredDeckPreset.value = preset;
+  filteredDeckModalOpen.value = true;
+}
+
+function handleEmptyDeck() {
+  const id = activeFilteredDeckIdSig.value;
+  if (id) emptyFilteredDeck(id);
+}
+
+function handleRebuild() {
+  const id = activeFilteredDeckIdSig.value;
+  if (id) rebuildFilteredDeck(id);
+}
 </script>
 
 <template>
@@ -70,11 +99,38 @@ const reviewed = computed(() => {
       </dl>
 
       <div class="congrats-actions">
+        <template v-if="isFilteredDeck">
+          <Button variant="secondary" @click="handleRebuild">
+            Rebuild Deck
+          </Button>
+          <Button variant="secondary" @click="handleEmptyDeck">
+            Empty Deck
+          </Button>
+        </template>
+        <template v-else>
+          <Button variant="secondary" @click="customStudyOpen = true">
+            Custom Study
+          </Button>
+        </template>
         <Button variant="secondary" @click="reviewModeSig = 'deck-list'">
           Back to Decks
         </Button>
       </div>
     </div>
+
+    <CustomStudyModal
+      :is-open="customStudyOpen"
+      @close="customStudyOpen = false"
+      @create-filtered="handleCustomStudyCreate"
+    />
+
+    <FilteredDeckModal
+      :is-open="filteredDeckModalOpen"
+      :initial-name="filteredDeckPreset?.name"
+      :initial-query="filteredDeckPreset?.query"
+      :initial-reschedule="filteredDeckPreset?.reschedule"
+      @close="filteredDeckModalOpen = false"
+    />
   </div>
 </template>
 

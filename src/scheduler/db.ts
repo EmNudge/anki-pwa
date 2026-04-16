@@ -1,6 +1,7 @@
 import type {
   CardReviewState,
   DailyStats,
+  FilteredDeckConfig,
   OptionPreset,
   SchedulerSettings,
   StoredReviewLog,
@@ -9,7 +10,7 @@ import type { CardState } from "./algorithm";
 import { DEFAULT_SCHEDULER_SETTINGS } from "./types";
 
 const DB_NAME = "anki-review-db";
-const DB_VERSION = 5; // 5: added presets store
+const DB_VERSION = 6; // 6: added filteredDecks store
 
 /**
  * IndexedDB wrapper for persisting review state
@@ -115,6 +116,11 @@ class ReviewDB {
         // Store for option presets — added in v5
         if (!db.objectStoreNames.contains("presets")) {
           db.createObjectStore("presets", { keyPath: "id" });
+        }
+
+        // Store for filtered deck configs — added in v6
+        if (!db.objectStoreNames.contains("filteredDecks")) {
+          db.createObjectStore("filteredDecks", { keyPath: "id" });
         }
       };
     });
@@ -424,6 +430,35 @@ class ReviewDB {
     await this.run(["presets"], "readwrite", (tx) => tx.objectStore("presets").delete(id));
   }
 
+  // ── Filtered Decks ──
+
+  async getAllFilteredDecks(): Promise<FilteredDeckConfig[]> {
+    return this.run(["filteredDecks"], "readonly", (tx) =>
+      tx.objectStore("filteredDecks").getAll(),
+    );
+  }
+
+  async getFilteredDeck(id: string): Promise<FilteredDeckConfig | null> {
+    return this.run(
+      ["filteredDecks"],
+      "readonly",
+      (tx) => tx.objectStore("filteredDecks").get(id),
+      (r) => (r as FilteredDeckConfig | null) ?? null,
+    );
+  }
+
+  async saveFilteredDeck(config: FilteredDeckConfig): Promise<void> {
+    await this.run(["filteredDecks"], "readwrite", (tx) =>
+      tx.objectStore("filteredDecks").put(config),
+    );
+  }
+
+  async deleteFilteredDeck(id: string): Promise<void> {
+    await this.run(["filteredDecks"], "readwrite", (tx) =>
+      tx.objectStore("filteredDecks").delete(id),
+    );
+  }
+
   /**
    * Get all cards across all decks.
    */
@@ -462,6 +497,7 @@ class ReviewDB {
         "deletedNotes",
         "deletedDecks",
         "presets",
+        "filteredDecks",
       ];
       const transaction = db.transaction(stores, "readwrite");
 

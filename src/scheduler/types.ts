@@ -310,3 +310,38 @@ export interface StoredReviewLog {
   rating: Answer | number; // Can be Answer string or legacy number rating
   reviewLog: ReviewLogEntry; // Algorithm-specific review log data
 }
+
+/**
+ * Sort order options for filtered decks
+ */
+export type FilteredDeckSortOrder =
+  | "random"
+  | "orderAdded"
+  | "orderDue"
+  | "intervalAsc"
+  | "intervalDesc"
+  | "easeAsc"
+  | "easeDesc"
+  | "lapsesDesc";
+
+/**
+ * Configuration for a filtered (custom study) deck
+ */
+export interface FilteredDeckConfig {
+  /** Unique identifier */
+  id: string;
+  /** Display name */
+  name: string;
+  /** Search query string */
+  query: string;
+  /** Maximum cards to gather */
+  limit: number;
+  /** Sort order for gathered cards */
+  sortOrder: FilteredDeckSortOrder;
+  /** true = normal review (reschedule), false = cram mode */
+  reschedule: boolean;
+  /** Timestamp of creation */
+  createdAt: number;
+  /** Timestamp of last modification */
+  modifiedAt: number;
+}

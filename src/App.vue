@@ -31,6 +31,9 @@ import {
   selectedTemplateSig,
   templatesSig,
   updateDueCardsAfterReview,
+  activeFilteredDeckIdSig,
+  activeFilteredDeckSig,
+  emptyFilteredDeck,
 } from "./stores";
 import StatusBar from "./components/StatusBar.vue";
 import FileLibrary from "./components/FileLibrary.vue";
@@ -352,37 +355,49 @@ async function handleChooseAnswer(answer: Answer) {
     const queue = reviewQueueSig.value;
 
     if (reviewCard && queue) {
-      // Capture previous state for undo
-      const previousState = JSON.parse(JSON.stringify(reviewCard.reviewState));
-      const wasNew = reviewCard.isNew;
-      const today = new Date();
-      const rolloverHour = 4; // Default rollover hour
-      if (today.getHours() < rolloverHour) today.setDate(today.getDate() - 1);
-      const dailyStatsDate = today.toISOString().split("T")[0]!;
+      // Check if we're in cram mode (filtered deck with reschedule=false)
+      const filteredDeck = activeFilteredDeckSig.value;
+      const isCramMode = filteredDeck && !filteredDeck.reschedule;
 
-      const reviewTimeMs = Date.now() - reviewStartTime.value;
-      const reviewLogTimestamp = Date.now();
-      const updatedState = await queue.processReview(reviewCard, answer, reviewTimeMs);
+      if (isCramMode) {
+        // Cram mode: don't persist scheduling changes
+        // Just remove the card from the queue and move on
+        updateDueCardsAfterReview(reviewCard.cardId, reviewCard.reviewState);
+        moveToNextReviewCard();
+      } else {
+        // Normal mode: process review with scheduling
+        // Capture previous state for undo
+        const previousState = JSON.parse(JSON.stringify(reviewCard.reviewState));
+        const wasNew = reviewCard.isNew;
+        const today = new Date();
+        const rolloverHour = 4; // Default rollover hour
+        if (today.getHours() < rolloverHour) today.setDate(today.getDate() - 1);
+        const dailyStatsDate = today.toISOString().split("T")[0]!;
 
-      // Record undo entry
-      const answerLabel = answer.charAt(0).toUpperCase() + answer.slice(1);
-      pushUndo({
-        type: "review",
-        description: `Answer ${answerLabel}`,
-        undoData: {
-          cardId: reviewCard.cardId,
-          previousState,
-          newState: JSON.parse(JSON.stringify(updatedState)),
-          reviewLogTimestamp,
-          wasNew,
-          dailyStatsDate,
-          reviewTimeMs,
-        },
-      });
+        const reviewTimeMs = Date.now() - reviewStartTime.value;
+        const reviewLogTimestamp = Date.now();
+        const updatedState = await queue.processReview(reviewCard, answer, reviewTimeMs);
 
-      updateDueCardsAfterReview(reviewCard.cardId, updatedState);
-      moveToNextReviewCard();
-      markDataChanged();
+        // Record undo entry
+        const answerLabel = answer.charAt(0).toUpperCase() + answer.slice(1);
+        pushUndo({
+          type: "review",
+          description: `Answer ${answerLabel}`,
+          undoData: {
+            cardId: reviewCard.cardId,
+            previousState,
+            newState: JSON.parse(JSON.stringify(updatedState)),
+            reviewLogTimestamp,
+            wasNew,
+            dailyStatsDate,
+            reviewTimeMs,
+          },
+        });
+
+        updateDueCardsAfterReview(reviewCard.cardId, updatedState);
+        moveToNextReviewCard();
+        markDataChanged();
+      }
     }
   } else {
     moveToNextCard();
@@ -455,7 +470,19 @@ onUnmounted(clearAutoAdvanceTimer);
   <main v-else>
     <div class="layout-center-column">
       <template v-if="renderedCard">
-        <div v-if="selectedDeckName" class="deck-header">
+        <div v-if="activeFilteredDeckSig" class="filtered-deck-header">
+          <span class="filtered-deck-name">
+            <svg class="filtered-deck-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+            </svg>
+            {{ activeFilteredDeckSig.name }}
+            <span v-if="!activeFilteredDeckSig.reschedule" class="cram-badge">Cram</span>
+          </span>
+          <button class="filtered-deck-close" @click="emptyFilteredDeck(activeFilteredDeckSig.id); reviewModeSig = 'deck-list'">
+            &times;
+          </button>
+        </div>
+        <div v-else-if="selectedDeckName" class="deck-header">
           <Tooltip :text="selectedDeckDescription ?? 'No description'">
             <button class="deck-info-btn" @click="deckInfoModalOpen = true">
               <Info :size="16" />
@@ -643,6 +670,62 @@ main {
   gap: var(--spacing-1-5);
   color: var(--color-text-secondary);
   font-size: var(--font-size-sm);
+}
+
+.filtered-deck-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-2);
+  padding: var(--spacing-2) var(--spacing-3);
+  background: var(--color-surface-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--spacing-2);
+}
+
+.filtered-deck-name {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-1-5);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+}
+
+.filtered-deck-icon {
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+.cram-badge {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-warning, #f59e0b);
+  background: var(--color-warning-alpha, rgba(245, 158, 11, 0.1));
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+}
+
+.filtered-deck-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  font-size: var(--font-size-lg);
+  color: var(--color-text-tertiary);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  box-shadow: none;
+}
+
+.filtered-deck-close:hover {
+  color: var(--color-text-primary);
+  background: var(--color-surface-hover);
 }
 
 .no-deck-message {
