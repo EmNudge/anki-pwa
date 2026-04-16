@@ -4,6 +4,7 @@ import {
   parseOcclusionShapes,
   parseOcclusionShapesForEditor,
   serializeShapesToSvg,
+  extractOcclusionMode,
   renderImageOcclusion,
   getImageFilename,
   type OcclusionShape,
@@ -225,6 +226,130 @@ describe("Image Occlusion", () => {
       const html = renderImageOcclusion({ values, cardOrd: 0, isAnswer: false });
       expect(html).toContain('<img src="test.png">');
       expect(html).toContain("Test");
+    });
+  });
+
+  describe("extractOcclusionMode", () => {
+    it("returns hide-all-guess-one by default", () => {
+      const svg = `<svg viewBox="0 0 800 600"><rect data-ordinal="1" x="0" y="0" width="10" height="10" /></svg>`;
+      expect(extractOcclusionMode(svg)).toBe("hide-all-guess-one");
+    });
+
+    it("parses hide-one mode", () => {
+      const svg = `<svg viewBox="0 0 800 600" data-mode="hide-one"><rect data-ordinal="1" x="0" y="0" width="10" height="10" /></svg>`;
+      expect(extractOcclusionMode(svg)).toBe("hide-one");
+    });
+
+    it("parses hide-all-guess-one mode", () => {
+      const svg = `<svg data-mode="hide-all-guess-one" viewBox="0 0 800 600"></svg>`;
+      expect(extractOcclusionMode(svg)).toBe("hide-all-guess-one");
+    });
+
+    it("falls back to default for unknown mode", () => {
+      const svg = `<svg data-mode="unknown" viewBox="0 0 800 600"></svg>`;
+      expect(extractOcclusionMode(svg)).toBe("hide-all-guess-one");
+    });
+  });
+
+  describe("serializeShapesToSvg with mode", () => {
+    it("includes data-mode attribute", () => {
+      const shapes: OcclusionShape[] = [
+        { id: "1", type: "rect", ordinal: 1, x: 0, y: 0, width: 10, height: 10 },
+      ];
+      const svg = serializeShapesToSvg(shapes, 800, 600, "hide-one");
+      expect(svg).toContain('data-mode="hide-one"');
+    });
+
+    it("defaults to hide-all-guess-one", () => {
+      const shapes: OcclusionShape[] = [
+        { id: "1", type: "rect", ordinal: 1, x: 0, y: 0, width: 10, height: 10 },
+      ];
+      const svg = serializeShapesToSvg(shapes, 800, 600);
+      expect(svg).toContain('data-mode="hide-all-guess-one"');
+    });
+
+    it("round-trips mode through serialize/extract", () => {
+      const shapes: OcclusionShape[] = [
+        { id: "1", type: "rect", ordinal: 1, x: 0, y: 0, width: 10, height: 10 },
+      ];
+      const svg = serializeShapesToSvg(shapes, 800, 600, "hide-one");
+      expect(extractOcclusionMode(svg)).toBe("hide-one");
+    });
+  });
+
+  describe("renderImageOcclusion with modes", () => {
+    const makeValues = (mode: string) => ({
+      "Image Occlusion": '<img src="test.png">',
+      Header: "",
+      "Back Extra": "",
+      Occlusions: `<svg viewBox="0 0 800 600" data-mode="${mode}">
+        <rect data-ordinal="1" x="10" y="20" width="100" height="50" fill="#ffeba2" />
+        <rect data-ordinal="2" x="200" y="100" width="80" height="60" fill="#ffeba2" />
+      </svg>`,
+    });
+
+    describe("hide-all-guess-one mode", () => {
+      it("shows all shapes as masks on front", () => {
+        const html = renderImageOcclusion({
+          values: makeValues("hide-all-guess-one"),
+          cardOrd: 0,
+          isAnswer: false,
+        });
+        // Both shapes should be present
+        expect(html).toContain('x="10"');
+        expect(html).toContain('x="200"');
+        // Active one highlighted
+        expect(html).toContain('class="io-mask io-mask-active"');
+        // Non-active one plain mask
+        expect(html).toContain('class="io-mask"');
+      });
+
+      it("reveals active shape on back, keeps others masked", () => {
+        const html = renderImageOcclusion({
+          values: makeValues("hide-all-guess-one"),
+          cardOrd: 0,
+          isAnswer: true,
+        });
+        expect(html).toContain('class="io-mask-reveal"');
+        expect(html).toContain('class="io-mask"');
+      });
+    });
+
+    describe("hide-one mode", () => {
+      it("shows only active shape on front", () => {
+        const html = renderImageOcclusion({
+          values: makeValues("hide-one"),
+          cardOrd: 0,
+          isAnswer: false,
+        });
+        // Active shape should be present
+        expect(html).toContain('x="10"');
+        // Non-active shape should NOT be present
+        expect(html).not.toContain('x="200"');
+      });
+
+      it("reveals only active shape on back", () => {
+        const html = renderImageOcclusion({
+          values: makeValues("hide-one"),
+          cardOrd: 0,
+          isAnswer: true,
+        });
+        expect(html).toContain('class="io-mask-reveal"');
+        // Non-active shape should not be in the output
+        expect(html).not.toContain('x="200"');
+      });
+
+      it("shows different shape when cardOrd changes", () => {
+        const html = renderImageOcclusion({
+          values: makeValues("hide-one"),
+          cardOrd: 1,
+          isAnswer: false,
+        });
+        // Shape 2 (ordinal 2) should be present
+        expect(html).toContain('x="200"');
+        // Shape 1 (ordinal 1) should NOT be present
+        expect(html).not.toContain('x="10"');
+      });
     });
   });
 });

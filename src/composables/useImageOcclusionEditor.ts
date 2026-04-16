@@ -1,5 +1,5 @@
 import { ref, computed, type Ref } from "vue";
-import type { OcclusionShape } from "../utils/imageOcclusion";
+import type { OcclusionShape, OcclusionMode } from "../utils/imageOcclusion";
 
 let shapeIdCounter = 0;
 function generateId(): string {
@@ -13,6 +13,7 @@ export function useImageOcclusionEditor(initialShapes: OcclusionShape[] = []) {
   const selectedShapeId = ref<string | null>(null);
   const activeTool = ref<IoTool>("rect");
   const isDrawing = ref(false);
+  const occlusionMode = ref<OcclusionMode>("hide-all-guess-one");
 
   // Internal drawing state (not reactive for performance)
   let drawStartX = 0;
@@ -121,11 +122,16 @@ export function useImageOcclusionEditor(initialShapes: OcclusionShape[] = []) {
     selectedShapeId.value = null;
   }
 
+  function setOcclusionMode(mode: OcclusionMode) {
+    occlusionMode.value = mode;
+  }
+
   return {
     shapes,
     selectedShapeId,
     activeTool,
     isDrawing,
+    occlusionMode,
     selectedShape,
     nextOrdinal,
     setTool,
@@ -138,5 +144,6 @@ export function useImageOcclusionEditor(initialShapes: OcclusionShape[] = []) {
     deleteShape,
     deleteSelectedShape,
     setShapes,
+    setOcclusionMode,
   };
 }
