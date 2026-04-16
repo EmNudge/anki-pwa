@@ -9,7 +9,9 @@ import {
   getImageFilename,
   parseOcclusionShapesForEditor,
   serializeShapesToSvg,
+  extractOcclusionMode,
   type OcclusionShape,
+  type OcclusionMode,
 } from "../utils/imageOcclusion";
 
 type Card = AnkiDB2Data["cards"][number];
@@ -27,6 +29,7 @@ const emit = defineEmits<{
 
 // Editor state
 const shapes = ref<OcclusionShape[]>([]);
+const occlusionMode = ref<OcclusionMode>("hide-all-guess-one");
 const headerText = ref("");
 const backExtraText = ref("");
 const editTags = ref<string[]>([]);
@@ -57,6 +60,10 @@ watch(
     headerText.value = getFieldValue(values, IO_FIELD_NAMES.header);
     backExtraText.value = getFieldValue(values, IO_FIELD_NAMES.backExtra);
     editTags.value = [...card.tags];
+
+    // Parse occlusion mode from SVG
+    const occSvgRaw = getFieldValue(values, IO_FIELD_NAMES.occlusions);
+    occlusionMode.value = extractOcclusionMode(occSvgRaw);
 
     // Parse existing shapes
     const occSvg = getFieldValue(values, IO_FIELD_NAMES.occlusions);
@@ -151,7 +158,7 @@ function handleTagKeydown(e: KeyboardEvent) {
 }
 
 function handleSave() {
-  const occSvg = serializeShapesToSvg(shapes.value, imageNaturalWidth.value, imageNaturalHeight.value);
+  const occSvg = serializeShapesToSvg(shapes.value, imageNaturalWidth.value, imageNaturalHeight.value, occlusionMode.value);
   const imgTag = imageFilename.value ? `<img src="${imageFilename.value}">` : "";
 
   const fields: Record<string, string | null> = {
@@ -191,6 +198,7 @@ function handleSave() {
     <template v-if="hasImage && imageUrl">
       <ImageOcclusionEditor
         v-model="shapes"
+        v-model:occlusion-mode="occlusionMode"
         :image-url="imageUrl"
       />
     </template>

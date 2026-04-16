@@ -19,6 +19,8 @@ export const IO_FIELD_NAMES = {
 
 // --- Types ---
 
+export type OcclusionMode = "hide-one" | "hide-all-guess-one";
+
 export type OcclusionShape = {
   id: string;
   type: "rect" | "ellipse";
@@ -164,6 +166,7 @@ export function serializeShapesToSvg(
   shapes: OcclusionShape[],
   imageWidth: number,
   imageHeight: number,
+  mode: OcclusionMode = "hide-all-guess-one",
 ): string {
   const elements = shapes.map((shape) => {
     if (shape.type === "ellipse") {
@@ -176,14 +179,26 @@ export function serializeShapesToSvg(
     return `<rect data-ordinal="${shape.ordinal}" x="${shape.x}" y="${shape.y}" width="${shape.width}" height="${shape.height}" fill="#ffeba2" fill-opacity="1" stroke="#2d2d2d" stroke-width="1"/>`;
   });
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${imageWidth} ${imageHeight}">\n  ${elements.join("\n  ")}\n</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${imageWidth} ${imageHeight}" data-mode="${mode}">\n  ${elements.join("\n  ")}\n</svg>`;
 }
 
-// --- SVG viewBox extraction ---
+// --- SVG metadata extraction ---
 
 function extractViewBox(svgString: string): string | null {
   const match = svgString.match(/viewBox="([^"]+)"/);
   return match ? match[1]! : null;
+}
+
+/**
+ * Extract the occlusion mode from the SVG root element.
+ * Defaults to "hide-all-guess-one" (Anki desktop default).
+ */
+export function extractOcclusionMode(svgString: string): OcclusionMode {
+  const match = svgString.match(/data-mode="([^"]+)"/);
+  if (match && (match[1] === "hide-one" || match[1] === "hide-all-guess-one")) {
+    return match[1];
+  }
+  return "hide-all-guess-one";
 }
 
 // --- Rendering ---
@@ -208,11 +223,26 @@ export function renderImageOcclusion({
   const activeOrdinal = cardOrd + 1;
   const shapes = parseOcclusionShapes(occlusionsSvg);
   const viewBox = extractViewBox(occlusionsSvg);
+  const mode = extractOcclusionMode(occlusionsSvg);
 
   const svgShapes = shapes
     .map(({ ordinal, svgElement }) => {
       const isActive = ordinal === activeOrdinal;
 
+      if (mode === "hide-one") {
+        // Hide one: only the active shape is shown as a mask; others are invisible
+        if (!isActive) return null;
+        if (isAnswer) {
+          return svgElement
+            .replace(/class="[^"]*"/, "")
+            .replace(/<(rect|ellipse|circle|polygon|path)\b/, `<$1 class="io-mask-reveal"`);
+        }
+        return svgElement
+          .replace(/class="[^"]*"/, "")
+          .replace(/<(rect|ellipse|circle|polygon|path)\b/, `<$1 class="io-mask io-mask-active"`);
+      }
+
+      // hide-all-guess-one (default): all shapes masked, active highlighted
       if (isAnswer) {
         if (isActive) {
           return svgElement
@@ -229,6 +259,7 @@ export function renderImageOcclusion({
           .replace(/<(rect|ellipse|circle|polygon|path)\b/, `<$1 class="${cssClass}"`);
       }
     })
+    .filter((s): s is string => s !== null)
     .join("\n    ");
 
   const viewBoxAttr = viewBox ? `viewBox="${viewBox}"` : "";
