@@ -18,13 +18,13 @@ This directory contains comprehensive tests for the Anki parser, covering both A
 
 ```bash
 # Run tests in watch mode
-npm test
+pnpm test
 
 # Run tests once
-npm run test:run
+pnpm run test:run
 
 # Run tests with UI
-npm run test:ui
+pnpm run test:ui
 ```
 
 ## Test Coverage

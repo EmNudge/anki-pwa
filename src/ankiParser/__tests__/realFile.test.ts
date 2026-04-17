@@ -4,14 +4,14 @@ import { join } from "path";
 import initSqlJs from "sql.js";
 import { getDataFromAnki2 } from "../anki2";
 import { getDataFromAnki21b } from "../anki21b";
-import { BlobReader, ZipReader, BlobWriter, Entry, FileEntry } from "@zip-js/zip-js";
+import { BlobReader, ZipReader, BlobWriter, type Entry } from "@zip-js/zip-js";
 import path from "path";
 
 /**
- * Type guard to check if an Entry is a FileEntry (has getData method)
+ * Type guard to check if an Entry has getData (i.e. is a file, not a directory)
  */
-function isFileEntry(entry: Entry): entry is FileEntry {
-  return !entry.directory;
+function isFileEntry(entry: Entry): entry is Entry & { getData: NonNullable<Entry["getData"]> } {
+  return !entry.directory && typeof entry.getData === "function";
 }
 
 // Mock the WASM dependencies to avoid loading issues in tests
@@ -20,7 +20,7 @@ vi.mock("../index", () => ({
 }));
 
 async function parseAnkiFile(filePath: string) {
-  const fileBuffer = readFileSync(filePath);
+  const fileBuffer = new Uint8Array(readFileSync(filePath));
   const blob = new Blob([fileBuffer]);
 
   const zipFileReader = new BlobReader(blob);

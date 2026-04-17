@@ -35,16 +35,16 @@ The test suite covers the following major features:
 
 ```bash
 # Run all e2e tests
-npm run test:e2e
+pnpm run test:e2e
 
 # Run tests with UI
-npm run test:e2e:ui
+pnpm run test:e2e:ui
 
 # Run tests in headed mode (see browser)
-npm run test:e2e:headed
+pnpm run test:e2e:headed
 
 # Debug tests
-npm run test:e2e:debug
+pnpm run test:e2e:debug
 ```
 
 ## Test Setup

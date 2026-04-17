@@ -1,4 +1,5 @@
 import { test as base, expect } from '@playwright/test';
+import { clearAppState } from './fixtures';
 import path from 'path';
 
 /**
@@ -9,23 +10,7 @@ import path from 'path';
 const test = base.extend<{ cleanPage: import('@playwright/test').Page }>({
   cleanPage: async ({ page }, use) => {
     await page.goto('/', { waitUntil: 'networkidle' });
-
-    // Clear any existing data
-    await page.evaluate(() => localStorage.clear());
-    await page.evaluate(async () => {
-      return new Promise<void>((resolve) => {
-        const request = indexedDB.deleteDatabase('anki-review-db');
-        request.onsuccess = () => resolve();
-        request.onerror = () => resolve();
-        request.onblocked = () => resolve();
-      });
-    });
-    await page.evaluate(async () => {
-      const cache = await caches.open('anki-cache');
-      const keys = await cache.keys();
-      for (const key of keys) await cache.delete(key);
-    });
-
+    await clearAppState(page);
     await page.reload({ waitUntil: 'networkidle' });
     await use(page);
   },
