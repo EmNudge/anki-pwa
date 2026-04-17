@@ -1,5 +1,6 @@
 import type { SubDeckInfo, DeckTreeNode } from "../types";
 import type { AnkiData } from "../ankiParser";
+import { groupBy } from "./groupBy";
 
 export function computeDeckInfo(ankiData: AnkiData) {
   const nameToDeckId = new Map(Object.entries(ankiData.decks).map(([id, deck]) => [deck.name, id]));
@@ -9,7 +10,7 @@ export function computeDeckInfo(ankiData: AnkiData) {
     deckId: nameToDeckId.get(card.deckName),
   }));
 
-  const cardsByDeckId = Object.groupBy(cardsWithDeckIds, (item) => item.deckId ?? "unknown");
+  const cardsByDeckId = groupBy(cardsWithDeckIds, (item) => item.deckId ?? "unknown");
 
   const subdecks: SubDeckInfo[] = Object.entries(ankiData.decks)
     .map(([deckId, deck]) => {
@@ -22,33 +23,14 @@ export function computeDeckInfo(ankiData: AnkiData) {
       const displayName = deck.name.includes("::") ? deck.name.split("::").pop()! : deck.name;
 
       // Compute new/learn/due counts from Anki scheduling data
-      let newCount = 0;
-      let learnCount = 0;
-      let dueCount = 0;
-
-      for (const item of cardsInDeck) {
-        const sched = item.card.scheduling;
-        if (!sched) {
-          // Cards without scheduling data are treated as new
-          newCount++;
-          continue;
-        }
-        // Skip suspended and buried cards
-        if (sched.queue < 0) continue;
-
-        switch (sched.queue) {
-          case 0: // new
-            newCount++;
-            break;
-          case 1: // learning
-          case 3: // day learning
-            learnCount++;
-            break;
-          case 2: // review (due)
-            dueCount++;
-            break;
-        }
-      }
+      const activeCards = cardsInDeck.filter((item) => !item.card.scheduling || item.card.scheduling.queue >= 0);
+      const grouped = groupBy(activeCards, (item) => {
+        const q = item.card.scheduling?.queue;
+        if (q === undefined || q === 0) return "new";
+        if (q === 1 || q === 3) return "learning";
+        if (q === 2) return "due";
+        return "other";
+      });
 
       return {
         id: deckId,
@@ -57,9 +39,9 @@ export function computeDeckInfo(ankiData: AnkiData) {
         description: deck.description,
         cardCount: cardsInDeck.length,
         templateCount: templateNames.size,
-        newCount,
-        learnCount,
-        dueCount,
+        newCount: grouped.new?.length ?? 0,
+        learnCount: grouped.learning?.length ?? 0,
+        dueCount: grouped.due?.length ?? 0,
       };
     })
     .filter((subdeck) => subdeck.cardCount > 0);
@@ -91,51 +73,48 @@ function buildDeckTree(subdecks: SubDeckInfo[]): DeckTreeNode[] {
   const deckMap = new Map(subdecks.map((d) => [d.fullName, d]));
 
   // Collect all unique path prefixes (including virtual parents)
-  const allPaths = new Set<string>();
-  for (const d of subdecks) {
-    const parts = d.fullName.split("::");
-    for (let i = 1; i <= parts.length; i++) {
-      allPaths.add(parts.slice(0, i).join("::"));
-    }
-  }
+  const allPaths = new Set(
+    subdecks.flatMap((d) => {
+      const parts = d.fullName.split("::");
+      return parts.map((_, i) => parts.slice(0, i + 1).join("::"));
+    }),
+  );
 
   // Build nodes for every path
-  const nodeMap = new Map<string, DeckTreeNode>();
-  for (const path of allPaths) {
-    const existing = deckMap.get(path);
-    const parts = path.split("::");
-    const displayName = parts[parts.length - 1]!;
+  const nodeMap = new Map<string, DeckTreeNode>(
+    [...allPaths].map((path) => {
+      const existing = deckMap.get(path);
+      const parts = path.split("::");
+      const displayName = parts[parts.length - 1]!;
 
-    nodeMap.set(path, {
-      id: existing?.id ?? path,
-      name: displayName,
-      fullName: path,
-      cardCount: existing?.cardCount ?? 0,
-      templateCount: existing?.templateCount ?? 0,
-      newCount: existing?.newCount ?? 0,
-      learnCount: existing?.learnCount ?? 0,
-      dueCount: existing?.dueCount ?? 0,
-      children: [],
-      depth: parts.length - 1,
-    });
-  }
+      return [
+        path,
+        {
+          id: existing?.id ?? path,
+          name: displayName,
+          fullName: path,
+          cardCount: existing?.cardCount ?? 0,
+          templateCount: existing?.templateCount ?? 0,
+          newCount: existing?.newCount ?? 0,
+          learnCount: existing?.learnCount ?? 0,
+          dueCount: existing?.dueCount ?? 0,
+          children: [],
+          depth: parts.length - 1,
+        },
+      ];
+    }),
+  );
 
-  // Wire parent-child relationships
-  const roots: DeckTreeNode[] = [];
+  // Wire parent-child relationships (mutation is inherent to tree building)
   for (const [path, node] of nodeMap) {
     const parts = path.split("::");
-    if (parts.length === 1) {
-      roots.push(node);
-    } else {
-      const parentPath = parts.slice(0, -1).join("::");
-      const parent = nodeMap.get(parentPath);
-      if (parent) {
-        parent.children.push(node);
-      } else {
-        roots.push(node);
-      }
-    }
+    if (parts.length <= 1) continue;
+    const parentPath = parts.slice(0, -1).join("::");
+    const parent = nodeMap.get(parentPath);
+    if (parent) parent.children.push(node);
   }
+
+  const roots = [...nodeMap.values()].filter((node) => !node.fullName.includes("::"));
 
   // Sort children alphabetically at each level
   const sortChildren = (nodes: DeckTreeNode[]) => {

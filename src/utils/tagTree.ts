@@ -11,41 +11,34 @@ export type TagTreeNode = {
  * Each node tracks how many notes have that exact tag or a descendant.
  */
 export function buildTagTree(tags: string[], tagNoteCounts: Map<string, number>): TagTreeNode[] {
-  const nodeMap = new Map<string, TagTreeNode>();
-
-  for (const tag of tags) {
+  const nodeEntries = tags.flatMap((tag) => {
     const parts = tag.split("::");
-    for (const [i] of parts.entries()) {
+    return parts.map((_, i) => {
       const fullPath = parts.slice(0, i + 1).join("::");
-      if (nodeMap.has(fullPath)) continue;
-      nodeMap.set(fullPath, {
-        name: parts[i]!,
-        fullPath,
-        noteCount: 0,
-        children: [],
-        expanded: false,
-      });
-    }
-  }
+      return [fullPath, parts[i]!] as const;
+    });
+  });
+
+  const nodeMap = new Map<string, TagTreeNode>(
+    nodeEntries.map(([fullPath, name]) => [
+      fullPath,
+      { name, fullPath, noteCount: 0, children: [], expanded: false },
+    ]),
+  );
 
   // Wire up parent-child relationships
-  for (const node of nodeMap.values()) {
+  nodeMap.forEach((node) => {
     const lastSep = node.fullPath.lastIndexOf("::");
-    if (lastSep === -1) continue;
-    const parentPath = node.fullPath.slice(0, lastSep);
-    const parent = nodeMap.get(parentPath);
-    if (parent) {
-      parent.children.push(node);
-    }
-  }
+    if (lastSep === -1) return;
+    const parent = nodeMap.get(node.fullPath.slice(0, lastSep));
+    if (parent) parent.children.push(node);
+  });
 
   // Compute note counts (exact matches only - parent click will filter with prefix)
-  for (const [tag, count] of tagNoteCounts) {
+  tagNoteCounts.forEach((count, tag) => {
     const node = nodeMap.get(tag);
-    if (node) {
-      node.noteCount = count;
-    }
-  }
+    if (node) node.noteCount = count;
+  });
 
   // Return only root nodes (no "::" in fullPath), sorted alphabetically
   return Array.from(nodeMap.values())

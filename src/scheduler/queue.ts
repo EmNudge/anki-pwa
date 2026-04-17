@@ -4,6 +4,7 @@ import type { SchedulingAlgorithm } from "./algorithm";
 import { FSRSAlgorithm } from "./fsrs-algorithm";
 import { AnkiSM2Algorithm } from "./anki-sm2-algorithm";
 import { QUEUE_SUSPENDED, QUEUE_SCHED_BURIED, QUEUE_USER_BURIED } from "../lib/syncWrite";
+import { groupBy } from "../utils/groupBy";
 
 /**
  * Apply fuzz to a due date to spread reviews across days.
@@ -187,41 +188,37 @@ export class ReviewQueue {
     const now = new Date();
     const nowMs = now.getTime();
 
-    const learningCards: ReviewCard[] = [];
-    const dueReviews: ReviewCard[] = [];
-    const newCards: ReviewCard[] = [];
-    const aheadCards: ReviewCard[] = [];
-    const dueDateCache = new Map<string, number>();
+    const activeCards = queue.filter(
+      (card) =>
+        card.reviewState.queueOverride !== QUEUE_SUSPENDED &&
+        card.reviewState.queueOverride !== QUEUE_USER_BURIED &&
+        card.reviewState.queueOverride !== QUEUE_SCHED_BURIED,
+    );
 
-    for (const card of queue) {
-      try {
-        // Skip suspended cards entirely
-        if (card.reviewState.queueOverride === QUEUE_SUSPENDED) continue;
-        // Skip buried cards (they'll be unburied on day rollover)
-        if (
-          card.reviewState.queueOverride === QUEUE_USER_BURIED ||
-          card.reviewState.queueOverride === QUEUE_SCHED_BURIED
-        )
-          continue;
-
-        const dueDate = this.algorithm.getDueDate(card.reviewState.cardState);
-        const dueMs = dueDate.getTime();
-        dueDateCache.set(card.cardId, dueMs);
-
-        if (card.isNew) {
-          newCards.push(card);
-        } else if (this.algorithm.isInLearning?.(card.reviewState.cardState)) {
-          // Learning/relearning cards — always include (shown when due)
-          learningCards.push(card);
-        } else if (dueMs <= nowMs) {
-          dueReviews.push(card);
-        } else {
-          aheadCards.push(card);
+    const dueDateCache = new Map<string, number>(
+      activeCards.flatMap((card) => {
+        try {
+          return [[card.cardId, this.algorithm.getDueDate(card.reviewState.cardState).getTime()] as const];
+        } catch (error) {
+          console.error("Error processing card in queue:", error, card);
+          return [];
         }
-      } catch (error) {
-        console.error("Error processing card in queue:", error, card);
-      }
-    }
+      }),
+    );
+
+    const categorize = (card: ReviewCard): string => {
+      if (!dueDateCache.has(card.cardId)) return "error";
+      if (card.isNew) return "new";
+      if (this.algorithm.isInLearning?.(card.reviewState.cardState)) return "learning";
+      if (dueDateCache.get(card.cardId)! <= nowMs) return "dueReview";
+      return "ahead";
+    };
+
+    const grouped = groupBy(activeCards, categorize);
+    const learningCards = grouped.learning ?? [];
+    const dueReviews = grouped.dueReview ?? [];
+    const newCards = grouped.new ?? [];
+    const aheadCards = grouped.ahead ?? [];
 
     // Apply easy-days multiplier to daily limits
     const easyMultiplier = getEasyDayMultiplier(now, this.settings.easyDays);

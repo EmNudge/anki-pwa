@@ -167,36 +167,33 @@ export function readDeckStepCounts(db: import("sql.js").Database): Map<number, D
   const isAnki21b = (hasNotetypes[0]?.values.length ?? 0) > 0;
 
   if (isAnki21b) {
-    // anki21b: deck_config table has config JSON, decks table references config via common JSON
-    const configMap = new Map<number, DeckStepInfo>();
     const dcResult = db.exec("SELECT id, config FROM deck_config");
-    if (dcResult[0]) {
-      for (const row of dcResult[0].values) {
+    const configMap = new Map<number, DeckStepInfo>(
+      (dcResult[0]?.values ?? []).map((row) => {
         const id = row[0] as number;
         try {
           const cfg = JSON.parse(row[1] as string);
-          configMap.set(id, {
+          return [id, {
             learnSteps: Array.isArray(cfg.new?.delays) ? cfg.new.delays.length : 2,
             relearnSteps: Array.isArray(cfg.lapse?.delays) ? cfg.lapse.delays.length : 1,
-          });
+          }];
         } catch {
-          configMap.set(id, { learnSteps: 2, relearnSteps: 1 });
+          return [id, { learnSteps: 2, relearnSteps: 1 }];
         }
-      }
-    }
-    // Map each deck to its config
+      }),
+    );
+
     const decksResult = db.exec("SELECT id, common FROM decks");
-    if (decksResult[0]) {
-      for (const row of decksResult[0].values) {
-        const deckId = row[0] as number;
-        try {
-          const common = JSON.parse(row[1] as string);
-          const confId = common.conf ?? common.config_id ?? 1;
-          const steps = configMap.get(confId);
-          if (steps) result.set(deckId, steps);
-        } catch { /* use default */ }
-      }
-    }
+    const deckEntries = (decksResult[0]?.values ?? []).flatMap((row) => {
+      const deckId = row[0] as number;
+      try {
+        const common = JSON.parse(row[1] as string);
+        const confId = common.conf ?? common.config_id ?? 1;
+        const steps = configMap.get(confId);
+        return steps ? [[deckId, steps] as const] : [];
+      } catch { return []; }
+    });
+    deckEntries.forEach(([deckId, steps]) => result.set(deckId, steps));
   } else {
     // anki2: col.dconf has deck configs, col.decks has deck → conf mapping
     const colResult = db.exec("SELECT dconf, decks FROM col");
@@ -211,19 +208,19 @@ export function readDeckStepCounts(db: import("sql.js").Database): Map<number, D
           conf?: string | number;
         }>;
 
-        const configMap = new Map<string, DeckStepInfo>();
-        for (const [id, cfg] of Object.entries(dconf)) {
-          configMap.set(id, {
+        const configMap = new Map<string, DeckStepInfo>(
+          Object.entries(dconf).map(([id, cfg]) => [id, {
             learnSteps: Array.isArray(cfg.new?.delays) ? cfg.new.delays.length : 2,
             relearnSteps: Array.isArray(cfg.lapse?.delays) ? cfg.lapse.delays.length : 1,
-          });
-        }
+          }]),
+        );
 
-        for (const deck of Object.values(decks)) {
-          const confId = String(deck.conf ?? "1");
-          const steps = configMap.get(confId);
-          if (steps) result.set(deck.id, steps);
-        }
+        Object.values(decks)
+          .flatMap((deck) => {
+            const steps = configMap.get(String(deck.conf ?? "1"));
+            return steps ? [[deck.id, steps] as const] : [];
+          })
+          .forEach(([deckId, steps]) => result.set(deckId, steps));
       } catch { /* use defaults */ }
     }
   }
@@ -406,14 +403,9 @@ async function insertRevlogs(
 
   if (allLogs.length === 0) return;
 
-  // Get existing revlog IDs to avoid duplicates
-  const existingIds = new Set<number>();
-  const existingResult = db.exec("SELECT id FROM revlog");
-  if (existingResult[0]) {
-    for (const row of existingResult[0].values) {
-      existingIds.add(row[0] as number);
-    }
-  }
+  const existingIds = new Set<number>(
+    (db.exec("SELECT id FROM revlog")[0]?.values ?? []).map((row) => row[0] as number),
+  );
 
   // Build a map of cardId → card state for revlog type lookup
   const cardStateMap = new Map(reviewedCards.map((c) => [c.cardId, c]));
@@ -481,26 +473,15 @@ async function insertGraves(db: import("sql.js").Database, deckId: string): Prom
 
   const insertStmt = db.prepare(GRAVES_INSERT_SQL);
 
-  // Card graves (type 0)
-  for (const deleted of deletedCards) {
-    const ankiCardId = Number(deleted.cardId);
-    if (isNaN(ankiCardId)) continue;
-    insertStmt.run([-1, ankiCardId, 0]);
-  }
+  const graves: [number, number][] = [
+    ...deletedCards.map((d) => [Number(d.cardId), 0] as [number, number]),
+    ...deletedNotes.map((d) => [Number(d.noteId), 1] as [number, number]),
+    ...deletedDecks.map((d) => [Number(d.deletedDeckId), 2] as [number, number]),
+  ];
 
-  // Note graves (type 1)
-  for (const deleted of deletedNotes) {
-    const ankiNoteId = Number(deleted.noteId);
-    if (isNaN(ankiNoteId)) continue;
-    insertStmt.run([-1, ankiNoteId, 1]);
-  }
-
-  // Deck graves (type 2)
-  for (const deleted of deletedDecks) {
-    const ankiDeckId = Number(deleted.deletedDeckId);
-    if (isNaN(ankiDeckId)) continue;
-    insertStmt.run([-1, ankiDeckId, 2]);
-  }
+  graves
+    .filter(([id]) => !isNaN(id))
+    .forEach(([id, type]) => insertStmt.run([-1, id, type]));
 
   insertStmt.free();
 }

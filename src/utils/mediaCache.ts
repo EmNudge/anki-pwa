@@ -27,14 +27,14 @@ async function loadMediaEntries<T>(
   transform: (blob: Blob) => T,
 ): Promise<Map<string, T>> {
   const mediaKeys = filterMediaKeys(await cache.keys());
-  const entries = new Map<string, T>();
-  for (const req of mediaKeys) {
-    const resp = await cache.match(req);
-    if (resp) {
-      entries.set(mediaKeyToFilename(req), transform(await resp.blob()));
-    }
-  }
-  return entries;
+  const results = await Promise.all(
+    mediaKeys.map(async (req) => {
+      const resp = await cache.match(req);
+      if (!resp) return null;
+      return [mediaKeyToFilename(req), transform(await resp.blob())] as const;
+    }),
+  );
+  return new Map(results.filter((r): r is NonNullable<typeof r> => r !== null));
 }
 
 /**
@@ -56,9 +56,7 @@ export function loadMediaObjectUrls(cache: Cache): Promise<Map<string, string>> 
  * Revoke all object URLs in a Map (for cleanup on deck switch / unmount).
  */
 export function revokeMediaObjectUrls(urls: Map<string, string>): void {
-  for (const url of urls.values()) {
-    URL.revokeObjectURL(url);
-  }
+  urls.forEach((url) => URL.revokeObjectURL(url));
 }
 
 /**

@@ -115,37 +115,42 @@ export function useCommands(options: UseCommandsOptions = {}) {
     );
 
     // Undo/redo commands (only show when available)
-    const undoRedoCommands: Command[] = [];
-    if (canUndo.value) {
-      undoRedoCommands.push({
-        id: "undo",
-        title: `Undo: ${undoDescription.value}`,
-        description: "Revert the last operation",
-        icon: icon(Undo2),
-        hotkey: "ctrl+Z",
-        group: "Edit",
-        handler: () => {
-          void executeUndo().then((desc) => {
-            if (desc) options.onUndoToast?.(`Undo: ${desc}`);
-          });
-        },
-      });
-    }
-    if (canRedo.value) {
-      undoRedoCommands.push({
-        id: "redo",
-        title: `Redo: ${redoDescription.value}`,
-        description: "Re-apply the last undone operation",
-        icon: icon(Redo2),
-        hotkey: "ctrl+shift+Z",
-        group: "Edit",
-        handler: () => {
-          void executeRedo().then((desc) => {
-            if (desc) options.onUndoToast?.(`Redo: ${desc}`);
-          });
-        },
-      });
-    }
+    const undoRedoCommands: Command[] = [
+      ...(canUndo.value
+        ? [
+            {
+              id: "undo",
+              title: `Undo: ${undoDescription.value}`,
+              description: "Revert the last operation",
+              icon: icon(Undo2),
+              hotkey: "ctrl+Z",
+              group: "Edit",
+              handler: () => {
+                void executeUndo().then((desc) => {
+                  if (desc) options.onUndoToast?.(`Undo: ${desc}`);
+                });
+              },
+            },
+          ]
+        : []),
+      ...(canRedo.value
+        ? [
+            {
+              id: "redo",
+              title: `Redo: ${redoDescription.value}`,
+              description: "Re-apply the last undone operation",
+              icon: icon(Redo2),
+              hotkey: "ctrl+shift+Z",
+              group: "Edit",
+              handler: () => {
+                void executeRedo().then((desc) => {
+                  if (desc) options.onUndoToast?.(`Redo: ${desc}`);
+                });
+              },
+            },
+          ]
+        : []),
+    ];
 
     const commands: Command[] = [
       ...undoRedoCommands,
@@ -263,7 +268,7 @@ function buildCardActionCommands(ankiData: AnkiData | null, options: UseCommands
   const currentFlag = reviewCard.reviewState.flags ?? 0;
   const isMarked = noteCard?.tags.some((t) => t.toLowerCase() === "marked") ?? false;
 
-  const commands: Command[] = [
+  return [
     {
       id: "bury-card",
       title: "Bury Card",
@@ -327,26 +332,24 @@ function buildCardActionCommands(ankiData: AnkiData | null, options: UseCommands
       metadata: buildCardInfoMetadata(reviewCard, queue),
       handler: () => ({ keepOpen: true }),
     },
-  ];
-
-  if (noteCard) {
-    commands.push({
-      id: "mark-note",
-      title: isMarked ? "Unmark Note" : "Mark Note",
-      description: isMarked
-        ? 'Remove the "marked" tag from this note'
-        : 'Tag this note as "marked" for easy filtering',
-      icon: icon(Star),
-      hotkey: "*",
-      label: isMarked ? "Marked" : undefined,
-      group: "Current Card",
-      handler: () => {
-        markCurrentNote();
-      },
-    });
-  }
-
-  commands.push(
+    ...(noteCard
+      ? [
+          {
+            id: "mark-note",
+            title: isMarked ? "Unmark Note" : "Mark Note",
+            description: isMarked
+              ? 'Remove the "marked" tag from this note'
+              : 'Tag this note as "marked" for easy filtering',
+            icon: icon(Star),
+            hotkey: "*",
+            label: isMarked ? "Marked" : undefined,
+            group: "Current Card",
+            handler: () => {
+              markCurrentNote();
+            },
+          },
+        ]
+      : []),
     {
       id: "edit-card",
       title: "Edit Card",
@@ -403,9 +406,7 @@ function buildCardActionCommands(ankiData: AnkiData | null, options: UseCommands
         }
       },
     },
-  );
-
-  return commands;
+  ];
 }
 
 function buildCardInfoMetadata(
@@ -413,46 +414,38 @@ function buildCardInfoMetadata(
   queue: import("../scheduler/queue").ReviewQueue | null,
 ): Command["metadata"] {
   const displayInfo = queue?.getCardDisplayInfo(reviewCard) ?? {};
-  const entries: NonNullable<Command["metadata"]> = [
-    { label: "Card ID", value: reviewCard.cardId },
-    { label: "New", value: reviewCard.isNew ? "Yes" : "No" },
+  const flags = reviewCard.reviewState.flags ?? 0;
+
+  type MetadataEntry = { label: string; value: string | ReturnType<typeof h> };
+  const conditionalEntries: (MetadataEntry | null)[] = [
+    displayInfo.ease !== undefined
+      ? { label: "Ease Factor", value: String(Math.round((displayInfo.ease as number) * 100)) + "%" }
+      : null,
+    displayInfo.interval !== undefined
+      ? { label: "Interval", value: displayInfo.interval + " days" }
+      : null,
+    displayInfo.repetitions !== undefined
+      ? { label: "Repetitions", value: String(displayInfo.repetitions) }
+      : null,
+    displayInfo.stability !== undefined
+      ? { label: "Stability", value: String(displayInfo.stability) }
+      : null,
+    displayInfo.difficulty !== undefined
+      ? { label: "Difficulty", value: String(displayInfo.difficulty) }
+      : null,
+    flags > 0 ? { label: "Flag", value: getFlagLabel(flags) } : null,
+    reviewCard.reviewState.lastReviewed
+      ? {
+          label: "Last Reviewed",
+          value: new Date(reviewCard.reviewState.lastReviewed).toLocaleDateString(),
+        }
+      : null,
   ];
 
-  if (displayInfo.ease !== undefined) {
-    entries.push({
-      label: "Ease Factor",
-      value: String(Math.round((displayInfo.ease as number) * 100)) + "%",
-    });
-  }
-  if (displayInfo.interval !== undefined) {
-    entries.push({ label: "Interval", value: displayInfo.interval + " days" });
-  }
-  if (displayInfo.repetitions !== undefined) {
-    entries.push({ label: "Repetitions", value: String(displayInfo.repetitions) });
-  }
-  if (displayInfo.stability !== undefined) {
-    entries.push({ label: "Stability", value: String(displayInfo.stability) });
-  }
-  if (displayInfo.difficulty !== undefined) {
-    entries.push({ label: "Difficulty", value: String(displayInfo.difficulty) });
-  }
-
-  const flags = reviewCard.reviewState.flags ?? 0;
-  if (flags > 0) {
-    entries.push({ label: "Flag", value: getFlagLabel(flags) });
-  }
-
-  if (reviewCard.reviewState.lastReviewed) {
-    entries.push({
-      label: "Last Reviewed",
-      value: new Date(reviewCard.reviewState.lastReviewed).toLocaleDateString(),
-    });
-  }
-
-  entries.push({
-    label: "Review Log",
-    value: h(ReviewLogPanel, { cardId: reviewCard.cardId }),
-  });
-
-  return entries;
+  return [
+    { label: "Card ID", value: reviewCard.cardId },
+    { label: "New", value: reviewCard.isNew ? "Yes" : "No" },
+    ...conditionalEntries.filter((e): e is MetadataEntry => e !== null),
+    { label: "Review Log", value: h(ReviewLogPanel, { cardId: reviewCard.cardId }) },
+  ];
 }

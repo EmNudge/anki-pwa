@@ -42,37 +42,46 @@ function isAnki21b(db: Database): boolean {
   return tableExists(db, "notetypes");
 }
 
+function countByKey<T, K extends string | number>(items: T[], keyFn: (item: T) => K): Map<K, number> {
+  const map = new Map<K, number>();
+  items.forEach((item) => {
+    const key = keyFn(item);
+    map.set(key, (map.get(key) ?? 0) + 1);
+  });
+  return map;
+}
+
+function sumValues(map: Map<unknown, number>): number {
+  let total = 0;
+  map.forEach((v) => { total += v; });
+  return total;
+}
+
 /**
  * Get all notetype IDs and their field counts from the database.
  */
 function getNotetypeFieldCounts(db: Database): Map<number, number> {
-  const result = new Map<number, number>();
-
   if (isAnki21b(db)) {
-    // anki21b: fields table with ntid
     const rows = executeQueryAll<{ ntid: number; cnt: number }>(
       db,
       "SELECT ntid, COUNT(*) as cnt FROM fields GROUP BY ntid",
     );
-    for (const row of rows) {
-      result.set(row.ntid, row.cnt);
-    }
-  } else {
-    // anki2: models stored as JSON in col table
-    try {
-      const col = executeQueryAll<{ models: string }>(db, "SELECT models FROM col");
-      if (col.length > 0 && col[0]!.models) {
-        const models = JSON.parse(col[0]!.models) as Record<string, { flds: unknown[] }>;
-        for (const [id, model] of Object.entries(models)) {
-          result.set(Number(id), model.flds?.length ?? 0);
-        }
-      }
-    } catch {
-      // If parsing fails, return empty
-    }
+    return new Map(rows.map((row) => [row.ntid, row.cnt]));
   }
 
-  return result;
+  try {
+    const col = executeQueryAll<{ models: string }>(db, "SELECT models FROM col");
+    if (col.length > 0 && col[0]!.models) {
+      const models = JSON.parse(col[0]!.models) as Record<string, { flds: unknown[] }>;
+      return new Map(
+        Object.entries(models).map(([id, model]) => [Number(id), model.flds?.length ?? 0]),
+      );
+    }
+  } catch {
+    // If parsing fails, return empty
+  }
+
+  return new Map();
 }
 
 /**
@@ -117,12 +126,151 @@ function getNotetypeIds(db: Database): Set<number> {
   }
 }
 
+function checkOrphanedCards(cards: CardRow[], noteIdSet: Set<number>): IntegrityIssue | null {
+  const orphanedCards = cards.filter((c) => !noteIdSet.has(c.nid));
+  if (orphanedCards.length === 0) return null;
+  return {
+    type: "orphaned-cards",
+    severity: "error",
+    title: "Orphaned Cards",
+    description: "Cards that reference notes which no longer exist. These cards cannot be studied.",
+    count: orphanedCards.length,
+    details: orphanedCards.slice(0, 20).map((c) => `Card ${c.id} → missing note ${c.nid}`),
+    fixable: true,
+  };
+}
+
+function checkOrphanedNotes(notes: NoteRow[], cardNoteIds: Set<number>): IntegrityIssue | null {
+  const orphanedNotes = notes.filter((n) => !cardNoteIds.has(n.id));
+  if (orphanedNotes.length === 0) return null;
+  return {
+    type: "orphaned-notes",
+    severity: "warning",
+    title: "Notes Without Cards",
+    description: "Notes that have no associated cards. They take up space but cannot be studied.",
+    count: orphanedNotes.length,
+    details: orphanedNotes.slice(0, 20).map((n) => `Note ${n.id} (guid: ${n.guid})`),
+    fixable: true,
+  };
+}
+
+function checkMissingNotetypes(notes: NoteRow[], notetypeIds: Set<number>): IntegrityIssue | null {
+  const missingNotetypes = countByKey(
+    notes.filter((n) => !notetypeIds.has(n.mid)),
+    (n) => n.mid,
+  );
+  if (missingNotetypes.size === 0) return null;
+  return {
+    type: "missing-notetype",
+    severity: "error",
+    title: "Missing Note Types",
+    description: "Notes reference note types that don't exist in the database.",
+    count: sumValues(missingNotetypes),
+    details: Array.from(missingNotetypes.entries()).map(
+      ([mid, cnt]) => `Notetype ${mid}: ${cnt} note${cnt !== 1 ? "s" : ""} affected`,
+    ),
+    fixable: false,
+  };
+}
+
+function checkMissingDecks(cards: CardRow[], deckIds: Set<number>): IntegrityIssue | null {
+  const missingDecks = countByKey(
+    cards.filter((c) => !deckIds.has(c.odid !== 0 ? c.odid : c.did)),
+    (c) => (c.odid !== 0 ? c.odid : c.did),
+  );
+  if (missingDecks.size === 0) return null;
+  return {
+    type: "missing-deck",
+    severity: "error",
+    title: "Missing Decks",
+    description: "Cards reference decks that don't exist in the database.",
+    count: sumValues(missingDecks),
+    details: Array.from(missingDecks.entries()).map(
+      ([did, cnt]) => `Deck ${did}: ${cnt} card${cnt !== 1 ? "s" : ""} affected`,
+    ),
+    fixable: true,
+  };
+}
+
+function checkFieldCountMismatches(notes: NoteRow[], notetypeFieldCounts: Map<number, number>): IntegrityIssue | null {
+  const fieldMismatches = notes
+    .filter((note) => notetypeFieldCounts.has(note.mid))
+    .map((note) => ({
+      noteId: note.id,
+      expected: notetypeFieldCounts.get(note.mid)!,
+      actual: note.flds.split("\x1f").length,
+    }))
+    .filter((m) => m.actual !== m.expected);
+  if (fieldMismatches.length === 0) return null;
+  return {
+    type: "field-count-mismatch",
+    severity: "warning",
+    title: "Field Count Mismatches",
+    description: "Notes whose field count doesn't match their note type definition.",
+    count: fieldMismatches.length,
+    details: fieldMismatches.slice(0, 20).map(
+      (m) => `Note ${m.noteId}: expected ${m.expected} fields, has ${m.actual}`,
+    ),
+    fixable: false,
+  };
+}
+
+function hasInvalidScheduling(card: CardRow): boolean {
+  return (card.ivl < 0 && card.type === 2) || card.type < 0 || card.type > 3 || card.queue < -3 || card.queue > 4;
+}
+
+function describeSchedulingIssue(card: CardRow): string[] {
+  return [
+    ...(card.ivl < 0 && card.type === 2 ? [`Card ${card.id}: negative interval on review card`] : []),
+    ...(card.type < 0 || card.type > 3 ? [`Card ${card.id}: invalid type ${card.type}`] : []),
+    ...(card.queue < -3 || card.queue > 4 ? [`Card ${card.id}: invalid queue ${card.queue}`] : []),
+  ];
+}
+
+function checkInvalidScheduling(cards: CardRow[]): IntegrityIssue | null {
+  const invalidCards = cards.filter(hasInvalidScheduling);
+  const details = invalidCards.flatMap(describeSchedulingIssue);
+  if (details.length === 0) return null;
+  return {
+    type: "invalid-scheduling",
+    severity: "warning",
+    title: "Invalid Scheduling Data",
+    description: "Cards with impossible scheduling values (negative intervals, invalid types/queues).",
+    count: details.length,
+    details: details.slice(0, 20),
+    fixable: true,
+  };
+}
+
+function checkDuplicateIds<T>(
+  items: T[],
+  keyFn: (item: T) => string | number,
+  type: IssueType,
+  severity: IssueSeverity,
+  title: string,
+  description: string,
+  labelFn: (key: string | number, cnt: number) => string,
+  limit?: number,
+): IntegrityIssue | null {
+  const counts = countByKey(items, keyFn);
+  const dups = Array.from(counts.entries()).filter(([, cnt]) => cnt > 1);
+  if (dups.length === 0) return null;
+  const details = limit !== undefined ? dups.slice(0, limit) : dups;
+  return {
+    type,
+    severity,
+    title,
+    description,
+    count: sumValues(new Map(dups)),
+    details: details.map(([key, cnt]) => labelFn(key, cnt)),
+    fixable: false,
+  };
+}
+
 /**
  * Run all integrity checks against the database and return issues found.
  */
 export function checkDatabaseIntegrity(db: Database): IntegrityIssue[] {
-  const issues: IntegrityIssue[] = [];
-
   const notes = executeQueryAll<NoteRow>(db, "SELECT id, mid, flds, guid FROM notes");
   const cards = executeQueryAll<CardRow>(
     db,
@@ -135,185 +283,33 @@ export function checkDatabaseIntegrity(db: Database): IntegrityIssue[] {
   const notetypeIds = getNotetypeIds(db);
   const notetypeFieldCounts = getNotetypeFieldCounts(db);
 
-  // 1. Orphaned cards (cards whose note doesn't exist)
-  const orphanedCards = cards.filter((c) => !noteIdSet.has(c.nid));
-  if (orphanedCards.length > 0) {
-    issues.push({
-      type: "orphaned-cards",
-      severity: "error",
-      title: "Orphaned Cards",
-      description: "Cards that reference notes which no longer exist. These cards cannot be studied.",
-      count: orphanedCards.length,
-      details: orphanedCards.slice(0, 20).map((c) => `Card ${c.id} → missing note ${c.nid}`),
-      fixable: true,
-    });
-  }
-
-  // 2. Orphaned notes (notes with no cards)
-  const orphanedNotes = notes.filter((n) => !cardNoteIds.has(n.id));
-  if (orphanedNotes.length > 0) {
-    issues.push({
-      type: "orphaned-notes",
-      severity: "warning",
-      title: "Notes Without Cards",
-      description: "Notes that have no associated cards. They take up space but cannot be studied.",
-      count: orphanedNotes.length,
-      details: orphanedNotes.slice(0, 20).map((n) => `Note ${n.id} (guid: ${n.guid})`),
-      fixable: true,
-    });
-  }
-
-  // 3. Missing notetypes
-  const missingNotetypes = new Map<number, number>();
-  for (const note of notes) {
-    if (!notetypeIds.has(note.mid)) {
-      missingNotetypes.set(note.mid, (missingNotetypes.get(note.mid) ?? 0) + 1);
-    }
-  }
-  if (missingNotetypes.size > 0) {
-    const total = Array.from(missingNotetypes.values()).reduce((a, b) => a + b, 0);
-    issues.push({
-      type: "missing-notetype",
-      severity: "error",
-      title: "Missing Note Types",
-      description: "Notes reference note types that don't exist in the database.",
-      count: total,
-      details: Array.from(missingNotetypes.entries()).map(
-        ([mid, cnt]) => `Notetype ${mid}: ${cnt} note${cnt !== 1 ? "s" : ""} affected`,
-      ),
-      fixable: false,
-    });
-  }
-
-  // 4. Missing decks
-  const missingDecks = new Map<number, number>();
-  for (const card of cards) {
-    const effectiveDid = card.odid !== 0 ? card.odid : card.did;
-    if (!deckIds.has(effectiveDid)) {
-      missingDecks.set(effectiveDid, (missingDecks.get(effectiveDid) ?? 0) + 1);
-    }
-  }
-  if (missingDecks.size > 0) {
-    const total = Array.from(missingDecks.values()).reduce((a, b) => a + b, 0);
-    issues.push({
-      type: "missing-deck",
-      severity: "error",
-      title: "Missing Decks",
-      description: "Cards reference decks that don't exist in the database.",
-      count: total,
-      details: Array.from(missingDecks.entries()).map(
-        ([did, cnt]) => `Deck ${did}: ${cnt} card${cnt !== 1 ? "s" : ""} affected`,
-      ),
-      fixable: true,
-    });
-  }
-
-  // 5. Field count mismatches
-  const fieldMismatches: { noteId: number; expected: number; actual: number }[] = [];
-  for (const note of notes) {
-    const expectedCount = notetypeFieldCounts.get(note.mid);
-    if (expectedCount === undefined) continue; // already caught by missing notetype check
-    const actualCount = note.flds.split("\x1f").length;
-    if (actualCount !== expectedCount) {
-      fieldMismatches.push({ noteId: note.id, expected: expectedCount, actual: actualCount });
-    }
-  }
-  if (fieldMismatches.length > 0) {
-    issues.push({
-      type: "field-count-mismatch",
-      severity: "warning",
-      title: "Field Count Mismatches",
-      description: "Notes whose field count doesn't match their note type definition.",
-      count: fieldMismatches.length,
-      details: fieldMismatches.slice(0, 20).map(
-        (m) => `Note ${m.noteId}: expected ${m.expected} fields, has ${m.actual}`,
-      ),
-      fixable: false,
-    });
-  }
-
-  // 6. Invalid scheduling data
-  const invalidScheduling: { cardId: number; reason: string }[] = [];
-  for (const card of cards) {
-    if (card.ivl < 0 && card.type === 2) {
-      invalidScheduling.push({ cardId: card.id, reason: "negative interval on review card" });
-    }
-    if (card.type < 0 || card.type > 3) {
-      invalidScheduling.push({ cardId: card.id, reason: `invalid type ${card.type}` });
-    }
-    if (card.queue < -3 || card.queue > 4) {
-      invalidScheduling.push({ cardId: card.id, reason: `invalid queue ${card.queue}` });
-    }
-  }
-  if (invalidScheduling.length > 0) {
-    issues.push({
-      type: "invalid-scheduling",
-      severity: "warning",
-      title: "Invalid Scheduling Data",
-      description: "Cards with impossible scheduling values (negative intervals, invalid types/queues).",
-      count: invalidScheduling.length,
-      details: invalidScheduling.slice(0, 20).map(
-        (s) => `Card ${s.cardId}: ${s.reason}`,
-      ),
-      fixable: true,
-    });
-  }
-
-  // 7. Duplicate note IDs
-  const noteIdCounts = new Map<number, number>();
-  for (const note of notes) {
-    noteIdCounts.set(note.id, (noteIdCounts.get(note.id) ?? 0) + 1);
-  }
-  const dupNoteIds = Array.from(noteIdCounts.entries()).filter(([, cnt]) => cnt > 1);
-  if (dupNoteIds.length > 0) {
-    issues.push({
-      type: "duplicate-note-ids",
-      severity: "error",
-      title: "Duplicate Note IDs",
-      description: "Multiple notes share the same ID, which can cause data corruption.",
-      count: dupNoteIds.reduce((a, [, cnt]) => a + cnt, 0),
-      details: dupNoteIds.map(([id, cnt]) => `Note ID ${id}: ${cnt} occurrences`),
-      fixable: false,
-    });
-  }
-
-  // 8. Duplicate card IDs
-  const cardIdCounts = new Map<number, number>();
-  for (const card of cards) {
-    cardIdCounts.set(card.id, (cardIdCounts.get(card.id) ?? 0) + 1);
-  }
-  const dupCardIds = Array.from(cardIdCounts.entries()).filter(([, cnt]) => cnt > 1);
-  if (dupCardIds.length > 0) {
-    issues.push({
-      type: "duplicate-card-ids",
-      severity: "error",
-      title: "Duplicate Card IDs",
-      description: "Multiple cards share the same ID, which can cause data corruption.",
-      count: dupCardIds.reduce((a, [, cnt]) => a + cnt, 0),
-      details: dupCardIds.map(([id, cnt]) => `Card ID ${id}: ${cnt} occurrences`),
-      fixable: false,
-    });
-  }
-
-  // 9. Duplicate GUIDs
-  const guidCounts = new Map<string, number>();
-  for (const note of notes) {
-    guidCounts.set(note.guid, (guidCounts.get(note.guid) ?? 0) + 1);
-  }
-  const dupGuids = Array.from(guidCounts.entries()).filter(([, cnt]) => cnt > 1);
-  if (dupGuids.length > 0) {
-    issues.push({
-      type: "duplicate-guids",
-      severity: "warning",
-      title: "Duplicate Note GUIDs",
-      description: "Multiple notes share the same GUID. This can cause sync conflicts.",
-      count: dupGuids.reduce((a, [, cnt]) => a + cnt, 0),
-      details: dupGuids.slice(0, 20).map(([guid, cnt]) => `GUID "${guid}": ${cnt} occurrences`),
-      fixable: false,
-    });
-  }
-
-  return issues;
+  return [
+    checkOrphanedCards(cards, noteIdSet),
+    checkOrphanedNotes(notes, cardNoteIds),
+    checkMissingNotetypes(notes, notetypeIds),
+    checkMissingDecks(cards, deckIds),
+    checkFieldCountMismatches(notes, notetypeFieldCounts),
+    checkInvalidScheduling(cards),
+    checkDuplicateIds(
+      notes, (n) => n.id,
+      "duplicate-note-ids", "error", "Duplicate Note IDs",
+      "Multiple notes share the same ID, which can cause data corruption.",
+      (id, cnt) => `Note ID ${id}: ${cnt} occurrences`,
+    ),
+    checkDuplicateIds(
+      cards, (c) => c.id,
+      "duplicate-card-ids", "error", "Duplicate Card IDs",
+      "Multiple cards share the same ID, which can cause data corruption.",
+      (id, cnt) => `Card ID ${id}: ${cnt} occurrences`,
+    ),
+    checkDuplicateIds(
+      notes, (n) => n.guid,
+      "duplicate-guids", "warning", "Duplicate Note GUIDs",
+      "Multiple notes share the same GUID. This can cause sync conflicts.",
+      (guid, cnt) => `GUID "${guid}": ${cnt} occurrences`,
+      20,
+    ),
+  ].filter((issue): issue is IntegrityIssue => issue !== null);
 }
 
 /**
@@ -354,19 +350,15 @@ function fixMissingDecks(db: Database): number {
     "SELECT id, nid, did, type, queue, due, ivl, odid FROM cards",
   );
 
-  let fixed = 0;
-  for (const card of cards) {
-    const effectiveDid = card.odid !== 0 ? card.odid : card.did;
-    if (!deckIds.has(effectiveDid)) {
-      if (card.odid !== 0) {
-        db.run(`UPDATE cards SET odid = 0, did = 1 WHERE id = ${card.id}`);
-      } else {
-        db.run(`UPDATE cards SET did = 1 WHERE id = ${card.id}`);
-      }
-      fixed++;
+  const cardsToFix = cards.filter((c) => !deckIds.has(c.odid !== 0 ? c.odid : c.did));
+  cardsToFix.forEach((card) => {
+    if (card.odid !== 0) {
+      db.run(`UPDATE cards SET odid = 0, did = 1 WHERE id = ${card.id}`);
+    } else {
+      db.run(`UPDATE cards SET did = 1 WHERE id = ${card.id}`);
     }
-  }
-  return fixed;
+  });
+  return cardsToFix.length;
 }
 
 /**
@@ -378,20 +370,13 @@ function fixInvalidScheduling(db: Database): number {
     "SELECT id, nid, did, type, queue, due, ivl, odid FROM cards",
   );
 
-  let fixed = 0;
-  for (const card of cards) {
-    const hasNegativeIvl = card.ivl < 0 && card.type === 2;
-    const hasInvalidType = card.type < 0 || card.type > 3;
-    const hasInvalidQueue = card.queue < -3 || card.queue > 4;
-
-    if (hasNegativeIvl || hasInvalidType || hasInvalidQueue) {
-      db.run(
-        `UPDATE cards SET type = 0, queue = 0, due = 0, ivl = 0, factor = 0, reps = 0, lapses = 0 WHERE id = ${card.id}`,
-      );
-      fixed++;
-    }
-  }
-  return fixed;
+  const cardsToFix = cards.filter(hasInvalidScheduling);
+  cardsToFix.forEach((card) => {
+    db.run(
+      `UPDATE cards SET type = 0, queue = 0, due = 0, ivl = 0, factor = 0, reps = 0, lapses = 0 WHERE id = ${card.id}`,
+    );
+  });
+  return cardsToFix.length;
 }
 
 /**
