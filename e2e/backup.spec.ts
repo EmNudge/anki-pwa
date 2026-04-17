@@ -52,6 +52,11 @@ test.describe('Backup Panel', () => {
 
     const createBtn = page.locator('.backup-btn--primary:has-text("Create Backup")');
     await expect(createBtn).toBeVisible();
-    // Just verify the button is present and clickable (actual backup may fail without synced data)
+    await expect(createBtn).toBeEnabled();
+    await createBtn.click();
+
+    // After clicking, some response should appear (success toast, progress indicator, or error)
+    const response = page.locator('.toast, .backup-progress, .backup-status, .backup-error');
+    await expect(response.first()).toBeVisible({ timeout: 5000 });
   });
 });

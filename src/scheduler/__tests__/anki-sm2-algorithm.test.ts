@@ -35,6 +35,7 @@ describe("AnkiSM2Algorithm", () => {
       const result = algo.reviewCard(card, "again");
       const newState = result.cardState as AnkiSM2CardState;
       expect(newState.phase).toBe("learning");
+      expect(newState.phase).not.toBe("review"); // shouldn't graduate on again
       expect(newState.step).toBe(0);
       expect(newState.reps).toBe(1);
     });
@@ -45,7 +46,9 @@ describe("AnkiSM2Algorithm", () => {
       const newState = result.cardState as AnkiSM2CardState;
       // Good advances to next step (step 1 of [1, 10])
       expect(newState.phase).toBe("learning");
+      expect(newState.phase).not.toBe("review"); // shouldn't graduate after first good
       expect(newState.step).toBe(1);
+      expect(newState.step).not.toBe(0); // must advance past step 0
     });
 
     it("graduates immediately on 'easy'", () => {
@@ -53,7 +56,10 @@ describe("AnkiSM2Algorithm", () => {
       const result = algo.reviewCard(card, "easy");
       const newState = result.cardState as AnkiSM2CardState;
       expect(newState.phase).toBe("review");
+      expect(newState.phase).not.toBe("learning"); // easy must skip learning
       expect(newState.interval).toBe(DEFAULT_SM2_PARAMS.easyInterval);
+      // easyInterval (4) != graduatingInterval (1) — shouldn't use the wrong one
+      expect(newState.interval).not.toBe(DEFAULT_SM2_PARAMS.graduatingInterval);
     });
 
     it("graduates immediately when no learning steps", () => {
@@ -81,6 +87,8 @@ describe("AnkiSM2Algorithm", () => {
       const newState = result.cardState as AnkiSM2CardState;
       expect(newState.phase).toBe("review");
       expect(newState.interval).toBe(DEFAULT_SM2_PARAMS.graduatingInterval);
+      // Should use graduatingInterval (1), not easyInterval (4)
+      expect(newState.interval).not.toBe(DEFAULT_SM2_PARAMS.easyInterval);
     });
 
     it("resets to step 0 on 'again'", () => {
@@ -96,7 +104,9 @@ describe("AnkiSM2Algorithm", () => {
       const result = algo.reviewCard(card, "again");
       const newState = result.cardState as AnkiSM2CardState;
       expect(newState.phase).toBe("learning");
+      expect(newState.phase).not.toBe("review"); // again must not graduate
       expect(newState.step).toBe(0);
+      expect(newState.step).not.toBe(1); // must actually reset, not stay at current step
     });
 
     it("graduates on 'easy' from learning", () => {
@@ -134,7 +144,10 @@ describe("AnkiSM2Algorithm", () => {
       const result = algo.reviewCard(card, "again");
       const newState = result.cardState as AnkiSM2CardState;
       expect(newState.ease).toBe(2.3);
+      expect(newState.ease).not.toBe(2.5); // must not keep original ease
+      expect(newState.ease).not.toBe(2.35); // must not use hard's penalty (-0.15)
       expect(newState.lapses).toBe(1);
+      expect(newState.lapses).not.toBe(0); // again must increment lapses
     });
 
     it("enters relearning on 'again' with relearning steps", () => {
@@ -142,6 +155,8 @@ describe("AnkiSM2Algorithm", () => {
       const result = algo.reviewCard(card, "again");
       const newState = result.cardState as AnkiSM2CardState;
       expect(newState.phase).toBe("relearning");
+      expect(newState.phase).not.toBe("learning"); // relearning, not learning
+      expect(newState.phase).not.toBe("review"); // must not stay in review
     });
 
     it("decreases ease on 'hard'", () => {
@@ -149,7 +164,9 @@ describe("AnkiSM2Algorithm", () => {
       const result = algo.reviewCard(card, "hard");
       const newState = result.cardState as AnkiSM2CardState;
       expect(newState.ease).toBe(2.35);
+      expect(newState.ease).not.toBe(2.3); // must not use again's penalty (-0.2)
       expect(newState.phase).toBe("review");
+      expect(newState.lapses).toBe(0); // hard must not increment lapses
     });
 
     it("keeps ease on 'good'", () => {
@@ -157,6 +174,9 @@ describe("AnkiSM2Algorithm", () => {
       const result = algo.reviewCard(card, "good");
       const newState = result.cardState as AnkiSM2CardState;
       expect(newState.ease).toBe(2.5);
+      expect(newState.ease).not.toBe(2.35); // must not apply hard penalty
+      expect(newState.ease).not.toBe(2.65); // must not apply easy bonus
+      expect(newState.lapses).toBe(0); // good must not increment lapses
     });
 
     it("increases ease on 'easy'", () => {
@@ -164,6 +184,9 @@ describe("AnkiSM2Algorithm", () => {
       const result = algo.reviewCard(card, "easy");
       const newState = result.cardState as AnkiSM2CardState;
       expect(newState.ease).toBe(2.65);
+      expect(newState.ease).not.toBe(2.5); // must not keep original ease
+      expect(newState.ease).not.toBe(2.35); // must not decrease ease
+      expect(newState.lapses).toBe(0); // easy must not increment lapses
     });
 
     it("enforces minimum ease of 1.3", () => {
@@ -171,6 +194,9 @@ describe("AnkiSM2Algorithm", () => {
       const result = algo.reviewCard(card, "again");
       const newState = result.cardState as AnkiSM2CardState;
       expect(newState.ease).toBe(1.3);
+      // Must not go below floor (1.3 - 0.2 = 1.1 would be wrong)
+      expect(newState.ease).not.toBe(1.1);
+      expect(newState.ease).not.toBe(0);
     });
 
     it("enforces good > hard interval ordering", () => {
@@ -245,7 +271,23 @@ describe("AnkiSM2Algorithm", () => {
       expect((result.reviewLog as AnkiSM2ReviewLog).leeched).toBe(true);
     });
 
-    it("does not mark as leeched below threshold", () => {
+    it("does not mark as leeched one below threshold", () => {
+      // lapses=6, after 'again' becomes 7 — still below threshold of 8
+      const card: AnkiSM2CardState = {
+        phase: "review",
+        step: 0,
+        ease: 2.5,
+        interval: 10,
+        due: Date.now(),
+        lapses: 6,
+        reps: 15,
+      };
+      const result = algo.reviewCard(card, "again");
+      // Off-by-one: 7 lapses is NOT the threshold (8 is)
+      expect((result.reviewLog as AnkiSM2ReviewLog).leeched).toBe(false);
+    });
+
+    it("does not mark as leeched well below threshold", () => {
       const card: AnkiSM2CardState = {
         phase: "review",
         step: 0,
@@ -263,11 +305,21 @@ describe("AnkiSM2Algorithm", () => {
   describe("getNextIntervals", () => {
     it("returns dates for all four answers", () => {
       const card = algo.createCard();
+      const now = Date.now();
       const intervals = algo.getNextIntervals(card);
       expect(intervals.again).toBeInstanceOf(Date);
       expect(intervals.hard).toBeInstanceOf(Date);
       expect(intervals.good).toBeInstanceOf(Date);
       expect(intervals.easy).toBeInstanceOf(Date);
+
+      // All intervals should be in the future (or at current time)
+      expect(intervals.again.getTime()).toBeGreaterThanOrEqual(now);
+      expect(intervals.hard.getTime()).toBeGreaterThanOrEqual(now);
+      expect(intervals.good.getTime()).toBeGreaterThanOrEqual(now);
+      expect(intervals.easy.getTime()).toBeGreaterThanOrEqual(now);
+
+      // Easy should be further out than again for a new card
+      expect(intervals.easy.getTime()).toBeGreaterThan(intervals.again.getTime());
     });
   });
 

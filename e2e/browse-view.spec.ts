@@ -82,13 +82,22 @@ test.describe('Browse View', () => {
     await firstHeader.click();
     await page.waitForTimeout(300);
 
+    // Capture text after first sort
+    const afterFirstSort = await firstCell.textContent();
+
     // Click again to reverse sort
     await firstHeader.click();
     await page.waitForTimeout(300);
 
-    // Table should still be functional
+    const afterSecondSort = await firstCell.textContent();
+
+    // At least one of the sorts should change the first row compared to initial
+    // (unless there's only one row, in which case sorting can't change anything)
     const rowCount = await page.locator('.browse-table tbody tr').count();
-    expect(rowCount).toBeGreaterThan(0);
+    if (rowCount > 1) {
+      const changed = afterFirstSort !== initialText || afterSecondSort !== initialText;
+      expect(changed).toBe(true);
+    }
   });
 
   test('should show card preview in detail pane', async ({ loadedDeckPage: page }) => {

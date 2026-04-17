@@ -140,9 +140,9 @@ test.describe('CSV Import Wizard', () => {
     await page.click('button:has-text("Next: Map Fields")');
     await page.click('button:has-text("Next: Preview")');
 
-    // Check card count
+    // Check card count — the text is "N cards" so match exactly "3 cards"
     const countText = await page.locator('.preview-count').textContent();
-    expect(countText).toContain('3');
+    expect(countText).toMatch(/\b3\b/);
   });
 
   test('should navigate back through wizard steps', async ({ loadedDeckPage: page }) => {

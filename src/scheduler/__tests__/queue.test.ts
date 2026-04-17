@@ -44,6 +44,16 @@ describe("ReviewQueue.getDueCards", () => {
     expect(due[0]!.cardId).toBe("c1");
   });
 
+  it("should exclude cards that are not yet due", () => {
+    const futureCard = makeReviewCard({ cardId: "c-future" });
+    // Set due date far in the future
+    (futureCard.reviewState.cardState as { due: number }).due =
+      Date.now() + 7 * 24 * 60 * 60 * 1000;
+    const due = queue.getDueCards([futureCard]);
+    const ids = due.map((c) => c.cardId);
+    expect(ids).not.toContain("c-future");
+  });
+
   it("should exclude suspended cards (queueOverride = -1)", () => {
     const card = makeReviewCard({ cardId: "c1" });
     card.reviewState.queueOverride = -1;
@@ -58,6 +68,30 @@ describe("ReviewQueue.getDueCards", () => {
 
     const due = queue.getDueCards([card]);
     expect(due).toHaveLength(0);
+  });
+
+  it("should not confuse suspended (-1) with buried (-3)", () => {
+    const suspended = makeReviewCard({ cardId: "c-sus" });
+    suspended.reviewState.queueOverride = -1;
+    const buried = makeReviewCard({ cardId: "c-bur" });
+    buried.reviewState.queueOverride = -3;
+    const normal = makeReviewCard({ cardId: "c-norm" });
+
+    // Both excluded, but only the normal card comes through
+    const due = queue.getDueCards([suspended, buried, normal]);
+    expect(due).toHaveLength(1);
+    expect(due[0]!.cardId).toBe("c-norm");
+    expect(due[0]!.cardId).not.toBe("c-sus");
+    expect(due[0]!.cardId).not.toBe("c-bur");
+  });
+
+  it("should not exclude cards with unrelated queueOverride values", () => {
+    const card = makeReviewCard({ cardId: "c1" });
+    // queueOverride = 0 is not suspended or buried
+    card.reviewState.queueOverride = 0;
+
+    const due = queue.getDueCards([card]);
+    expect(due).toHaveLength(1);
   });
 
   it("should include cards without queueOverride alongside filtered ones", () => {

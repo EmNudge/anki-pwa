@@ -25,7 +25,11 @@ describe("normalizeForComparison", () => {
   });
 
   it("strips sound tags", () => {
-    expect(normalizeForComparison("[sound:audio.mp3] hello")).toBe("hello");
+    const result = normalizeForComparison("[sound:audio.mp3] hello");
+    expect(result).toBe("hello");
+    // Must strip the whole tag, not just the brackets
+    expect(result).not.toContain("sound");
+    expect(result).not.toContain("audio.mp3");
   });
 
   it("normalizes whitespace", () => {
@@ -74,6 +78,10 @@ describe("stringSimilarity", () => {
     const sim1 = stringSimilarity("cat", "cats");
     const sim2 = stringSimilarity("cat", "dog");
     expect(sim1).toBeGreaterThan(sim2);
+    // "cat" vs "cats" should be high but not perfect
+    expect(sim1).not.toBe(1);
+    // "cat" vs "dog" should be very low (no shared bigrams)
+    expect(sim2).toBeLessThan(0.5);
   });
 
   it("handles short strings", () => {
@@ -98,8 +106,15 @@ describe("findExactDuplicates", () => {
     });
 
     expect(groups).toHaveLength(1);
+    expect(groups).not.toHaveLength(2); // "world" is unique, must not form its own group
     expect(groups[0]!.notes).toHaveLength(2);
+    expect(groups[0]!.notes).not.toHaveLength(3); // "world" must not be in the group
     expect(groups[0]!.similarity).toBe(1.0);
+    // The group should contain guid 1 and 2, not guid 3
+    const guids = groups[0]!.notes.map((n) => n.guid);
+    expect(guids).toContain("1");
+    expect(guids).toContain("2");
+    expect(guids).not.toContain("3");
   });
 
   it("finds duplicates ignoring HTML", () => {
@@ -134,8 +149,12 @@ describe("findExactDuplicates", () => {
     });
 
     expect(groups).toHaveLength(1);
+    // Must not group cross-deck (all 3 have same Front but are in different decks)
     expect(groups[0]!.notes).toHaveLength(2);
+    expect(groups[0]!.notes).not.toHaveLength(3);
     expect(groups[0]!.notes.every((n) => n.deckName === "Deck A")).toBe(true);
+    // Deck B note must not leak into the group
+    expect(groups[0]!.notes.some((n) => n.deckName === "Deck B")).toBe(false);
   });
 
   it("compares by specified field index", () => {
@@ -210,8 +229,14 @@ describe("findFuzzyDuplicates", () => {
 
     expect(groups).toHaveLength(1);
     expect(groups[0]!.notes).toHaveLength(2);
+    // "fox" vs "fax" is fuzzy, not exact
     expect(groups[0]!.similarity).toBeLessThan(1.0);
     expect(groups[0]!.similarity).toBeGreaterThan(0.7);
+    // "something completely different here" must not be in the group
+    const guids = groups[0]!.notes.map((n) => n.guid);
+    expect(guids).not.toContain("3");
+    expect(guids).toContain("1");
+    expect(guids).toContain("2");
   });
 });
 
@@ -231,7 +256,11 @@ describe("findDuplicates", () => {
     });
 
     expect(groups).toHaveLength(1);
+    // Must not include "hallo" as fuzzy match when fuzzy is disabled
     expect(groups[0]!.notes).toHaveLength(2);
+    expect(groups[0]!.notes).not.toHaveLength(3);
+    const guids = groups[0]!.notes.map((n) => n.guid);
+    expect(guids).not.toContain("3"); // "hallo" is only a fuzzy match
   });
 
   it("returns exact + fuzzy when fuzzy is true", () => {
@@ -248,11 +277,12 @@ describe("findDuplicates", () => {
       fuzzyThreshold: 0.8,
     });
 
-    // Exact group (guid 1, 2) + fuzzy group (guid 3 with one of the others? No - guid 3 is compared with remaining)
-    // guid 1 and 2 are exact, guid 3 is fuzzy-similar to them but excluded from fuzzy since 1,2 are in exact
-    // So there should be 1 exact group only since guid 3 is alone after exclusion
-    expect(groups.length).toBeGreaterThanOrEqual(1);
+    // guid 1 and 2 are exact duplicates (similarity 1.0)
+    // guid 3 ("hello world tess") is fuzzy-similar but excluded from fuzzy since 1,2 are in exact group
+    // So there should be exactly 1 group: the exact match group
+    expect(groups.length).toBe(1);
     expect(groups[0]!.similarity).toBe(1.0);
+    expect(groups[0]!.notes).toHaveLength(2);
   });
 });
 

@@ -33,21 +33,6 @@ test.describe('Note Type Manager', () => {
     await expect(page.locator('.sidebar-actions button').first()).toBeVisible();
   });
 
-  test('should show empty state or note type list', async ({ loadedDeckPage: page }) => {
-    await page.keyboard.press('Control+k');
-    await page.locator('.command-palette-input').fill('manage note types');
-    await page.waitForTimeout(200);
-    await page.keyboard.press('Enter');
-    await expect(page.locator('.ds-modal__title:has-text("Manage Note Types")')).toBeVisible();
-
-    // Either note types are listed or an empty state message is shown
-    await page.waitForTimeout(1000);
-    const items = page.locator('.notetype-item');
-    const itemCount = await items.count();
-    // With a non-synced deck, the list may be empty — that's OK
-    expect(itemCount).toBeGreaterThanOrEqual(0);
-  });
-
   test('should close modal', async ({ loadedDeckPage: page }) => {
     await page.keyboard.press('Control+k');
     await page.locator('.command-palette-input').fill('manage note types');

@@ -1,8 +1,6 @@
 /**
  * Tests for parser correctness issues identified by cross-referencing
  * with the Anki source (ankitects/anki via deepwiki).
- *
- * All tests in this file are EXPECTED TO FAIL against the current implementation.
  */
 import { describe, it, expect } from "vitest";
 import { getDataFromAnki2 } from "../anki2";

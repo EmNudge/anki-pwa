@@ -140,7 +140,9 @@ test.describe('Bulk Operations', () => {
     await page.locator('.bulk-toolbar button:has-text("Suspend")').first().click();
     await page.waitForTimeout(500);
 
-    // Table should still be visible
+    // TODO: No visible UI indicator for suspended state — both Suspend/Unsuspend
+    // buttons are always shown. Consider adding a "Queue" column or row styling
+    // so this test can verify the state actually changed.
     await expect(page.locator('.browse-table')).toBeVisible();
   });
 
@@ -165,7 +167,7 @@ test.describe('Bulk Operations', () => {
     await page.locator('.bulk-toolbar button:has-text("Unsuspend")').click();
     await page.waitForTimeout(500);
 
-    // Table should still be visible
+    // TODO: Same as suspend test — no visible indicator to verify unsuspend worked.
     await expect(page.locator('.browse-table')).toBeVisible();
   });
 });

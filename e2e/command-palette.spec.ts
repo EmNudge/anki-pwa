@@ -52,16 +52,20 @@ test.describe('Command Palette', () => {
 
   test('should navigate commands with arrow keys', async ({ loadedDeckPage: page }) => {
     await page.keyboard.press('Control+k');
-    await expect(page.locator('.command-palette-item.selected')).toBeVisible();
+    const initialSelected = page.locator('.command-palette-item.selected');
+    await expect(initialSelected).toBeVisible();
+    const initialText = await initialSelected.textContent();
 
     // Press down arrow
     await page.keyboard.press('ArrowDown');
     await page.waitForTimeout(100);
 
-    // A different item should be selected
-    const selectedItems = page.locator('.command-palette-item.selected');
-    const count = await selectedItems.count();
+    // A different item should now be selected
+    const newSelected = page.locator('.command-palette-item.selected');
+    const count = await newSelected.count();
     expect(count).toBe(1);
+    const newText = await newSelected.textContent();
+    expect(newText).not.toBe(initialText);
   });
 
   test('should execute command on Enter', async ({ loadedDeckPage: page }) => {
