@@ -10,6 +10,7 @@ import {
 } from "./undoRedo";
 import { reviewDB } from "./scheduler/db";
 import type { CardReviewState, StoredReviewLog } from "./scheduler/types";
+import { removeTags } from "./utils/tagTree";
 import {
   ankiDataSig,
   currentReviewCardSig,
@@ -473,7 +474,7 @@ async function redoBulkRemoveTag(entry: UndoEntry): Promise<void> {
   const cards = ankiData.cards as CardLike[];
   for (const card of cards) {
     if (!data.guids.includes(card.guid)) continue;
-    card.tags = card.tags.filter((t) => t !== data.tag && !t.startsWith(data.tag + "::"));
+    card.tags = removeTags(card.tags, data.tag);
   }
   triggerRef(ankiDataSig);
 
@@ -565,7 +566,7 @@ async function redoDeleteTag(entry: UndoEntry): Promise<void> {
 
   const cards = ankiData.cards as CardLike[];
   for (const card of cards) {
-    card.tags = card.tags.filter((t) => t !== data.tag && !t.startsWith(data.tag + "::"));
+    card.tags = removeTags(card.tags, data.tag);
   }
   triggerRef(ankiDataSig);
 
@@ -638,11 +639,12 @@ async function redoSuspendCard(entry: UndoEntry): Promise<void> {
 
 async function undoBuryNote(entry: UndoEntry): Promise<void> {
   const data = entry.undoData as BuryNoteUndoData;
-  for (const cardId of data.cardIds) {
-    await reviewDB.patchCard(cardId, {
-      queueOverride: data.previousQueueOverrides[cardId],
-    });
-  }
+  await reviewDB.patchCards(
+    data.cardIds.map((cardId) => ({
+      cardId,
+      patch: { queueOverride: data.previousQueueOverrides[cardId] },
+    })),
+  );
   await initializeReviewQueue();
 
   pushRedo(
@@ -657,9 +659,9 @@ async function undoBuryNote(entry: UndoEntry): Promise<void> {
 
 async function redoBuryNote(entry: UndoEntry): Promise<void> {
   const data = entry.undoData as BuryNoteUndoData;
-  for (const cardId of data.cardIds) {
-    await reviewDB.patchCard(cardId, { queueOverride: QUEUE_USER_BURIED });
-  }
+  await reviewDB.patchCards(
+    data.cardIds.map((cardId) => ({ cardId, patch: { queueOverride: QUEUE_USER_BURIED } })),
+  );
   await initializeReviewQueue();
 
   pushUndo({

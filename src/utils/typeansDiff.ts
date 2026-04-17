@@ -6,6 +6,8 @@
  * - Grey (#888) with strikethrough for missing characters
  */
 
+import { escapeHtml } from "./format";
+
 type DiffEntry =
   | { type: "correct"; value: string }
   | { type: "incorrect"; typed: string; expected: string }
@@ -194,14 +196,6 @@ export function renderDiffHtml(typed: string, expected: string): string {
   }
 
   return `<div id="typeans"><div class="typeans-row">${typedRow}</div><hr><div class="typeans-row">${expectedRow}</div></div>`;
-}
-
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
 }
 
 /**

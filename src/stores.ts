@@ -3,7 +3,8 @@ import { getAnkiDataFromBlob, getAnkiDataFromSqlite } from "./ankiParser";
 import type { AnkiData } from "./ankiParser";
 import { createDatabase } from "./utils/sql";
 
-import { stringHash } from "./utils/constants";
+import { stringHash, ankiSortField } from "./utils/constants";
+import { tagMatchesOrIsChild, removeTags } from "./utils/tagTree";
 import { ReviewQueue, type ReviewCard } from "./scheduler/queue";
 import {
   DEFAULT_SCHEDULER_SETTINGS,
@@ -519,7 +520,7 @@ function formatTagsStr(tags: string[]): string {
 
 /** Compute sort field and checksum from a raw field value. */
 function computeSortField(field: string): { sfld: string; csum: number } {
-  const sfld = field.replace(/<[^>]*>/g, "").trim();
+  const sfld = ankiSortField(field);
   return { sfld, csum: stringHash(sfld) };
 }
 
@@ -1194,8 +1195,10 @@ export async function buryCurrentNote() {
     previousQueueOverrides[cardId] = sibling?.reviewState.queueOverride;
   }
 
+  await reviewDB.patchCards(
+    siblingCardIds.map((cardId) => ({ cardId, patch: { queueOverride: QUEUE_USER_BURIED } })),
+  );
   for (const cardId of siblingCardIds) {
-    await reviewDB.patchCard(cardId, { queueOverride: QUEUE_USER_BURIED });
     const sibling = dueCardsSig.value.find((c) => c.cardId === cardId);
     if (sibling) sibling.reviewState.queueOverride = QUEUE_USER_BURIED;
   }
@@ -1885,7 +1888,7 @@ export async function bulkRemoveTag(guids: string[], tag: string): Promise<void>
     if (!previousTags[card.guid]) {
       previousTags[card.guid] = [...card.tags];
     }
-    card.tags = card.tags.filter((t) => t !== tag && !t.startsWith(tag + "::"));
+    card.tags = removeTags(card.tags, tag);
   }
   triggerRef(ankiDataSig);
 
@@ -1908,8 +1911,7 @@ export async function renameTag(oldTag: string, newTag: string): Promise<void> {
 
   const affectedGuidSet = new Set<string>();
   for (const card of data.cards) {
-    const hasTag = card.tags.some((t) => t === oldTag || t.startsWith(oldTag + "::"));
-    if (!hasTag) continue;
+    if (!card.tags.some((t) => tagMatchesOrIsChild(t, oldTag))) continue;
 
     card.tags = card.tags.map((t) => {
       if (t === oldTag) return newTag;
@@ -1942,14 +1944,13 @@ export async function deleteTag(tag: string): Promise<void> {
   const previousTags: Record<string, string[]> = {};
   const affectedGuidSet = new Set<string>();
   for (const card of data.cards) {
-    const hasTag = card.tags.some((t) => t === tag || t.startsWith(tag + "::"));
-    if (!hasTag) continue;
+    if (!card.tags.some((t) => tagMatchesOrIsChild(t, tag))) continue;
 
     if (!previousTags[card.guid]) {
       previousTags[card.guid] = [...card.tags];
     }
 
-    card.tags = card.tags.filter((t) => t !== tag && !t.startsWith(tag + "::"));
+    card.tags = removeTags(card.tags, tag);
     affectedGuidSet.add(card.guid);
   }
   const affectedGuids = [...affectedGuidSet];

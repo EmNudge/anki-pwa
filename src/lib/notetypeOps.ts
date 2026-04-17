@@ -9,6 +9,7 @@ import {
   parseTemplatesProto,
   type Anki21bFieldConfig,
 } from "~/ankiParser/anki21b/proto";
+import { ankiSortField } from "~/utils/constants";
 
 function now(): number {
   return Math.floor(Date.now() / 1000);
@@ -463,7 +464,7 @@ export function convertNotes(
     });
 
     const newFlds = newSegments.join("\x1f");
-    const sfld = (newSegments[0] ?? "").replace(/<[^>]*>/g, "").trim();
+    const sfld = ankiSortField(newSegments[0] ?? "");
 
     db.run("UPDATE notes SET mid=?, flds=?, sfld=?, mod=?, usn=-1 WHERE id=?", [
       targetNtidNum,

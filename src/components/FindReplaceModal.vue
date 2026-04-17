@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, watch } from "vue";
 import { ankiDataSig, bulkUpdateNoteFields } from "../stores";
+import { stripHtml } from "../utils/stripHtml";
+import { escapeHtml, truncate } from "../utils/format";
 import Modal from "../design-system/components/primitives/Modal.vue";
 import Button from "../design-system/components/primitives/Button.vue";
 
@@ -177,13 +179,6 @@ const preview = computed<NoteChange[]>(() => {
 
 const totalChanges = computed(() => preview.value.reduce((sum, n) => sum + n.changes.length, 0));
 
-function stripHtml(html: string): string {
-  return html
-    .replace(/\[sound:[^\]]+\]/g, "")
-    .replace(/<[^>]*>/g, "")
-    .trim();
-}
-
 // ── Highlight matches in a string for display ──
 
 function highlightMatches(text: string, isOld: boolean): string {
@@ -219,21 +214,6 @@ function highlightMatches(text: string, isOld: boolean): string {
     parts.push(escapeHtml(text.slice(lastIndex)));
   }
   return parts.join("");
-}
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-// ── Truncate long text for display ──
-
-function truncate(text: string, max = 120): string {
-  if (text.length <= max) return text;
-  return text.slice(0, max) + "...";
 }
 
 // ── Apply changes ──

@@ -53,3 +53,13 @@ export function buildTagTree(tags: string[], tagNoteCounts: Map<string, number>)
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
+/** Check if a tag matches exactly or is a child of the given parent tag. */
+export function tagMatchesOrIsChild(t: string, tag: string): boolean {
+  return t === tag || t.startsWith(tag + "::");
+}
+
+/** Remove a tag and all its children from a tag list. */
+export function removeTags(tags: string[], tag: string): string[] {
+  return tags.filter((t) => !tagMatchesOrIsChild(t, tag));
+}
+

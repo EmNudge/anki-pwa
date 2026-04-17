@@ -7,8 +7,7 @@ import type {
   CardCountsData,
   TrueRetentionData,
 } from "./types";
-
-const MS_PER_DAY = 86_400_000;
+import { MS_PER_DAY } from "../utils/constants";
 
 function formatDate(ts: number): string {
   const d = new Date(ts);
@@ -32,13 +31,6 @@ export function computeCardCounts(cards: NormalizedCardInfo[]): CardCountsData {
 }
 
 export function computeIntervalDistribution(cards: NormalizedCardInfo[]): BucketData[] {
-  // Only include cards with meaningful intervals (review/young/mature)
-  const intervals = cards
-    .filter((c) => c.phase !== "new" && c.phase !== "learning")
-    .map((c) => c.interval);
-
-  if (intervals.length === 0) return [];
-
   // Create logarithmic-ish buckets: 0-1d, 1-3d, 3-7d, 7-14d, 14-30d, 1-3mo, 3-6mo, 6-12mo, 1y+
   const buckets: [string, number, number][] = [
     ["< 1d", 0, 1],
@@ -52,46 +44,67 @@ export function computeIntervalDistribution(cards: NormalizedCardInfo[]): Bucket
     ["1y+", 365, Infinity],
   ];
 
-  return buckets.map(([label, min, max]) => ({
-    label,
-    count: intervals.filter((i) => i >= min && i < max).length,
-  }));
+  const counts = new Array<number>(buckets.length).fill(0);
+  let total = 0;
+
+  for (const c of cards) {
+    if (c.phase === "new" || c.phase === "learning") continue;
+    total++;
+    const iv = c.interval;
+    for (let b = 0; b < buckets.length; b++) {
+      if (iv >= buckets[b]![1] && iv < buckets[b]![2]) {
+        counts[b]!++;
+        break;
+      }
+    }
+  }
+
+  if (total === 0) return [];
+  return buckets.map(([label], i) => ({ label, count: counts[i]! }));
 }
 
 export function computeEaseDistribution(cards: NormalizedCardInfo[]): BucketData[] {
-  const eases = cards.filter((c) => c.reps > 0).map((c) => Math.round(c.easeFactor * 100));
+  // Buckets from 130% to 350%+ in steps of 20 — single-pass counting
+  const BUCKET_START = 130;
+  const BUCKET_STEP = 20;
+  const NUM_BUCKETS = 12; // 130-150, 150-170, ..., 330-350, 350+
+  const counts = new Array<number>(NUM_BUCKETS).fill(0);
+  let total = 0;
 
-  if (eases.length === 0) return [];
-
-  // Buckets from 130% to 350%+ in steps of 20
-  const buckets: BucketData[] = [];
-  for (let start = 130; start <= 340; start += 20) {
-    const end = start + 20;
-    buckets.push({
-      label: `${start}%`,
-      count: eases.filter((e) => e >= start && e < end).length,
-    });
+  for (const c of cards) {
+    if (c.reps <= 0) continue;
+    total++;
+    const ease = Math.round(c.easeFactor * 100);
+    const idx = Math.min(Math.floor((ease - BUCKET_START) / BUCKET_STEP), NUM_BUCKETS - 1);
+    counts[Math.max(0, idx)]!++;
   }
-  buckets.push({
-    label: "350%+",
-    count: eases.filter((e) => e >= 350).length,
-  });
+
+  if (total === 0) return [];
+
+  const buckets: BucketData[] = [];
+  for (let i = 0; i < NUM_BUCKETS - 1; i++) {
+    buckets.push({ label: `${BUCKET_START + i * BUCKET_STEP}%`, count: counts[i]! });
+  }
+  buckets.push({ label: "350%+", count: counts[NUM_BUCKETS - 1]! });
   return buckets;
 }
 
 export function computeFutureDue(cards: NormalizedCardInfo[], days: number = 30): DayCount[] {
   const now = Date.now();
-  const result: DayCount[] = [];
+  const endMs = now + days * MS_PER_DAY;
 
-  for (let i = 0; i < days; i++) {
-    const dayStart = now + i * MS_PER_DAY;
-    const dayEnd = dayStart + MS_PER_DAY;
-    const date = formatDate(dayStart);
-    const count = cards.filter((c) => c.due >= dayStart && c.due < dayEnd).length;
-    result.push({ date, count });
+  // Single pass: bucket each card into its day
+  const dayCounts = new Array<number>(days).fill(0);
+  for (const c of cards) {
+    if (c.due < now || c.due >= endMs) continue;
+    const dayIndex = Math.floor((c.due - now) / MS_PER_DAY);
+    if (dayIndex >= 0 && dayIndex < days) dayCounts[dayIndex]!++;
   }
 
-  return result;
+  return dayCounts.map((count, i) => ({
+    date: formatDate(now + i * MS_PER_DAY),
+    count,
+  }));
 }
 
 export function computeAddedCards(

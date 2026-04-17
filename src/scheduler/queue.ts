@@ -119,11 +119,10 @@ export class ReviewQueue {
    */
   private async unburyCards(): Promise<void> {
     const cards = await reviewDB.getCardsForDeck(this.deckId);
-    for (const card of cards) {
-      if (card.queueOverride === QUEUE_USER_BURIED) {
-        await reviewDB.patchCard(card.cardId, { queueOverride: undefined });
-      }
-    }
+    const patches = cards
+      .filter((c) => c.queueOverride === QUEUE_USER_BURIED)
+      .map((c) => ({ cardId: c.cardId, patch: { queueOverride: undefined } as Partial<import("./types").CardReviewState> }));
+    await reviewDB.patchCards(patches);
   }
 
   /**
