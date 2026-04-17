@@ -12,6 +12,7 @@ import { executeQuery, executeQueryAll } from "~/utils/sql";
 import { assertTruthy } from "~/utils/assert";
 import { type CardScheduling, type RevlogEntry } from "../anki2";
 import { buildScheduling, resolveCardDeckName, isBlankCard, parseRevlog } from "../shared";
+import { groupBy } from "~/utils/groupBy";
 
 export type Anki21bDeck = {
   id: number;
@@ -140,19 +141,13 @@ export function getDataFromAnki21b(db: Database): AnkiDB21bData {
     }));
   })();
 
-  // Pre-build fields-by-notetype map (sorted by ord) to avoid O(n²) lookups
-  const fieldsByNtid = new Map<string, typeof fields>();
-  for (const field of fields) {
-    let list = fieldsByNtid.get(field.ntid);
-    if (!list) {
-      list = [];
-      fieldsByNtid.set(field.ntid, list);
-    }
-    list.push(field);
-  }
-  for (const list of fieldsByNtid.values()) {
-    list.sort((a, b) => a.ord - b.ord);
-  }
+  // Pre-build fields-by-notetype map (sorted by ord) to avoid O(n^2) lookups
+  const fieldsByNtid = new Map(
+    Object.entries(groupBy(fields, (f) => f.ntid)).map(([ntid, group]) => [
+      ntid,
+      [...group!].sort((a, b) => a.ord - b.ord),
+    ]),
+  );
 
   const templatesMap = (() => {
     const templates = executeQueryAll<{
@@ -162,26 +157,20 @@ export function getDataFromAnki21b(db: Database): AnkiDB21bData {
       ntid: string;
     }>(db, "SELECT name, ord, config, cast(ntid as text) as ntid FROM templates");
 
-    const templatesMap = new Map<
-      string,
-      { name: string; afmt: string; qfmt: string; ord: number }[]
-    >();
-
-    for (const template of templates) {
-      const templateProto = parseTemplatesProto(template.config);
-
-      const { aFormat, qFormat } = templateProto;
-
-      const curTemplate = {
-        name: template.name,
-        afmt: aFormat,
-        qfmt: qFormat,
-        ord: template.ord,
+    const parsed = templates.map((template) => {
+      const { aFormat, qFormat } = parseTemplatesProto(template.config);
+      return {
+        ntid: template.ntid,
+        entry: { name: template.name, afmt: aFormat, qfmt: qFormat, ord: template.ord },
       };
-      templatesMap.set(template.ntid, [...(templatesMap.get(template.ntid) ?? []), curTemplate]);
-    }
+    });
 
-    return templatesMap;
+    return new Map(
+      Object.entries(groupBy(parsed, (p) => p.ntid)).map(([ntid, group]) => [
+        ntid,
+        group!.map((g) => g.entry),
+      ]),
+    );
   })();
 
   const notesTypes = getNotesType(db);

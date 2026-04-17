@@ -332,10 +332,7 @@ async function undoNoteDelete(entry: UndoEntry): Promise<void> {
   if (!ankiData) return;
 
   // Restore cards to in-memory data
-  const cards = ankiData.cards as unknown[];
-  for (const card of data.cards) {
-    cards.push(card);
-  }
+  (ankiData as { cards: unknown[] }).cards = [...ankiData.cards, ...data.cards];
   triggerRef(ankiDataSig);
 
   // Restore review states
@@ -367,12 +364,9 @@ async function redoNoteDelete(entry: UndoEntry): Promise<void> {
   if (!ankiData) return;
 
   // Remove cards from in-memory data
-  const cards = ankiData.cards as Array<{ guid: string }>;
-  for (let i = cards.length - 1; i >= 0; i--) {
-    if (cards[i]!.guid === data.guid) {
-      cards.splice(i, 1);
-    }
-  }
+  (ankiData as { cards: Array<{ guid: string }> }).cards = (
+    ankiData.cards as Array<{ guid: string }>
+  ).filter((card) => card.guid !== data.guid);
   triggerRef(ankiDataSig);
 
   // Delete review states
@@ -720,9 +714,9 @@ async function undoMarkNote(entry: UndoEntry): Promise<void> {
   for (const card of cards) {
     if (card.guid !== data.guid) continue;
     if (data.wasMarked) {
-      if (!card.tags.some((t) => t.toLowerCase() === "marked")) {
-        card.tags.push("marked");
-      }
+      card.tags = card.tags.some((t) => t.toLowerCase() === "marked")
+        ? card.tags
+        : [...card.tags, "marked"];
     } else {
       card.tags = card.tags.filter((t) => t.toLowerCase() !== "marked");
     }
@@ -750,9 +744,9 @@ async function redoMarkNote(entry: UndoEntry): Promise<void> {
     if (data.wasMarked) {
       card.tags = card.tags.filter((t) => t.toLowerCase() !== "marked");
     } else {
-      if (!card.tags.some((t) => t.toLowerCase() === "marked")) {
-        card.tags.push("marked");
-      }
+      card.tags = card.tags.some((t) => t.toLowerCase() === "marked")
+        ? card.tags
+        : [...card.tags, "marked"];
     }
   }
   triggerRef(ankiDataSig);

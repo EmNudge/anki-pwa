@@ -14,6 +14,8 @@ export type NoteInfo = {
   fieldNames: string[];
 };
 
+import { groupBy } from "./groupBy";
+
 export type DuplicateGroup = {
   /** The normalized key used to group these notes */
   key: string;
@@ -112,19 +114,20 @@ export function buildNoteInfos(
     templates: { qfmt: string; afmt: string; name: string; ord?: number }[];
   }[],
 ): NoteInfo[] {
-  const seen = new Map<string, NoteInfo>();
-  for (const card of cards) {
-    if (seen.has(card.guid)) continue;
-    const fieldNames = Object.keys(card.values);
-    seen.set(card.guid, {
+  const seen = new Set<string>();
+  return cards
+    .filter((card) => {
+      if (seen.has(card.guid)) return false;
+      seen.add(card.guid);
+      return true;
+    })
+    .map((card) => ({
       guid: card.guid,
       values: card.values,
       tags: card.tags,
       deckName: card.deckName,
-      fieldNames,
-    });
-  }
-  return Array.from(seen.values());
+      fieldNames: Object.keys(card.values),
+    }));
 }
 
 /**
@@ -135,48 +138,35 @@ export function findExactDuplicates(
   options: DuplicateSearchOptions,
 ): DuplicateGroup[] {
   const { fieldIndex, scope } = options;
-  const groups = new Map<string, NoteInfo[]>();
 
-  for (const note of notes) {
-    const raw = getFieldValue(note, fieldIndex);
-    const normalized = normalizeForComparison(raw);
-    if (!normalized) continue;
+  const notesWithKeys = notes
+    .map((note) => {
+      const normalized = normalizeForComparison(getFieldValue(note, fieldIndex));
+      if (!normalized) return null;
+      const key = scope === "deck" ? `${note.deckName}\x1F${normalized}` : normalized;
+      return { note, key };
+    })
+    .filter((entry) => entry !== null);
 
-    // Build the grouping key based on scope
-    let key: string;
-    if (scope === "deck") {
-      key = `${note.deckName}\x1F${normalized}`;
-    } else {
-      key = normalized;
-    }
+  const grouped = groupBy(notesWithKeys, (entry) => entry.key);
 
-    const group = groups.get(key);
-    if (group) {
-      group.push(note);
-    } else {
-      groups.set(key, [note]);
-    }
-  }
-
-  const result: DuplicateGroup[] = [];
-  for (const [key, noteGroup] of groups) {
-    if (noteGroup.length < 2) continue;
-    const displayKey = getFieldValue(noteGroup[0]!, fieldIndex) ?? key;
-    const cleanDisplayKey = displayKey
-      .replace(/<[^>]*>/g, "")
-      .replace(/\[sound:[^\]]+\]/g, "")
-      .trim();
-    result.push({
-      key,
-      displayKey: cleanDisplayKey || key,
-      notes: noteGroup,
-      similarity: 1.0,
-    });
-  }
-
-  // Sort by group size (largest groups first)
-  result.sort((a, b) => b.notes.length - a.notes.length);
-  return result;
+  return Object.entries(grouped)
+    .filter(([, entries]) => entries !== undefined && entries.length >= 2)
+    .map(([key, entries]) => {
+      const noteGroup = entries!.map((e) => e.note);
+      const displayKey = getFieldValue(noteGroup[0]!, fieldIndex) ?? key;
+      const cleanDisplayKey = displayKey
+        .replace(/<[^>]*>/g, "")
+        .replace(/\[sound:[^\]]+\]/g, "")
+        .trim();
+      return {
+        key,
+        displayKey: cleanDisplayKey || key,
+        notes: noteGroup,
+        similarity: 1.0,
+      };
+    })
+    .toSorted((a, b) => b.notes.length - a.notes.length);
 }
 
 /**
@@ -189,114 +179,91 @@ export function findFuzzyDuplicates(
 ): DuplicateGroup[] {
   const { fieldIndex, scope, fuzzyThreshold } = options;
 
-  // Build normalized values
-  const noteValues: { note: NoteInfo; normalized: string; scopeKey: string }[] = [];
-  for (const note of notes) {
-    const raw = getFieldValue(note, fieldIndex);
-    const normalized = normalizeForComparison(raw);
-    if (!normalized) continue;
-    const scopeKey = scope === "deck" ? note.deckName : "all";
-    noteValues.push({ note, normalized, scopeKey });
-  }
+  const noteValues = notes
+    .map((note) => {
+      const normalized = normalizeForComparison(getFieldValue(note, fieldIndex));
+      if (!normalized) return null;
+      const scopeKey = scope === "deck" ? note.deckName : "all";
+      return { note, normalized, scopeKey };
+    })
+    .filter((entry) => entry !== null);
 
-  // Group by scope first
-  const scopeGroups = new Map<string, typeof noteValues>();
-  for (const nv of noteValues) {
-    const group = scopeGroups.get(nv.scopeKey);
-    if (group) group.push(nv);
-    else scopeGroups.set(nv.scopeKey, [nv]);
-  }
+  const scopeGroups = groupBy(noteValues, (nv) => nv.scopeKey);
 
-  const result: DuplicateGroup[] = [];
   const mergedGuids = new Set<string>();
 
-  for (const scopeNotes of scopeGroups.values()) {
-    // Skip exact matches (already handled)
-    // Use Union-Find to group similar notes together
-    const parent = new Map<number, number>();
-    function find(i: number): number {
-      let p = parent.get(i) ?? i;
-      while (p !== (parent.get(p) ?? p)) {
-        p = parent.get(p) ?? p;
-      }
-      parent.set(i, p);
-      return p;
-    }
-    function union(i: number, j: number) {
-      parent.set(find(i), find(j));
-    }
-
-    // Compare all pairs within scope (limit to first 2000 to avoid freezing)
-    // Cache similarity scores to avoid recomputing during cluster averaging
-    const limit = Math.min(scopeNotes.length, 2000);
-    const simCache = new Map<string, number>();
-    for (let i = 0; i < limit; i++) {
-      for (let j = i + 1; j < limit; j++) {
-        const a = scopeNotes[i]!;
-        const b = scopeNotes[j]!;
-        // Skip if exactly the same (handled by exact matching)
-        if (a.normalized === b.normalized) continue;
-        const sim = stringSimilarity(a.normalized, b.normalized);
-        if (sim >= fuzzyThreshold) {
-          simCache.set(`${i}:${j}`, sim);
-          union(i, j);
+  return Object.values(scopeGroups)
+    .filter((group) => group !== undefined)
+    .flatMap((scopeNotes) => {
+      // Union-Find to group similar notes (inherently imperative)
+      const parent = new Map<number, number>();
+      function find(i: number): number {
+        let p = parent.get(i) ?? i;
+        while (p !== (parent.get(p) ?? p)) {
+          p = parent.get(p) ?? p;
         }
+        parent.set(i, p);
+        return p;
       }
-    }
-
-    // Collect groups
-    const clusters = new Map<number, { indices: number[] }>();
-    for (let i = 0; i < limit; i++) {
-      const root = find(i);
-      const cluster = clusters.get(root);
-      if (cluster) {
-        cluster.indices.push(i);
-      } else {
-        clusters.set(root, { indices: [i] });
+      function union(i: number, j: number) {
+        parent.set(find(i), find(j));
       }
-    }
 
-    for (const cluster of clusters.values()) {
-      if (cluster.indices.length < 2) continue;
-
-      // Calculate average similarity from cached scores
-      let totalSim = 0;
-      let count = 0;
-      for (let i = 0; i < cluster.indices.length; i++) {
-        for (let j = i + 1; j < cluster.indices.length; j++) {
-          const a = cluster.indices[i]!;
-          const b = cluster.indices[j]!;
-          const key = a < b ? `${a}:${b}` : `${b}:${a}`;
-          const cached = simCache.get(key);
-          totalSim += cached ?? 1.0; // 1.0 for exact matches (not in cache)
-          count++;
+      const limit = Math.min(scopeNotes.length, 2000);
+      const simCache = new Map<string, number>();
+      for (let i = 0; i < limit; i++) {
+        for (let j = i + 1; j < limit; j++) {
+          const a = scopeNotes[i]!;
+          const b = scopeNotes[j]!;
+          if (a.normalized === b.normalized) continue;
+          const sim = stringSimilarity(a.normalized, b.normalized);
+          if (sim >= fuzzyThreshold) {
+            simCache.set(`${i}:${j}`, sim);
+            union(i, j);
+          }
         }
       }
 
-      const avgSim = count > 0 ? totalSim / count : 1.0;
-      const clusterNotes = cluster.indices.map((i) => scopeNotes[i]!.note);
+      const clusterMap = groupBy(
+        Array.from({ length: limit }, (_, i) => i),
+        (i) => find(i),
+      );
 
-      // Skip if all notes already covered by exact matching
-      if (clusterNotes.every((n) => mergedGuids.has(n.guid))) continue;
-      for (const n of clusterNotes) mergedGuids.add(n.guid);
-
-      const displayKey =
-        getFieldValue(clusterNotes[0]!, fieldIndex)
-          ?.replace(/<[^>]*>/g, "")
-          .replace(/\[sound:[^\]]+\]/g, "")
-          .trim() ?? "";
-
-      result.push({
-        key: `fuzzy-${clusterNotes.map((n) => n.guid).join("-")}`,
-        displayKey: displayKey || "(empty)",
-        notes: clusterNotes,
-        similarity: Math.round(avgSim * 100) / 100,
-      });
-    }
-  }
-
-  result.sort((a, b) => b.notes.length - a.notes.length);
-  return result;
+      return Object.values(clusterMap)
+        .filter((indices): indices is number[] => indices !== undefined && indices.length >= 2)
+        .map((indices) => {
+          let totalSim = 0;
+          let count = 0;
+          for (let i = 0; i < indices.length; i++) {
+            for (let j = i + 1; j < indices.length; j++) {
+              const a = indices[i]!;
+              const b = indices[j]!;
+              const key = a < b ? `${a}:${b}` : `${b}:${a}`;
+              totalSim += simCache.get(key) ?? 1.0;
+              count++;
+            }
+          }
+          const avgSim = count > 0 ? totalSim / count : 1.0;
+          const clusterNotes = indices.map((i) => scopeNotes[i]!.note);
+          const displayKey =
+            getFieldValue(clusterNotes[0]!, fieldIndex)
+              ?.replace(/<[^>]*>/g, "")
+              .replace(/\[sound:[^\]]+\]/g, "")
+              .trim() ?? "";
+          return {
+            key: `fuzzy-${clusterNotes.map((n) => n.guid).join("-")}`,
+            displayKey: displayKey || "(empty)",
+            notes: clusterNotes,
+            similarity: Math.round(avgSim * 100) / 100,
+          };
+        })
+        .filter((group) => {
+          if (group.notes.every((n) => mergedGuids.has(n.guid))) return false;
+          group.notes.forEach((n) => mergedGuids.add(n.guid));
+          return true;
+        });
+    })
+    .toSorted((a, b) => b.notes.length - a.notes.length);
 }
 
 /**
@@ -310,13 +277,7 @@ export function findDuplicates(
 
   if (!options.fuzzy) return exactGroups;
 
-  // For fuzzy, exclude notes already in exact groups
-  const exactGuids = new Set<string>();
-  for (const group of exactGroups) {
-    for (const note of group.notes) {
-      exactGuids.add(note.guid);
-    }
-  }
+  const exactGuids = new Set(exactGroups.flatMap((group) => group.notes.map((n) => n.guid)));
 
   const remainingNotes = notes.filter((n) => !exactGuids.has(n.guid));
   const fuzzyGroups = findFuzzyDuplicates(remainingNotes, options);

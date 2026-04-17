@@ -284,14 +284,10 @@ export async function loadSyncedCollection(bytes: Uint8Array, mediaBlobs?: Map<s
   let mediaFiles: Map<string, string> | undefined;
   const newMediaFilenames = new Set<string>();
   if (mediaBlobs && mediaBlobs.size > 0) {
-    mediaFiles = new Map<string, string>();
-    const puts: Promise<void>[] = [];
-    for (const [filename, blob] of mediaBlobs) {
-      newMediaFilenames.add(filename);
-      mediaFiles.set(filename, URL.createObjectURL(blob));
-      puts.push(cache.put(mediaCachePath(filename), new Response(blob)));
-    }
-    await Promise.all(puts);
+    const entries = [...mediaBlobs];
+    entries.forEach(([filename]) => newMediaFilenames.add(filename));
+    mediaFiles = new Map(entries.map(([filename, blob]) => [filename, URL.createObjectURL(blob)]));
+    await Promise.all(entries.map(([filename, blob]) => cache.put(mediaCachePath(filename), new Response(blob))));
   }
 
   // Clear old media entries that weren't replaced by new ones
@@ -1025,18 +1021,17 @@ export function moveToNextReviewCard() {
 
   // First priority: any learning card that is due now (but not the one we just reviewed)
   if (queue) {
-    for (const card of dueCards) {
-      if (card.cardId === currentId) continue;
-      if (!queue.isCardInLearning(card)) continue;
+    const dueLearningCard = dueCards.find((card) => {
+      if (card.cardId === currentId || !queue.isCardInLearning(card)) return false;
       try {
-        const dueMs = new Date((card.reviewState.cardState as { due: number }).due).getTime();
-        if (dueMs <= nowMs) {
-          currentReviewCardSig.value = card;
-          return;
-        }
+        return new Date((card.reviewState.cardState as { due: number }).due).getTime() <= nowMs;
       } catch {
-        // skip
+        return false;
       }
+    });
+    if (dueLearningCard) {
+      currentReviewCardSig.value = dueLearningCard;
+      return;
     }
   }
 
@@ -1051,16 +1046,12 @@ export function moveToNextReviewCard() {
   }
 
   // Third priority: soonest learning card (even if not yet due)
-  let soonest: ReviewCard | null = null;
-  let soonestDue = Infinity;
-  for (const c of dueCards) {
-    if (c.cardId === currentId || !queue?.isCardInLearning(c)) continue;
-    const due = (c.reviewState.cardState as { due: number }).due;
-    if (due < soonestDue) {
-      soonest = c;
-      soonestDue = due;
-    }
-  }
+  const soonest = dueCards
+    .filter((c) => c.cardId !== currentId && queue?.isCardInLearning(c))
+    .toSorted((a, b) =>
+      (a.reviewState.cardState as { due: number }).due -
+      (b.reviewState.cardState as { due: number }).due,
+    )[0];
   if (soonest) {
     currentReviewCardSig.value = soonest;
     return;
@@ -1394,11 +1385,7 @@ const BASE91_CHARS =
   "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!#$%&()*+,-.:;<=>?@[]^_`{|}~";
 
 function generateGuid(): string {
-  let result = "";
-  for (let i = 0; i < 10; i++) {
-    result += BASE91_CHARS[Math.floor(Math.random() * BASE91_CHARS.length)];
-  }
-  return result;
+  return Array.from({ length: 10 }, () => BASE91_CHARS[Math.floor(Math.random() * BASE91_CHARS.length)]).join("");
 }
 
 /**
@@ -1647,13 +1634,9 @@ export function countFilteredDeckCards(query: string): number {
   if (!data || !query.trim()) return 0;
   const expr = parseSearch(query);
   if (!expr) return data.cards.length;
-  let count = 0;
-  for (let i = 0; i < data.cards.length; i++) {
-    const card = data.cards[i]!;
-    const searchable = ankiCardToSearchable(card);
-    if (matchExpr(searchable, expr, data.collectionCreationTime)) count++;
-  }
-  return count;
+  return data.cards.filter((card) =>
+    matchExpr(ankiCardToSearchable(card), expr, data.collectionCreationTime),
+  ).length;
 }
 
 /**
@@ -1664,16 +1647,11 @@ function gatherFilteredCards(config: FilteredDeckConfig): number[] {
   if (!data) return [];
 
   const expr = parseSearch(config.query);
-  const matching: { index: number; card: (typeof data.cards)[number] }[] = [];
-
-  for (let i = 0; i < data.cards.length; i++) {
-    const card = data.cards[i]!;
-    if (expr) {
-      const searchable = ankiCardToSearchable(card);
-      if (!matchExpr(searchable, expr, data.collectionCreationTime)) continue;
-    }
-    matching.push({ index: i, card });
-  }
+  const matching = data.cards
+    .map((card, index) => ({ index, card }))
+    .filter(({ card }) =>
+      !expr || matchExpr(ankiCardToSearchable(card), expr, data.collectionCreationTime),
+    );
 
   // Sort
   switch (config.sortOrder) {
@@ -2093,19 +2071,17 @@ async function bulkPersistTags(guids: string[]): Promise<void> {
     const mod = nowSecs();
 
     const guidSet = new Set(guids);
-    const cardsByGuid = new Map<string, (typeof data.cards)[number]>();
-    for (const card of data.cards) {
-      if (guidSet.has(card.guid) && !cardsByGuid.has(card.guid)) {
-        cardsByGuid.set(card.guid, card);
-      }
-    }
+    const cardsByGuid = new Map(
+      data.cards
+        .filter((card) => guidSet.has(card.guid))
+        .map((card) => [card.guid, card] as const),
+    );
 
-    for (const guid of guids) {
+    guids.forEach((guid) => {
       const card = cardsByGuid.get(guid);
-      if (!card) continue;
-
+      if (!card) return;
       db.run("UPDATE notes SET tags=?, mod=?, usn=-1 WHERE guid=?", [formatTagsStr(card.tags), mod, guid]);
-    }
+    });
 
     await persistSqliteBytes(db, input);
   } finally {

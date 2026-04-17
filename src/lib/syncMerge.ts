@@ -173,13 +173,18 @@ function mergeColJsonField<T extends { id: number; mod?: number }>(
 ): void {
   if (remoteItems.length === 0) return;
   const local = getColJson<Record<string, T>>(db, column, {});
-  for (const item of remoteItems) {
-    const existing = local[String(item.id)];
-    if (!existing || (item.mod ?? 0) >= (existing.mod ?? 0)) {
-      local[String(item.id)] = item;
-    }
-  }
-  db.run(`UPDATE col SET ${column}=?`, [JSON.stringify(local)]);
+  const merged = {
+    ...local,
+    ...Object.fromEntries(
+      remoteItems
+        .filter((item) => {
+          const existing = local[String(item.id)];
+          return !existing || (item.mod ?? 0) >= (existing.mod ?? 0);
+        })
+        .map((item) => [String(item.id), item]),
+    ),
+  };
+  db.run(`UPDATE col SET ${column}=?`, [JSON.stringify(merged)]);
 }
 
 /**
@@ -226,27 +231,19 @@ export async function applyRemoteGraves(db: Database, graves: Graves): Promise<v
   // Delete cards
   if (graves.cards.length > 0) {
     const cardIds = graves.cards.map(String);
-    for (const cardId of graves.cards) {
-      db.run("DELETE FROM cards WHERE id=?", [cardId]);
-    }
+    graves.cards.forEach((cardId) => db.run("DELETE FROM cards WHERE id=?", [cardId]));
     await reviewDB.deleteCards(cardIds);
     await reviewDB.deleteReviewLogsForCards(cardIds);
   }
 
   // Delete notes
   if (graves.notes.length > 0) {
-    // Collect all card IDs belonging to deleted notes
-    const noteCardIds: string[] = [];
-    for (const noteId of graves.notes) {
+    const noteCardIds = graves.notes.flatMap((noteId) => {
       const cardRows = db.exec("SELECT id FROM cards WHERE nid=?", [noteId]);
-      if (cardRows[0]) {
-        for (const row of cardRows[0].values) {
-          noteCardIds.push(String(row[0]));
-        }
-      }
       db.run("DELETE FROM cards WHERE nid=?", [noteId]);
       db.run("DELETE FROM notes WHERE id=?", [noteId]);
-    }
+      return (cardRows[0]?.values ?? []).map((row) => String(row[0]));
+    });
     await reviewDB.deleteCards(noteCardIds);
     await reviewDB.deleteReviewLogsForCards(noteCardIds);
   }
@@ -254,15 +251,15 @@ export async function applyRemoteGraves(db: Database, graves: Graves): Promise<v
   // Delete decks
   if (graves.decks.length > 0) {
     const anki21b = isAnki21bFormat(db);
-    for (const deckId of graves.decks) {
-      if (anki21b) {
-        db.run("DELETE FROM decks WHERE id=?", [deckId]);
-      } else {
-        // anki2: decks are stored as JSON in col.decks
-        const decks = getColJson<Record<string, unknown>>(db, "decks", {});
-        delete decks[String(deckId)];
-        db.run("UPDATE col SET decks=?", [JSON.stringify(decks)]);
-      }
+    if (anki21b) {
+      graves.decks.forEach((deckId) => db.run("DELETE FROM decks WHERE id=?", [deckId]));
+    } else {
+      const decks = getColJson<Record<string, unknown>>(db, "decks", {});
+      const deckIdsToRemove = new Set(graves.decks.map(String));
+      const filtered = Object.fromEntries(
+        Object.entries(decks).filter(([key]) => !deckIdsToRemove.has(key)),
+      );
+      db.run("UPDATE col SET decks=?", [JSON.stringify(filtered)]);
     }
   }
 }
@@ -381,16 +378,18 @@ function applyRemoteUnchunkedAnki2(db: Database, changes: UnchunkedChanges, loca
   // Models — merge with mod-time conflict resolution + schema validation
   if (changes.models.length > 0) {
     const local = getColJson<Record<string, SyncModel>>(db, "models", {});
-    for (const item of changes.models) {
+    const winners = changes.models.filter((item) => {
       const existing = local[String(item.id)];
       if (existing && (item.mod ?? 0) >= (existing.mod ?? 0)) {
         validateNotetypeSchema(existing, item);
       }
-      if (!existing || (item.mod ?? 0) >= (existing.mod ?? 0)) {
-        local[String(item.id)] = item;
-      }
-    }
-    db.run("UPDATE col SET models=?", [JSON.stringify(local)]);
+      return !existing || (item.mod ?? 0) >= (existing.mod ?? 0);
+    });
+    const merged = {
+      ...local,
+      ...Object.fromEntries(winners.map((item) => [String(item.id), item])),
+    };
+    db.run("UPDATE col SET models=?", [JSON.stringify(merged)]);
   }
 
   const [remoteDecks, remoteDconf] = changes.decks;
@@ -400,14 +399,13 @@ function applyRemoteUnchunkedAnki2(db: Database, changes: UnchunkedChanges, loca
   // Tags — merge with USN awareness: remote tags win over non-pending local tags
   if (changes.tags.length > 0) {
     const localTags = getColJson<Record<string, number>>(db, "tags", {});
-    for (const tag of changes.tags) {
-      const localUsn = localTags[tag];
-      // Accept remote tag if: not present locally, or local isn't pending sync
-      if (localUsn === undefined || localUsn !== -1) {
-        localTags[tag] = 0; // Mark as synced
-      }
-    }
-    db.run("UPDATE col SET tags=?", [JSON.stringify(localTags)]);
+    const acceptedTags = Object.fromEntries(
+      changes.tags
+        .filter((tag) => localTags[tag] === undefined || localTags[tag] !== -1)
+        .map((tag) => [tag, 0]),
+    );
+    const mergedTags = { ...localTags, ...acceptedTags };
+    db.run("UPDATE col SET tags=?", [JSON.stringify(mergedTags)]);
   }
 
   // Config — only accept server config if local is not newer (matching desktop Anki)
@@ -508,17 +506,16 @@ function applyRemoteUnchunkedAnki21b(db: Database, changes: UnchunkedChanges, lo
 
 /** Build local graves (deletions) from SQLite rows with usn=-1. */
 export function buildLocalGraves(db: Database): Graves {
-  const graves: Graves = { cards: [], notes: [], decks: [] };
   const result = db.exec("SELECT oid, type FROM graves WHERE usn=-1");
-  if (!result[0]) return graves;
-  for (const row of result[0].values) {
-    const oid = Number(row[0]);
-    const type = Number(row[1]);
-    if (type === 0) graves.cards.push(oid);
-    else if (type === 1) graves.notes.push(oid);
-    else if (type === 2) graves.decks.push(oid);
-  }
-  return graves;
+  const rows = (result[0]?.values ?? []).map((row) => ({
+    oid: Number(row[0]),
+    type: Number(row[1]),
+  }));
+  return {
+    cards: rows.filter((r) => r.type === 0).map((r) => r.oid),
+    notes: rows.filter((r) => r.type === 1).map((r) => r.oid),
+    decks: rows.filter((r) => r.type === 2).map((r) => r.oid),
+  };
 }
 
 /** Build unchunked changes to send. PWA doesn't modify these, so send current state. */
@@ -534,33 +531,25 @@ export function buildLocalUnchunkedChanges(
 }
 
 function buildLocalUnchunkedAnki2(db: Database, localIsNewer: boolean): UnchunkedChanges {
+  const models = Object.values(getColJson<Record<string, SyncModel>>(db, "models", {})).filter(
+    (m) => m.usn === -1,
+  );
+  const pendingDecks = Object.values(getColJson<Record<string, SyncDeck>>(db, "decks", {})).filter(
+    (d) => d.usn === -1,
+  );
+  const pendingDconf = Object.values(
+    getColJson<Record<string, SyncDeckConfig>>(db, "dconf", {}),
+  ).filter((c) => c.usn === -1);
+  const tags = Object.entries(getColJson<Record<string, number>>(db, "tags", {}))
+    .filter(([, usn]) => usn === -1)
+    .map(([tag]) => tag);
+
   const changes: UnchunkedChanges = {
-    models: [],
-    decks: [[], []],
-    tags: [],
+    models,
+    decks: [pendingDecks, pendingDconf],
+    tags,
   };
 
-  // Models (notetypes) with pending changes (usn=-1)
-  for (const m of Object.values(getColJson<Record<string, SyncModel>>(db, "models", {}))) {
-    if (m.usn === -1) changes.models.push(m);
-  }
-
-  // Decks with pending changes (usn=-1)
-  for (const d of Object.values(getColJson<Record<string, SyncDeck>>(db, "decks", {}))) {
-    if (d.usn === -1) changes.decks[0].push(d);
-  }
-
-  // Deck configs with pending changes (usn=-1)
-  for (const c of Object.values(getColJson<Record<string, SyncDeckConfig>>(db, "dconf", {}))) {
-    if (c.usn === -1) changes.decks[1].push(c);
-  }
-
-  // Tags with pending changes (value=-1 in the JSON object)
-  for (const [tag, usn] of Object.entries(getColJson<Record<string, number>>(db, "tags", {}))) {
-    if (usn === -1) changes.tags.push(tag);
-  }
-
-  // If local is newer, include conf and crt so the server can update
   if (localIsNewer) {
     const result = db.exec("SELECT conf, crt FROM col");
     if (result[0]?.values[0]) {
@@ -579,74 +568,51 @@ function buildLocalUnchunkedAnki2(db: Database, localIsNewer: boolean): Unchunke
   return changes;
 }
 
+function safeParseJson(val: unknown): Record<string, unknown> {
+  if (typeof val !== "string") return {};
+  try {
+    return JSON.parse(val);
+  } catch {
+    return {};
+  }
+}
+
 function buildLocalUnchunkedAnki21b(db: Database, localIsNewer: boolean): UnchunkedChanges {
-  const changes: UnchunkedChanges = {
-    models: [],
-    decks: [[], []],
-    tags: [],
-  };
-
-  // Notetypes with pending changes (usn=-1)
   const ntResult = db.exec("SELECT id, name, mtime_secs, usn, config FROM notetypes WHERE usn=-1");
-  if (ntResult[0]) {
-    for (const row of ntResult[0].values) {
-      const configStr = typeof row[4] === "string" ? row[4] : "{}";
-      let parsed: Record<string, unknown> = {};
-      try { parsed = JSON.parse(configStr); } catch { /* skip */ }
-      const obj: SyncModel = {
-        ...parsed,
-        id: Number(row[0]),
-        name: String(row[1] ?? ""),
-        mtime_secs: Number(row[2]),
-        usn: Number(row[3]),
-      };
-      changes.models.push(obj);
-    }
-  }
+  const models: SyncModel[] = (ntResult[0]?.values ?? []).map((row) => ({
+    ...safeParseJson(row[4]),
+    id: Number(row[0]),
+    name: String(row[1] ?? ""),
+    mtime_secs: Number(row[2]),
+    usn: Number(row[3]),
+  }));
 
-  // Decks with pending changes (usn=-1)
   const decksResult = db.exec("SELECT id, name, mtime, usn, common FROM decks WHERE usn=-1");
-  if (decksResult[0]) {
-    for (const row of decksResult[0].values) {
-      const commonStr = typeof row[4] === "string" ? row[4] : "{}";
-      let parsed: Record<string, unknown> = {};
-      try { parsed = JSON.parse(commonStr); } catch { /* skip */ }
-      const obj: SyncDeck = {
-        ...parsed,
-        id: Number(row[0]),
-        name: String(row[1] ?? ""),
-        mtime: Number(row[2]),
-        usn: Number(row[3]),
-      };
-      changes.decks[0].push(obj);
-    }
-  }
+  const pendingDecks: SyncDeck[] = (decksResult[0]?.values ?? []).map((row) => ({
+    ...safeParseJson(row[4]),
+    id: Number(row[0]),
+    name: String(row[1] ?? ""),
+    mtime: Number(row[2]),
+    usn: Number(row[3]),
+  }));
 
-  // Deck configs with pending changes (usn=-1)
   const dcResult = db.exec("SELECT id, name, mtime, usn, config FROM deck_config WHERE usn=-1");
-  if (dcResult[0]) {
-    for (const row of dcResult[0].values) {
-      const configStr = typeof row[4] === "string" ? row[4] : "{}";
-      let parsed: Record<string, unknown> = {};
-      try { parsed = JSON.parse(configStr); } catch { /* skip */ }
-      const obj: SyncDeckConfig = {
-        ...parsed,
-        id: Number(row[0]),
-        name: String(row[1] ?? ""),
-        mtime: Number(row[2]),
-        usn: Number(row[3]),
-      };
-      changes.decks[1].push(obj);
-    }
-  }
+  const pendingDconf: SyncDeckConfig[] = (dcResult[0]?.values ?? []).map((row) => ({
+    ...safeParseJson(row[4]),
+    id: Number(row[0]),
+    name: String(row[1] ?? ""),
+    mtime: Number(row[2]),
+    usn: Number(row[3]),
+  }));
 
-  // Tags with pending changes (usn=-1)
   const tagsResult = db.exec("SELECT tag FROM tags WHERE usn=-1");
-  if (tagsResult[0]) {
-    for (const row of tagsResult[0].values) {
-      changes.tags.push(String(row[0] ?? ""));
-    }
-  }
+  const tags = (tagsResult[0]?.values ?? []).map((row) => String(row[0] ?? ""));
+
+  const changes: UnchunkedChanges = {
+    models,
+    decks: [pendingDecks, pendingDconf],
+    tags,
+  };
 
   if (localIsNewer) {
     const result = db.exec("SELECT conf, crt FROM col");
@@ -669,49 +635,34 @@ function buildLocalUnchunkedAnki21b(db: Database, localIsNewer: boolean): Unchun
 /** Yield local chunks of cards/notes/revlog with usn=-1. */
 export function* buildLocalChunks(db: Database): Generator<Chunk> {
   // Gather all pending items
-  const pendingCards: CardRow[] = [];
   const cardsResult = db.exec(
     "SELECT id, nid, did, ord, mod, usn, type, queue, due, ivl, factor, reps, lapses, left, odue, odid, flags, data FROM cards WHERE usn=-1",
   );
-  if (cardsResult[0]) {
-    for (const row of cardsResult[0].values) {
-      pendingCards.push([
-        Number(row[0]), Number(row[1]), Number(row[2]), Number(row[3]),
-        Number(row[4]), Number(row[5]), Number(row[6]), Number(row[7]),
-        Number(row[8]), Number(row[9]), Number(row[10]), Number(row[11]),
-        Number(row[12]), Number(row[13]), Number(row[14]), Number(row[15]),
-        Number(row[16]), String(row[17] ?? ""),
-      ]);
-    }
-  }
+  const pendingCards: CardRow[] = (cardsResult[0]?.values ?? []).map((row) => [
+    Number(row[0]), Number(row[1]), Number(row[2]), Number(row[3]),
+    Number(row[4]), Number(row[5]), Number(row[6]), Number(row[7]),
+    Number(row[8]), Number(row[9]), Number(row[10]), Number(row[11]),
+    Number(row[12]), Number(row[13]), Number(row[14]), Number(row[15]),
+    Number(row[16]), String(row[17] ?? ""),
+  ]);
 
-  const pendingNotes: NoteRow[] = [];
   const notesResult = db.exec(
     "SELECT id, guid, mid, mod, usn, tags, flds, sfld, csum, flags, data FROM notes WHERE usn=-1",
   );
-  if (notesResult[0]) {
-    for (const row of notesResult[0].values) {
-      pendingNotes.push([
-        Number(row[0]), String(row[1] ?? ""), Number(row[2]), Number(row[3]),
-        Number(row[4]), String(row[5] ?? ""), String(row[6] ?? ""), String(row[7] ?? ""),
-        Number(row[8]), Number(row[9]), String(row[10] ?? ""),
-      ]);
-    }
-  }
+  const pendingNotes: NoteRow[] = (notesResult[0]?.values ?? []).map((row) => [
+    Number(row[0]), String(row[1] ?? ""), Number(row[2]), Number(row[3]),
+    Number(row[4]), String(row[5] ?? ""), String(row[6] ?? ""), String(row[7] ?? ""),
+    Number(row[8]), Number(row[9]), String(row[10] ?? ""),
+  ]);
 
-  const pendingRevlog: RevlogRow[] = [];
   const revlogResult = db.exec(
     "SELECT id, cid, usn, ease, ivl, lastIvl, factor, time, type FROM revlog WHERE usn=-1",
   );
-  if (revlogResult[0]) {
-    for (const row of revlogResult[0].values) {
-      pendingRevlog.push([
-        Number(row[0]), Number(row[1]), Number(row[2]), Number(row[3]),
-        Number(row[4]), Number(row[5]), Number(row[6]), Number(row[7]),
-        Number(row[8]),
-      ]);
-    }
-  }
+  const pendingRevlog: RevlogRow[] = (revlogResult[0]?.values ?? []).map((row) => [
+    Number(row[0]), Number(row[1]), Number(row[2]), Number(row[3]),
+    Number(row[4]), Number(row[5]), Number(row[6]), Number(row[7]),
+    Number(row[8]),
+  ]);
 
   // Yield in chunks of CHUNK_SIZE (interleaving types)
   let ci = 0,
@@ -822,15 +773,12 @@ export function finalizeUsn(
     finalizeUsnAnki2Json(db, serverUsn, "dconf");
     // Tags: update usn values in the JSON object
     const tags = getColJson<Record<string, number>>(db, "tags", {});
-    let changed = false;
-    for (const [tag, usn] of Object.entries(tags)) {
-      if (usn === -1) {
-        tags[tag] = serverUsn;
-        changed = true;
-      }
-    }
-    if (changed) {
-      db.run("UPDATE col SET tags=?", [JSON.stringify(tags)]);
+    const hasPending = Object.values(tags).some((usn) => usn === -1);
+    if (hasPending) {
+      const updated = Object.fromEntries(
+        Object.entries(tags).map(([tag, usn]) => [tag, usn === -1 ? serverUsn : usn]),
+      );
+      db.run("UPDATE col SET tags=?", [JSON.stringify(updated)]);
     }
   }
 
@@ -844,14 +792,14 @@ function finalizeUsnAnki2Json(
   column: "models" | "decks" | "dconf",
 ): void {
   const data = getColJson<Record<string, { usn?: number }>>(db, column, {});
-  let changed = false;
-  for (const obj of Object.values(data)) {
-    if (obj.usn === -1) {
-      obj.usn = serverUsn;
-      changed = true;
-    }
-  }
-  if (changed) {
-    db.run(`UPDATE col SET ${column}=?`, [JSON.stringify(data)]);
+  const hasPending = Object.values(data).some((obj) => obj.usn === -1);
+  if (hasPending) {
+    const updated = Object.fromEntries(
+      Object.entries(data).map(([key, obj]) => [
+        key,
+        obj.usn === -1 ? { ...obj, usn: serverUsn } : obj,
+      ]),
+    );
+    db.run(`UPDATE col SET ${column}=?`, [JSON.stringify(updated)]);
   }
 }

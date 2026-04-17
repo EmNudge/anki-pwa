@@ -105,13 +105,12 @@ async function performAutoSync(): Promise<boolean> {
     try {
       const dlMedia = await downloadMedia(config.serverUrl, state.hkey);
       if (dlMedia.size > 0) {
-        const typedBlobs = new Map<string, Blob>();
-        for (const [filename, blob] of dlMedia) {
-          typedBlobs.set(
+        const typedBlobs = new Map(
+          [...dlMedia].map(([filename, blob]) => [
             filename,
             new Blob([blob], { type: mime.getType(filename) ?? "application/octet-stream" }),
-          );
-        }
+          ]),
+        );
         await addMediaToCache(typedBlobs);
       }
     } catch (dlErr) {

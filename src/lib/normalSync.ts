@@ -311,10 +311,11 @@ async function sendGraves(
 
   for (let i = 0; i < allIds.length; i += CHUNK_SIZE) {
     const batch = allIds.slice(i, i + CHUNK_SIZE);
-    const chunk: Graves = { cards: [], notes: [], decks: [] };
-    for (const [id, type] of batch) {
-      chunk[type].push(id);
-    }
+    const chunk: Graves = {
+      cards: batch.filter(([, type]) => type === "cards").map(([id]) => id),
+      notes: batch.filter(([, type]) => type === "notes").map(([id]) => id),
+      decks: batch.filter(([, type]) => type === "decks").map(([id]) => id),
+    };
     await syncEndpoint(serverUrl, "applyGraves", hkey, { chunk }, proto, sessionKey);
   }
 
@@ -504,30 +505,23 @@ async function applyDeckConfigsToScheduler(
 
   type RawDconf = z.infer<typeof rawDconfSchema>;
 
-  const configs = new Map<string, RawDconf>();
-
-  if (isAnki21b) {
-    const dcResult = db.exec("SELECT id, config FROM deck_config");
-    if (dcResult[0]) {
-      for (const row of dcResult[0].values) {
-        const parsed = rawDconfSchema.safeParse(safeJsonParse(String(row[1] ?? "")));
-        if (parsed.success) {
-          configs.set(String(row[0]), parsed.data);
-        }
-      }
-    }
-  } else {
-    const dconfRaw = db.exec("SELECT dconf FROM col");
-    if (dconfRaw[0]?.values[0]) {
-      const outer = safeJsonParse(String(dconfRaw[0].values[0][0] ?? ""));
-      if (outer && typeof outer === "object") {
-        for (const [id, raw] of Object.entries(outer)) {
-          const parsed = rawDconfSchema.safeParse(raw);
-          if (parsed.success) configs.set(id, parsed.data);
-        }
-      }
-    }
-  }
+  const configs: Map<string, RawDconf> = isAnki21b
+    ? new Map(
+        (db.exec("SELECT id, config FROM deck_config")[0]?.values ?? [])
+          .map((row) => [String(row[0]), rawDconfSchema.safeParse(safeJsonParse(String(row[1] ?? "")))] as const)
+          .filter((entry): entry is [string, { success: true; data: RawDconf }] => entry[1].success)
+          .map(([id, parsed]) => [id, parsed.data]),
+      )
+    : (() => {
+        const outer = safeJsonParse(String(db.exec("SELECT dconf FROM col")[0]?.values[0]?.[0] ?? ""));
+        if (!outer || typeof outer !== "object") return new Map<string, RawDconf>();
+        return new Map(
+          Object.entries(outer)
+            .map(([id, raw]) => [id, rawDconfSchema.safeParse(raw)] as const)
+            .filter((entry): entry is [string, { success: true; data: RawDconf }] => entry[1].success)
+            .map(([id, parsed]) => [id, parsed.data]),
+        );
+      })();
 
   if (configs.size === 0) return;
 
