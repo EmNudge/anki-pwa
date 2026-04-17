@@ -1574,6 +1574,13 @@ async function handleNoteSave(payload: { fields: Record<string, string | null>; 
   border-bottom: 1px solid var(--color-border);
   background: var(--color-surface);
   flex-shrink: 0;
+  overflow: hidden;
+}
+
+@media (max-width: 640px) {
+  .toolbar {
+    flex-wrap: wrap;
+  }
 }
 
 .toolbar-left {
@@ -1582,6 +1589,7 @@ async function handleNoteSave(payload: { fields: Record<string, string | null>; 
   gap: var(--spacing-2);
   flex: 1;
   min-width: 0;
+  overflow: hidden;
 }
 
 .toolbar-right {
@@ -1589,6 +1597,12 @@ async function handleNoteSave(payload: { fields: Record<string, string | null>; 
   align-items: center;
   gap: var(--spacing-2);
   flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+  .toolbar-right {
+    flex-wrap: wrap;
+  }
 }
 
 .toolbar-icon-btn {
@@ -2076,6 +2090,8 @@ async function handleNoteSave(payload: { fields: Record<string, string | null>; 
   border-bottom: 1px solid var(--color-border);
   background: color-mix(in srgb, var(--color-primary) 6%, var(--color-surface));
   flex-shrink: 0;
+  flex-wrap: wrap;
+  overflow: hidden;
 }
 
 .bulk-count {

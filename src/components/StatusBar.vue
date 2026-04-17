@@ -84,11 +84,19 @@ async function handleRedo() {
   padding: 0 var(--spacing-4);
   background: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
+  overflow: hidden;
 }
 
 .tabs {
   display: flex;
   gap: var(--spacing-1);
+  overflow-x: auto;
+  min-width: 0;
+  scrollbar-width: none;
+}
+
+.tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .tab {
@@ -102,6 +110,8 @@ async function handleRedo() {
   cursor: pointer;
   transition: var(--transition-colors);
   box-shadow: none;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .tab:hover {
