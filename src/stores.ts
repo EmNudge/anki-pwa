@@ -507,6 +507,39 @@ export function isSyncedCollection(): boolean {
   return activeDeckInputSig.value?.kind === "sqlite";
 }
 
+/** Epoch seconds timestamp. */
+function nowSecs(): number {
+  return Math.floor(Date.now() / 1000);
+}
+
+/** Format tags array for Anki's DB storage (space-padded). */
+function formatTagsStr(tags: string[]): string {
+  return tags.length > 0 ? ` ${tags.join(" ")} ` : "";
+}
+
+/** Compute sort field and checksum from a raw field value. */
+function computeSortField(field: string): { sfld: string; csum: number } {
+  const sfld = field.replace(/<[^>]*>/g, "").trim();
+  return { sfld, csum: stringHash(sfld) };
+}
+
+/** Export DB bytes, write to cache, and update the active deck input signal. */
+async function persistSqliteBytes(
+  db: import("sql.js").Database,
+  input: DeckInput & { kind: "sqlite" },
+  reparse = false,
+): Promise<void> {
+  const newBytes = new Uint8Array(db.export());
+  const cache = await caches.open("anki-cache");
+  await cache.put("/sync/collection.sqlite", new Response(new Blob([newBytes as BlobPart])));
+  activeDeckInputSig.value = { ...input, bytes: newBytes };
+  if (reparse) {
+    const { getAnkiDataFromSqlite } = await import("./ankiParser");
+    ankiDataSig.value = await getAnkiDataFromSqlite(newBytes, input.mediaFiles);
+  }
+  markDataChanged();
+}
+
 /**
  * Rename a deck in the synced SQLite collection.
  * Updates the deck name and all child deck name prefixes.
@@ -530,7 +563,7 @@ export async function renameDeckInCollection(
     parts[parts.length - 1] = newName;
     const newFullName = parts.join("::");
 
-    const mod = Math.floor(Date.now() / 1000);
+    const mod = nowSecs();
 
     if (anki21b) {
       // Update the deck itself
@@ -580,17 +613,7 @@ export async function renameDeckInCollection(
       db.run("UPDATE col SET decks=?", [JSON.stringify(decksJson)]);
     }
 
-    const newBytes = new Uint8Array(db.export());
-
-    // Update cache
-    const cache = await caches.open("anki-cache");
-    await cache.put("/sync/collection.sqlite", new Response(new Blob([newBytes as BlobPart])));
-
-    // Update in-place and re-parse
-    activeDeckInputSig.value = { ...input, bytes: newBytes };
-    const { getAnkiDataFromSqlite } = await import("./ankiParser");
-    ankiDataSig.value = await getAnkiDataFromSqlite(newBytes, input.mediaFiles);
-    markDataChanged();
+    await persistSqliteBytes(db, input, true);
   } finally {
     db.close();
   }
@@ -670,22 +693,12 @@ export async function deleteDeckFromCollection(deckId: string, fullName: string)
       db.run("UPDATE col SET decks=?", [JSON.stringify(decksJson)]);
     }
 
-    const newBytes = new Uint8Array(db.export());
-
-    // Update cache
-    const cache = await caches.open("anki-cache");
-    await cache.put("/sync/collection.sqlite", new Response(new Blob([newBytes as BlobPart])));
-
-    // Update in-place and re-parse
-    activeDeckInputSig.value = { ...input, bytes: newBytes };
-    const { getAnkiDataFromSqlite } = await import("./ankiParser");
-    ankiDataSig.value = await getAnkiDataFromSqlite(newBytes, input.mediaFiles);
-
     // Clear selected deck if it was the deleted one
     if (selectedDeckIdSig.value === deckId) {
       selectedDeckIdSig.value = null;
     }
-    markDataChanged();
+
+    await persistSqliteBytes(db, input, true);
   } finally {
     db.close();
   }
@@ -1333,36 +1346,19 @@ export async function updateNote(
     // Build flds (field values joined by \x1F in field order)
     const fieldValues = Object.values(newFields);
     const flds = fieldValues.map((v) => v ?? "").join("\x1f");
-
-    // Compute sfld (sort field = first field, HTML stripped)
-    const firstField = fieldValues[0] ?? "";
-    const sfld = firstField.replace(/<[^>]*>/g, "").trim();
-
-    // Compute csum (checksum of sort field)
-    const csum = stringHash(sfld);
-
-    // Compute mod and tags string
-    const mod = Math.floor(Date.now() / 1000);
-    const tagsStr = newTags.length > 0 ? ` ${newTags.join(" ")} ` : "";
+    const { sfld, csum } = computeSortField(fieldValues[0] ?? "");
+    const mod = nowSecs();
 
     db.run("UPDATE notes SET flds=?, sfld=?, csum=?, mod=?, usn=-1, tags=? WHERE id=?", [
       flds,
       sfld,
       csum,
       mod,
-      tagsStr,
+      formatTagsStr(newTags),
       noteId,
     ]);
 
-    const newBytes = new Uint8Array(db.export());
-
-    // Write to cache for sync
-    const cache = await caches.open("anki-cache");
-    await cache.put("/sync/collection.sqlite", new Response(new Blob([newBytes as BlobPart])));
-
-    // Update in-place without triggering re-parse
-    activeDeckInputSig.value = { ...input, bytes: newBytes };
-    markDataChanged();
+    await persistSqliteBytes(db, input);
   } finally {
     db.close();
   }
@@ -1381,15 +1377,7 @@ export async function withDbMutation(mutate: (db: import("sql.js").Database) => 
   const db = await createDatabase(input.bytes);
   try {
     mutate(db);
-
-    const newBytes = new Uint8Array(db.export());
-    const cache = await caches.open("anki-cache");
-    await cache.put("/sync/collection.sqlite", new Response(new Blob([newBytes as BlobPart])));
-
-    activeDeckInputSig.value = { ...input, bytes: newBytes };
-    const { getAnkiDataFromSqlite } = await import("./ankiParser");
-    ankiDataSig.value = await getAnkiDataFromSqlite(newBytes, input.mediaFiles);
-    markDataChanged();
+    await persistSqliteBytes(db, input, true);
   } finally {
     db.close();
   }
@@ -1484,7 +1472,7 @@ export async function addNote(options: {
   try {
     const noteId = Date.now() * 1000 + Math.floor(Math.random() * 1000);
     const guid = generateGuid();
-    const mod = Math.floor(Date.now() / 1000);
+    const mod = nowSecs();
 
     // Get field order from DB
     const fieldRows = executeQueryAll<{ name: string; ord: number }>(
@@ -1498,16 +1486,12 @@ export async function addNote(options: {
       .map((f) => options.fields[f.name] ?? "")
       .join("\x1f");
 
-    // Sort field and checksum
-    const sfld = (options.fields[fieldRows[0]?.name ?? ""] ?? "").replace(/<[^>]*>/g, "").trim();
-    const csum = stringHash(sfld);
-
-    const tagsStr = options.tags.length > 0 ? ` ${options.tags.join(" ")} ` : "";
+    const { sfld, csum } = computeSortField(options.fields[fieldRows[0]?.name ?? ""] ?? "");
 
     // Insert note
     db.run(
       "INSERT INTO notes (id, guid, mid, mod, usn, tags, flds, sfld, csum, flags, data) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-      [noteId, guid, options.notetypeId, mod, -1, tagsStr, flds, sfld, csum, 0, ""],
+      [noteId, guid, options.notetypeId, mod, -1, formatTagsStr(options.tags), flds, sfld, csum, 0, ""],
     );
 
     // Insert cards (one per template, or numCards for cloze)
@@ -1520,15 +1504,7 @@ export async function addNote(options: {
       );
     }
 
-    // Persist and re-parse
-    const newBytes = new Uint8Array(db.export());
-    const cache = await caches.open("anki-cache");
-    await cache.put("/sync/collection.sqlite", new Response(new Blob([newBytes as BlobPart])));
-
-    activeDeckInputSig.value = { ...input, bytes: newBytes };
-    const { getAnkiDataFromSqlite } = await import("./ankiParser");
-    ankiDataSig.value = await getAnkiDataFromSqlite(newBytes, input.mediaFiles);
-    markDataChanged();
+    await persistSqliteBytes(db, input, true);
   } finally {
     db.close();
   }
@@ -2016,7 +1992,7 @@ export async function bulkUpdateNoteFields(
 
   const db = await createDatabase(input.bytes);
   try {
-    const mod = Math.floor(Date.now() / 1000);
+    const mod = nowSecs();
 
     for (const { guid, fields } of updates) {
       const result = db.exec("SELECT id FROM notes WHERE guid=?", [guid]);
@@ -2026,9 +2002,7 @@ export async function bulkUpdateNoteFields(
 
       const fieldValues = Object.values(fields);
       const flds = fieldValues.map((v) => v ?? "").join("\x1f");
-      const firstField = fieldValues[0] ?? "";
-      const sfld = firstField.replace(/<[^>]*>/g, "").trim();
-      const csum = stringHash(sfld);
+      const { sfld, csum } = computeSortField(fieldValues[0] ?? "");
 
       db.run("UPDATE notes SET flds=?, sfld=?, csum=?, mod=?, usn=-1 WHERE id=?", [
         flds,
@@ -2039,11 +2013,7 @@ export async function bulkUpdateNoteFields(
       ]);
     }
 
-    const newBytes = new Uint8Array(db.export());
-    const cache = await caches.open("anki-cache");
-    await cache.put("/sync/collection.sqlite", new Response(new Blob([newBytes as BlobPart])));
-    activeDeckInputSig.value = { ...input, bytes: newBytes };
-    markDataChanged();
+    await persistSqliteBytes(db, input);
   } finally {
     db.close();
   }
@@ -2098,11 +2068,7 @@ export async function deleteNotesByGuid(guids: string[]): Promise<void> {
       db.run("DELETE FROM notes WHERE id=?", [noteId]);
     }
 
-    const newBytes = new Uint8Array(db.export());
-    const cache = await caches.open("anki-cache");
-    await cache.put("/sync/collection.sqlite", new Response(new Blob([newBytes as BlobPart])));
-    activeDeckInputSig.value = { ...input, bytes: newBytes };
-    markDataChanged();
+    await persistSqliteBytes(db, input);
   } finally {
     db.close();
   }
@@ -2118,7 +2084,7 @@ async function bulkPersistTags(guids: string[]): Promise<void> {
 
   const db = await createDatabase(input.bytes);
   try {
-    const mod = Math.floor(Date.now() / 1000);
+    const mod = nowSecs();
 
     const guidSet = new Set(guids);
     const cardsByGuid = new Map<string, (typeof data.cards)[number]>();
@@ -2132,15 +2098,10 @@ async function bulkPersistTags(guids: string[]): Promise<void> {
       const card = cardsByGuid.get(guid);
       if (!card) continue;
 
-      const tagsStr = card.tags.length > 0 ? ` ${card.tags.join(" ")} ` : "";
-      db.run("UPDATE notes SET tags=?, mod=?, usn=-1 WHERE guid=?", [tagsStr, mod, guid]);
+      db.run("UPDATE notes SET tags=?, mod=?, usn=-1 WHERE guid=?", [formatTagsStr(card.tags), mod, guid]);
     }
 
-    const newBytes = new Uint8Array(db.export());
-    const cache = await caches.open("anki-cache");
-    await cache.put("/sync/collection.sqlite", new Response(new Blob([newBytes as BlobPart])));
-    activeDeckInputSig.value = { ...input, bytes: newBytes };
-    markDataChanged();
+    await persistSqliteBytes(db, input);
   } finally {
     db.close();
   }
@@ -2214,7 +2175,7 @@ async function persistNewCardPositions(
 
   const db = await createDatabase(input.bytes);
   try {
-    const mod = Math.floor(Date.now() / 1000);
+    const mod = nowSecs();
 
     for (let i = 0; i < cardIndices.length; i++) {
       const card = data.cards[cardIndices[i]!];
@@ -2224,11 +2185,7 @@ async function persistNewCardPositions(
       db.run("UPDATE cards SET due=?, mod=?, usn=-1 WHERE id=?", [newDue, mod, card.ankiCardId]);
     }
 
-    const newBytes = new Uint8Array(db.export());
-    const cache = await caches.open("anki-cache");
-    await cache.put("/sync/collection.sqlite", new Response(new Blob([newBytes as BlobPart])));
-    activeDeckInputSig.value = { ...input, bytes: newBytes };
-    markDataChanged();
+    await persistSqliteBytes(db, input);
   } finally {
     db.close();
   }

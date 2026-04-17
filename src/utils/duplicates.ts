@@ -227,7 +227,9 @@ export function findFuzzyDuplicates(
     }
 
     // Compare all pairs within scope (limit to first 2000 to avoid freezing)
+    // Cache similarity scores to avoid recomputing during cluster averaging
     const limit = Math.min(scopeNotes.length, 2000);
+    const simCache = new Map<string, number>();
     for (let i = 0; i < limit; i++) {
       for (let j = i + 1; j < limit; j++) {
         const a = scopeNotes[i]!;
@@ -236,40 +238,38 @@ export function findFuzzyDuplicates(
         if (a.normalized === b.normalized) continue;
         const sim = stringSimilarity(a.normalized, b.normalized);
         if (sim >= fuzzyThreshold) {
+          simCache.set(`${i}:${j}`, sim);
           union(i, j);
         }
       }
     }
 
     // Collect groups
-    const clusters = new Map<number, { indices: number[]; minSim: number }>();
+    const clusters = new Map<number, { indices: number[] }>();
     for (let i = 0; i < limit; i++) {
       const root = find(i);
       const cluster = clusters.get(root);
       if (cluster) {
         cluster.indices.push(i);
       } else {
-        clusters.set(root, { indices: [i], minSim: 1.0 });
+        clusters.set(root, { indices: [i] });
       }
     }
 
     for (const cluster of clusters.values()) {
       if (cluster.indices.length < 2) continue;
 
-      // Calculate average similarity within the group
+      // Calculate average similarity from cached scores
       let totalSim = 0;
       let count = 0;
       for (let i = 0; i < cluster.indices.length; i++) {
         for (let j = i + 1; j < cluster.indices.length; j++) {
-          const a = scopeNotes[cluster.indices[i]!]!;
-          const b = scopeNotes[cluster.indices[j]!]!;
-          if (a.normalized !== b.normalized) {
-            totalSim += stringSimilarity(a.normalized, b.normalized);
-            count++;
-          } else {
-            totalSim += 1.0;
-            count++;
-          }
+          const a = cluster.indices[i]!;
+          const b = cluster.indices[j]!;
+          const key = a < b ? `${a}:${b}` : `${b}:${a}`;
+          const cached = simCache.get(key);
+          totalSim += cached ?? 1.0; // 1.0 for exact matches (not in cache)
+          count++;
         }
       }
 
