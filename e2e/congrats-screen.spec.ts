@@ -66,10 +66,14 @@ test.describe('Congrats Screen', () => {
     const stats = page.locator('.congrats-stats');
     await expect(stats).toBeVisible();
 
-    // Should have stat entries
+    // Should have stat entries with actual values
     const statItems = stats.locator('.stat');
     const count = await statItems.count();
     expect(count).toBeGreaterThan(0);
+
+    // At least one stat should contain a numeric value (not empty/placeholder)
+    const firstStatText = await statItems.first().textContent();
+    expect(firstStatText).toMatch(/\d/);
   });
 
   test('should show Back to Decks button on congrats screen', async ({

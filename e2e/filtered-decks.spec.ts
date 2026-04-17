@@ -53,7 +53,7 @@ test.describe('Filtered Decks', () => {
     const hint = page.locator('.field-hint').first();
     await expect(hint).toBeVisible();
     const hintText = await hint.textContent();
-    expect(hintText).toMatch(/\d+/);
+    expect(hintText).toMatch(/\d+\s*(cards?|matching)/i);
   });
 
   test('should show preview bar with card count', async ({ loadedDeckPage: page }) => {
