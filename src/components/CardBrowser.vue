@@ -133,37 +133,42 @@ watch(viewMode, () => {
 });
 
 
-/** All unique tags */
-const allTags = computed(() => {
+/** Single-pass extraction of tags, tag note counts, decks, and note types from cards */
+const cardMetadata = computed(() => {
   const data = ankiDataSig.value;
-  if (!data) return [] as string[];
   const tags = new Set<string>();
-  for (const card of data.cards) {
-    for (const tag of card.tags) tags.add(tag);
-  }
-  return Array.from(tags).sort();
-});
-
-/** Tag note counts for the tree */
-const tagNoteCounts = computed(() => {
-  const data = ankiDataSig.value;
-  const counts = new Map<string, number>();
-  if (!data) return counts;
-
-  // Count unique notes per tag (deduplicate by guid)
+  const decks = new Set<string>();
+  const noteTypes = new Set<string>();
   const seenPerTag = new Map<string, Set<string>>();
-  for (const card of data.cards) {
-    for (const tag of card.tags) {
-      const seen = seenPerTag.get(tag) ?? new Set<string>();
-      seen.add(card.guid);
-      seenPerTag.set(tag, seen);
+
+  if (data) {
+    for (const card of data.cards) {
+      decks.add(card.deckName);
+      for (const t of card.templates) noteTypes.add(t.name);
+      for (const tag of card.tags) {
+        tags.add(tag);
+        const seen = seenPerTag.get(tag) ?? new Set<string>();
+        seen.add(card.guid);
+        seenPerTag.set(tag, seen);
+      }
     }
   }
+
+  const tagNoteCounts = new Map<string, number>();
   for (const [tag, guids] of seenPerTag) {
-    counts.set(tag, guids.size);
+    tagNoteCounts.set(tag, guids.size);
   }
-  return counts;
+
+  return {
+    tags: Array.from(tags).sort(),
+    tagNoteCounts,
+    decks: Array.from(decks).sort(),
+    noteTypes: Array.from(noteTypes).sort(),
+  };
 });
+
+const allTags = computed(() => cardMetadata.value.tags);
+const tagNoteCounts = computed(() => cardMetadata.value.tagNoteCounts);
 
 /** Hierarchical tag tree */
 const tagTree = computed(() => buildTagTree(allTags.value, tagNoteCounts.value));
@@ -313,25 +318,8 @@ async function applyTagDelete() {
   tagDeleteConfirmOpen.value = false;
 }
 
-/** All unique deck names */
-const allDecks = computed(() => {
-  const data = ankiDataSig.value;
-  if (!data) return [] as string[];
-  const decks = new Set<string>();
-  for (const card of data.cards) decks.add(card.deckName);
-  return Array.from(decks).sort();
-});
-
-/** All unique template/note type names */
-const allNoteTypes = computed(() => {
-  const data = ankiDataSig.value;
-  if (!data) return [] as string[];
-  const names = new Set<string>();
-  for (const card of data.cards) {
-    for (const t of card.templates) names.add(t.name);
-  }
-  return Array.from(names).sort();
-});
+const allDecks = computed(() => cardMetadata.value.decks);
+const allNoteTypes = computed(() => cardMetadata.value.noteTypes);
 
 // ── Search parsing (delegated to src/search/engine.ts) ──
 
@@ -1781,24 +1769,6 @@ async function handleNoteSave(payload: { fields: Record<string, string | null>; 
   font-size: var(--font-size-xs);
   color: var(--color-text-tertiary);
   white-space: nowrap;
-}
-
-/* Bulk toolbar */
-.bulk-toolbar {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-2);
-  padding: var(--spacing-1-5) var(--spacing-3);
-  background: var(--color-surface-elevated);
-  border-bottom: 1px solid var(--color-border);
-  flex-shrink: 0;
-}
-
-.bulk-count {
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text-secondary);
-  margin-right: var(--spacing-1);
 }
 
 /* Delete confirmation */

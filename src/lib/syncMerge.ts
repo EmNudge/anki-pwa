@@ -225,28 +225,30 @@ export async function applyRemoteGraves(db: Database, graves: Graves): Promise<v
 
   // Delete cards
   if (graves.cards.length > 0) {
+    const cardIds = graves.cards.map(String);
     for (const cardId of graves.cards) {
       db.run("DELETE FROM cards WHERE id=?", [cardId]);
-      await reviewDB.deleteCard(String(cardId));
-      await reviewDB.deleteReviewLogsForCard(String(cardId));
     }
+    await reviewDB.deleteCards(cardIds);
+    await reviewDB.deleteReviewLogsForCards(cardIds);
   }
 
   // Delete notes
   if (graves.notes.length > 0) {
+    // Collect all card IDs belonging to deleted notes
+    const noteCardIds: string[] = [];
     for (const noteId of graves.notes) {
-      // Also delete cards belonging to this note
       const cardRows = db.exec("SELECT id FROM cards WHERE nid=?", [noteId]);
       if (cardRows[0]) {
         for (const row of cardRows[0].values) {
-          const cid = String(row[0]);
-          await reviewDB.deleteCard(cid);
-          await reviewDB.deleteReviewLogsForCard(cid);
+          noteCardIds.push(String(row[0]));
         }
       }
       db.run("DELETE FROM cards WHERE nid=?", [noteId]);
       db.run("DELETE FROM notes WHERE id=?", [noteId]);
     }
+    await reviewDB.deleteCards(noteCardIds);
+    await reviewDB.deleteReviewLogsForCards(noteCardIds);
   }
 
   // Delete decks

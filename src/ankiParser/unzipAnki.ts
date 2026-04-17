@@ -3,13 +3,7 @@ import { isTruthy, assertTruthy } from "../utils/assert";
 import mime from "mime";
 import { decompressZstd } from "../utils/zstd";
 import { decompressMediaFile, parseMediaMapping } from "./mediaMappings";
-
-/**
- * Type guard to check if an Entry has getData (i.e. is a file, not a directory)
- */
-function isFileEntry(entry: Entry): entry is Entry & { getData: NonNullable<Entry["getData"]> } {
-  return !entry.directory && typeof entry.getData === "function";
-}
+import { isFileEntry } from "../utils/zipUtils";
 
 export async function getAnkiDataFromZip(file: Blob): Promise<{
   ankiDb: AnkiDb;

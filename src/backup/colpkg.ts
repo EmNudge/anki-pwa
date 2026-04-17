@@ -1,12 +1,9 @@
-import { BlobWriter, BlobReader, ZipWriter, ZipReader, type Entry } from "@zip-js/zip-js";
+import { BlobWriter, BlobReader, ZipWriter, ZipReader } from "@zip-js/zip-js";
 import { compressZstd, decompressZstd } from "../utils/zstd";
 import { getLocalMediaEntries } from "../utils/mediaCache";
 import { getCachedSqlite, loadSyncedCollection, initializeReviewQueue } from "../stores";
 import mime from "mime";
-
-function isFileEntry(entry: Entry): entry is Entry & { getData: NonNullable<Entry["getData"]> } {
-  return !entry.directory && typeof entry.getData === "function";
-}
+import { isFileEntry } from "../utils/zipUtils";
 
 /**
  * Create a .colpkg blob from the current collection (SQLite + media).

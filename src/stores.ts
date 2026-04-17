@@ -659,15 +659,15 @@ export async function deleteDeckFromCollection(deckId: string, fullName: string)
     }
 
     // Delete cards in those decks and track orphaned notes
+    const allDeletedCardIds: string[] = [];
     for (const did of deckIdsToDelete) {
       const cardRows = db.exec("SELECT id, nid FROM cards WHERE did=?", [did]);
       if (cardRows[0]) {
         for (const row of cardRows[0].values) {
           const cardId = Number(row[0]);
           const noteId = Number(row[1]);
+          allDeletedCardIds.push(String(cardId));
           db.run("DELETE FROM cards WHERE id=?", [cardId]);
-          await reviewDB.deleteCard(String(cardId));
-          await reviewDB.deleteReviewLogsForCard(String(cardId));
 
           // Delete note if no more cards reference it
           const remaining = db.exec("SELECT COUNT(*) FROM cards WHERE nid=?", [noteId]);
@@ -685,6 +685,8 @@ export async function deleteDeckFromCollection(deckId: string, fullName: string)
       db.run("INSERT INTO graves (usn, oid, type) VALUES (-1, ?, 2)", [did]);
       await reviewDB.markDeckDeleted(String(did));
     }
+    await reviewDB.deleteCards(allDeletedCardIds);
+    await reviewDB.deleteReviewLogsForCards(allDeletedCardIds);
 
     if (!anki21b) {
       // anki2: remove from JSON
@@ -2044,6 +2046,7 @@ export async function deleteNotesByGuid(guids: string[]): Promise<void> {
 
   const db = await createDatabase(input.bytes);
   try {
+    const allCardIds: string[] = [];
     for (const guid of guids) {
       // Find note ID
       const result = db.exec("SELECT id FROM notes WHERE guid=?", [guid]);
@@ -2051,13 +2054,11 @@ export async function deleteNotesByGuid(guids: string[]): Promise<void> {
       if (rawNoteId == null) continue;
       const noteId = Number(rawNoteId);
 
-      // Delete cards for this note and clean up review data
+      // Collect card IDs for batch deletion from IndexedDB
       const cardRows = db.exec("SELECT id FROM cards WHERE nid=?", [noteId]);
       if (cardRows[0]) {
         for (const row of cardRows[0].values) {
-          const cardId = String(row[0]);
-          await reviewDB.deleteCard(cardId);
-          await reviewDB.deleteReviewLogsForCard(cardId);
+          allCardIds.push(String(row[0]));
         }
       }
       db.run("DELETE FROM cards WHERE nid=?", [noteId]);
@@ -2068,6 +2069,10 @@ export async function deleteNotesByGuid(guids: string[]): Promise<void> {
       // Delete the note
       db.run("DELETE FROM notes WHERE id=?", [noteId]);
     }
+
+    // Batch delete from IndexedDB
+    await reviewDB.deleteCards(allCardIds);
+    await reviewDB.deleteReviewLogsForCards(allCardIds);
 
     await persistSqliteBytes(db, input);
   } finally {

@@ -403,23 +403,24 @@ export function replaceMediaFiles(renderedString: string, mediaFiles: Map<string
  * Truncate a filename to maxBytes, preserving the file extension.
  * Matches Anki's MAX_FILENAME_LENGTH = 120 bytes.
  */
+const textEncoder = new TextEncoder();
+const textDecoder = new TextDecoder();
+
 function truncateFilename(filename: string, maxBytes: number): string {
-  const encoder = new TextEncoder();
-  if (encoder.encode(filename).length <= maxBytes) return filename;
+  if (textEncoder.encode(filename).length <= maxBytes) return filename;
 
   const lastDot = filename.lastIndexOf(".");
   if (lastDot === -1) {
-    // No extension, just truncate
-    const bytes = encoder.encode(filename);
-    return new TextDecoder().decode(bytes.slice(0, maxBytes));
+    const bytes = textEncoder.encode(filename);
+    return textDecoder.decode(bytes.slice(0, maxBytes));
   }
   const ext = filename.slice(lastDot);
   const stem = filename.slice(0, lastDot);
-  const extBytes = encoder.encode(ext);
+  const extBytes = textEncoder.encode(ext);
   const maxStemBytes = maxBytes - extBytes.length;
   if (maxStemBytes <= 0) return filename;
-  const stemBytes = encoder.encode(stem);
-  const truncatedStem = new TextDecoder().decode(stemBytes.slice(0, maxStemBytes));
+  const stemBytes = textEncoder.encode(stem);
+  const truncatedStem = textDecoder.decode(stemBytes.slice(0, maxStemBytes));
   return truncatedStem + ext;
 }
 
