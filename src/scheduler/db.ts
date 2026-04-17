@@ -304,6 +304,23 @@ class ReviewDB {
   }
 
   /**
+   * Delete multiple cards in a single transaction.
+   */
+  async deleteCards(cardIds: string[]): Promise<void> {
+    if (cardIds.length === 0) return;
+    const db = await this.ensureInit();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction("cards", "readwrite");
+      const store = tx.objectStore("cards");
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      for (const cardId of cardIds) {
+        store.delete(cardId);
+      }
+    });
+  }
+
+  /**
    * Delete all review logs for a specific card.
    */
   async deleteReviewLogsForCard(cardId: string): Promise<void> {
@@ -322,6 +339,36 @@ class ReviewDB {
       };
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
+    });
+  }
+
+  /**
+   * Delete all review logs for multiple cards in a single transaction.
+   */
+  async deleteReviewLogsForCards(cardIds: string[]): Promise<void> {
+    if (cardIds.length === 0) return;
+    const db = await this.ensureInit();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction("reviewLogs", "readwrite");
+      const store = tx.objectStore("reviewLogs");
+      const index = store.index("cardId");
+      let completed = 0;
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      for (const cardId of cardIds) {
+        const request = index.openCursor(cardId);
+        request.onsuccess = () => {
+          const cursor = request.result;
+          if (cursor) {
+            cursor.delete();
+            cursor.continue();
+          } else {
+            completed++;
+            // All cursors exhausted — transaction auto-commits
+            void completed;
+          }
+        };
+      }
     });
   }
 
