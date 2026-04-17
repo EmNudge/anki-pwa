@@ -23,7 +23,7 @@ export async function decompressZstd(data: Uint8Array): Promise<Uint8Array> {
       '../../node_modules/@dweb-browser/zstd-wasm/zstd_wasm_bg.wasm'
     );
 
-    const wasmBinary = readFileSync(wasmPath);
+    const wasmBinary = new Uint8Array(readFileSync(wasmPath));
     await initWasm(wasmBinary);
     wasmInitialized = true;
   }

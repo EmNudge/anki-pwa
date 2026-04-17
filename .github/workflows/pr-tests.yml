@@ -14,14 +14,16 @@ jobs:
           - lint
           - lint:knip
           - test:run
+          - test:pbt
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-      - run: npm ci
-      - run: npm run ${{ matrix.check }}
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run ${{ matrix.check }}
 
   e2e:
     runs-on: ubuntu-latest
@@ -31,14 +33,15 @@ jobs:
         shard: [1, 2]
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-      - run: npm ci
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
       - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
-      - run: npx playwright test --shard=${{ matrix.shard }}/2
+        run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm exec playwright test --shard=${{ matrix.shard }}/2
       - name: Upload Playwright report
         if: failure()
         uses: actions/upload-artifact@v4
@@ -59,10 +62,11 @@ jobs:
           fetch-depth: 1
           submodules: recursive
 
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
+          cache: 'pnpm'
 
       - name: Install Rust toolchain and protobuf
         uses: dtolnay/rust-toolchain@stable
@@ -86,9 +90,9 @@ jobs:
           CARGO_INCREMENTAL: 0
           PROTOC: /usr/bin/protoc
 
-      - run: npm ci
+      - run: pnpm install --frozen-lockfile
 
       - name: Run sync integration tests
-        run: npm run test:integration
+        run: pnpm run test:integration
         env:
           ANKI_SYNC_SERVER_BIN: ${{ github.workspace }}/_anki/target/release/anki-sync-server

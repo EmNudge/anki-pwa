@@ -101,7 +101,7 @@ function startServer(binary: string, port: number, dataDir: string): ChildProces
 async function extractCollectionFromApkg(): Promise<Uint8Array> {
   const { ZipReader, BlobReader, BlobWriter } = await import("@zip-js/zip-js");
 
-  const apkgBytes = readFileSync(FIXTURE_APKG);
+  const apkgBytes = new Uint8Array(readFileSync(FIXTURE_APKG));
   const reader = new ZipReader(new BlobReader(new Blob([apkgBytes])));
   const entries = await reader.getEntries();
 

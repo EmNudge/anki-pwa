@@ -21,24 +21,24 @@ A command-line tool to identify and analyze Anki file formats by inspecting file
 ## Usage
 
 ```bash
-npm run identify <file-path>
+pnpm run identify <file-path>
 ```
 
 ### Examples
 
 Identify a package file:
 ```bash
-npm run identify myDeck.apkg
+pnpm run identify myDeck.apkg
 ```
 
 Analyze a raw collection database:
 ```bash
-npm run identify collection.anki2
+pnpm run identify collection.anki2
 ```
 
 Check a compressed modern database:
 ```bash
-npm run identify collection.anki21b
+pnpm run identify collection.anki21b
 ```
 
 ## Output Format
@@ -178,7 +178,7 @@ To support additional Anki formats:
 Create test files in various formats and run:
 
 ```bash
-npm run identify path/to/test/file.apkg
+pnpm run identify path/to/test/file.apkg
 ```
 
 Compare output against known file specifications.

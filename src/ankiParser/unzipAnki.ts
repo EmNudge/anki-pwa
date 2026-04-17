@@ -1,14 +1,14 @@
-import { BlobWriter, BlobReader, ZipReader, type Entry, type FileEntry } from "@zip-js/zip-js";
+import { BlobWriter, BlobReader, ZipReader, type Entry } from "@zip-js/zip-js";
 import { isTruthy, assertTruthy } from "../utils/assert";
 import mime from "mime";
 import { decompressZstd } from "../utils/zstd";
 import { decompressMediaFile, parseMediaMapping } from "./mediaMappings";
 
 /**
- * Type guard to check if an Entry is a FileEntry (has getData method)
+ * Type guard to check if an Entry has getData (i.e. is a file, not a directory)
  */
-function isFileEntry(entry: Entry): entry is FileEntry {
-  return !entry.directory;
+function isFileEntry(entry: Entry): entry is Entry & { getData: NonNullable<Entry["getData"]> } {
+  return !entry.directory && typeof entry.getData === "function";
 }
 
 export async function getAnkiDataFromZip(file: Blob): Promise<{
