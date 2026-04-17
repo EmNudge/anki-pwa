@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
+import { formatFileSize } from "../utils/format";
 import { Download, Upload, Archive, Trash2, RotateCcw } from "lucide-vue-next";
 import Modal from "../design-system/components/primitives/Modal.vue";
 import {
@@ -160,11 +161,6 @@ function formatDate(ts: number): string {
   return new Date(ts).toLocaleString();
 }
 
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
 
 const intervalOptions = [
   { label: "1 hour", value: 60 * 60 * 1000 },
@@ -217,7 +213,7 @@ const intervalOptions = [
           <div class="backup-item-info">
             <span class="backup-item-label">{{ backup.label }}</span>
             <span class="backup-item-meta">
-              {{ formatDate(backup.createdAt) }} · {{ formatSize(backup.sizeBytes) }}
+              {{ formatDate(backup.createdAt) }} · {{ formatFileSize(backup.sizeBytes) }}
             </span>
           </div>
           <div class="backup-item-actions">

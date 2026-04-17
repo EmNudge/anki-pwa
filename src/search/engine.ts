@@ -1,4 +1,5 @@
 import { getFlags } from "../lib/flags";
+import { stripHtml } from "../utils/stripHtml";
 
 // ── Search AST types ──
 
@@ -399,11 +400,6 @@ export function matchExpr(
 }
 
 // ── Helper to convert AnkiData card to SearchableCard ──
-
-function stripHtml(val: string | null | undefined): string {
-  if (!val) return "";
-  return val.replace(/<[^>]*>/g, "");
-}
 
 export function ankiCardToSearchable(
   card: {

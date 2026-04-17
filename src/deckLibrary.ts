@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { AnkiData } from "./ankiParser";
+import { formatFileSize } from "./utils/format";
 
 const cachedFileEntrySchema = z.array(
   z.object({
@@ -93,11 +94,6 @@ export function removeCachedFileEntry(cachedFiles: CachedFileEntry[], name: stri
   return cachedFiles.filter((file) => file.name !== name);
 }
 
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
 
 function formatAddedDate(timestamp: number): string {
   return new Date(timestamp).toLocaleDateString(undefined, {

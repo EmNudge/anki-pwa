@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from "vue";
+import { ref, computed, watch, nextTick, onBeforeUnmount } from "vue";
 import {
   ankiDataSig,
   mediaFilesSig,
@@ -16,12 +16,14 @@ import FindReplaceModal from "./FindReplaceModal.vue";
 import { getRenderedCardString, replaceMediaFiles } from "../utils/render";
 import { isImageOcclusionCard, renderImageOcclusion } from "../utils/imageOcclusion";
 import { sanitizeHtmlForPreview } from "../utils/sanitize";
+import { stripHtml } from "../utils/stripHtml";
 import { playAudio } from "../utils/sound";
 import Button from "../design-system/components/primitives/Button.vue";
 import Modal from "../design-system/components/primitives/Modal.vue";
 import NoteEditModal from "./NoteEditModal.vue";
 import TagTree from "./TagTree.vue";
-import { buildTagTree } from "../utils/tagTree";
+import { buildTagTree, tagMatchesOrIsChild } from "../utils/tagTree";
+import { useVirtualScroll } from "../composables/useVirtualScroll";
 import { getFlags } from "../lib/flags";
 import { reviewDB } from "../scheduler/db";
 import { QUEUE_USER_BURIED, QUEUE_SUSPENDED } from "../lib/syncWrite";
@@ -130,14 +132,6 @@ watch(viewMode, () => {
   lastClickedKey.value = null;
 });
 
-/** Strip HTML and sound tags to plain text for display and search */
-function stripHtml(html: string | null): string {
-  if (!html) return "";
-  return html
-    .replace(/\[sound:[^\]]+\]/g, "")
-    .replace(/<[^>]*>/g, "")
-    .trim();
-}
 
 /** All unique tags */
 const allTags = computed(() => {
@@ -816,7 +810,7 @@ const filteredRows = computed(() => {
   const tagFilter = activeTagFilter.value;
   if (tagFilter) {
     result = result.filter((row) =>
-      row.tags.some((t) => t === tagFilter || t.startsWith(tagFilter + "::")),
+      row.tags.some((t) => tagMatchesOrIsChild(t, tagFilter)),
     );
   }
 
@@ -892,53 +886,12 @@ function getCellValue(row: Row, col: string): string {
 
 // ── Virtual scrolling ──
 
-const ROW_HEIGHT = 30;
-const OVERSCAN = 10;
-const scrollContainerRef = ref<HTMLElement | null>(null);
-const scrollTop = ref(0);
-const containerHeight = ref(600);
-
-function onTableScroll(e: Event) {
-  const target = e.target as HTMLElement;
-  scrollTop.value = target.scrollTop;
-}
-
-let resizeObserver: ResizeObserver | null = null;
-
-onMounted(() => {
-  if (scrollContainerRef.value) {
-    containerHeight.value = scrollContainerRef.value.clientHeight;
-    resizeObserver = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        containerHeight.value = entry.contentRect.height;
-      }
-    });
-    resizeObserver.observe(scrollContainerRef.value);
-  }
+const { scrollContainerRef, onScroll: onTableScroll, virtualSlice } = useVirtualScroll({
+  items: filteredRows,
 });
 
 onBeforeUnmount(() => {
-  resizeObserver?.disconnect();
   document.removeEventListener("mousedown", handleColumnMenuOutsideClick);
-});
-
-const virtualSlice = computed(() => {
-  const total = filteredRows.value.length;
-  const headerHeight = ROW_HEIGHT;
-  const startIndex = Math.max(
-    0,
-    Math.floor((scrollTop.value - headerHeight) / ROW_HEIGHT) - OVERSCAN,
-  );
-  const visibleCount = Math.ceil(containerHeight.value / ROW_HEIGHT) + OVERSCAN * 2;
-  const endIndex = Math.min(total, startIndex + visibleCount);
-
-  return {
-    startIndex,
-    endIndex,
-    totalHeight: total * ROW_HEIGHT + headerHeight,
-    offsetY: startIndex * ROW_HEIGHT + headerHeight,
-    rows: filteredRows.value.slice(startIndex, endIndex),
-  };
 });
 
 // ── Row selection (multi-select) ──
@@ -1060,16 +1013,21 @@ function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+/** Pre-compiled media replacement regexps, keyed by mediaFilesSig identity */
+const mediaRegexps = computed(() =>
+  Array.from(mediaFilesSig.value, ([filename, url]) => ({
+    re: new RegExp(`((?:src|data-sound-file)="[^"]*?)${escapeRegExp(filename)}`, "g"),
+    url,
+  })),
+);
+
 function renderFieldHtml(html: string | null): string {
   if (!html) return "";
   let result = html.replace(/\[sound:(.+?)\]/g, (_match, filename) => {
     return `<button class="sound-btn" style="color: var(--color-text-secondary)" data-sound-file="${filename}">${SOUND_ICON_SVG}</button>`;
   });
-  for (const [filename, url] of mediaFilesSig.value) {
-    result = result.replace(
-      new RegExp(`((?:src|data-sound-file)="[^"]*?)${escapeRegExp(filename)}`, "g"),
-      `$1${url}`,
-    );
+  for (const { re, url } of mediaRegexps.value) {
+    result = result.replace(re, `$1${url}`);
   }
   return sanitizeHtmlForPreview(result);
 }
@@ -1115,12 +1073,13 @@ async function bulkSuspend() {
   bulkOperationInProgress.value = true;
   try {
     const indices = getCardIndicesForRows(getSelectedRows());
+    const patches: { cardId: string; patch: { queueOverride: number } }[] = [];
     for (const idx of indices) {
       const card = data.cards[idx];
       if (!card?.scheduling) continue;
       const cardId = card.ankiCardId;
       if (cardId != null) {
-        await reviewDB.patchCard(String(cardId), { queueOverride: QUEUE_SUSPENDED });
+        patches.push({ cardId: String(cardId), patch: { queueOverride: QUEUE_SUSPENDED } });
       }
       card.scheduling = {
         ...card.scheduling,
@@ -1128,6 +1087,7 @@ async function bulkSuspend() {
         queueName: "suspended",
       };
     }
+    await reviewDB.patchCards(patches);
     triggerRef(ankiDataSig);
     markDataChanged();
   } finally {
@@ -1146,6 +1106,7 @@ async function bulkUnsuspend() {
   bulkOperationInProgress.value = true;
   try {
     const indices = getCardIndicesForRows(getSelectedRows());
+    const patches: { cardId: string; patch: { queueOverride: number } }[] = [];
     for (const idx of indices) {
       const card = data.cards[idx];
       if (!card?.scheduling) continue;
@@ -1154,7 +1115,7 @@ async function bulkUnsuspend() {
       const restoredQueueName = TYPE_TO_QUEUE_NAME[card.scheduling.type] ?? "new";
       const cardId = card.ankiCardId;
       if (cardId != null) {
-        await reviewDB.patchCard(String(cardId), { queueOverride: restoredQueue });
+        patches.push({ cardId: String(cardId), patch: { queueOverride: restoredQueue } });
       }
       card.scheduling = {
         ...card.scheduling,
@@ -1162,6 +1123,7 @@ async function bulkUnsuspend() {
         queueName: restoredQueueName,
       };
     }
+    await reviewDB.patchCards(patches);
     triggerRef(ankiDataSig);
     markDataChanged();
   } finally {
@@ -1401,7 +1363,7 @@ async function handleNoteSave(payload: { fields: Record<string, string | null>; 
                     'tr--multi-selected': selectedRowKeys.has(row.key),
                   },
                 ]"
-                :style="{ height: ROW_HEIGHT + 'px' }"
+                class="tr-fixed-height"
                 @click="handleRowClick(row, $event)"
               >
                 <td v-for="col in visibleColumns" :key="col.key" class="td">
@@ -1925,6 +1887,10 @@ async function handleNoteSave(payload: { fields: Record<string, string | null>; 
 .tr {
   cursor: pointer;
   transition: background 0.1s;
+}
+
+.tr-fixed-height {
+  height: 30px;
 }
 
 .tr:hover {

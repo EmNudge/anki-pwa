@@ -194,6 +194,37 @@ class ReviewDB {
     });
   }
 
+  /**
+   * Batch-patch multiple cards in a single transaction.
+   */
+  async patchCards(
+    patches: { cardId: string; patch: Partial<CardReviewState> }[],
+  ): Promise<void> {
+    if (patches.length === 0) return;
+    const db = await this.ensureInit();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction("cards", "readwrite");
+      const store = tx.objectStore("cards");
+      let remaining = patches.length;
+
+      tx.onerror = () => reject(tx.error);
+      tx.oncomplete = () => resolve();
+
+      for (const { cardId, patch } of patches) {
+        const getReq = store.get(cardId);
+        getReq.onsuccess = () => {
+          const existing = getReq.result as CardReviewState | undefined;
+          if (existing) {
+            store.put({ ...existing, ...patch });
+          }
+          if (--remaining === 0) {
+            // All puts issued; transaction will auto-commit
+          }
+        };
+      }
+    });
+  }
+
   async getCardsForDeck(deckId: string): Promise<CardReviewState[]> {
     return this.run(["cards"], "readonly", (tx) =>
       tx.objectStore("cards").index("deckId").getAll(deckId),

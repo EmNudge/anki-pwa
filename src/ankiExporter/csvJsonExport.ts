@@ -1,4 +1,5 @@
 import type { AnkiData } from "../ankiParser";
+import { stripHtml } from "../utils/stripHtml";
 
 export type ExportFormat = "csv" | "json";
 export type ExportScope = "deck" | "all";
@@ -14,14 +15,6 @@ interface ExportOptions {
 }
 
 type CardData = AnkiData["cards"][number];
-
-function stripHtml(html: string | null | undefined): string {
-  if (!html) return "";
-  return html
-    .replace(/\[sound:[^\]]+\]/g, "")
-    .replace(/<[^>]*>/g, "")
-    .trim();
-}
 
 function getCardsForExport(ankiData: AnkiData, options: ExportOptions): CardData[] {
   if (options.scope === "all" || !options.deckName) {

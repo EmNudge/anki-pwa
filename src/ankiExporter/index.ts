@@ -1,15 +1,12 @@
 import { createDatabase } from "~/utils/sql";
 import { BlobWriter, ZipWriter, BlobReader } from "@zip-js/zip-js";
 import type { AnkiDeckSpec } from "../lib/ollama";
-import { stringHash, ANKI_DEFAULT_CSS } from "../utils/constants";
+import { ankiSortField, fieldChecksum, ANKI_DEFAULT_CSS } from "../utils/constants";
 
 function generateId(): number {
   return Date.now() + Math.floor(Math.random() * 1000);
 }
 
-function fieldChecksum(field: string): number {
-  return stringHash(field.replace(/<[^>]*>/g, "").trim());
-}
 
 function guidFromId(_id: number): string {
   // Generate a random base91-like GUID (random source, not derived from ID)
@@ -250,7 +247,7 @@ export async function createApkg(spec: AnkiDeckSpec): Promise<Blob> {
     const flds = `${card.front}\x1f${card.back}`;
     const csum = fieldChecksum(card.front);
     const tags = (card.tags ?? []).join(" ");
-    const sfld = card.front.replace(/<[^>]*>/g, "").trim();
+    const sfld = ankiSortField(card.front);
 
     db.run("INSERT INTO notes VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", [
       noteId,

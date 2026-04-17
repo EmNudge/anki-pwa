@@ -20,6 +20,16 @@ export const ANKI_DEFAULT_CSS = `.card {
   background-color: white;
 }`;
 
+/** Compute Anki's sort field: strip HTML tags and trim (no sound removal). */
+export function ankiSortField(html: string): string {
+  return html.replace(/<[^>]*>/g, "").trim();
+}
+
+/** Compute Anki's field checksum (SHA-1 first 32 bits of the sort field). */
+export function fieldChecksum(field: string): number {
+  return stringHash(ankiSortField(field));
+}
+
 export function stringHash(input: string): number {
   // UTF-8 encode
   const encoder = new TextEncoder();

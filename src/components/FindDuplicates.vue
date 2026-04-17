@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, watch } from "vue";
 import { ankiDataSig, activeViewSig } from "../stores";
+import { stripHtml } from "../utils/stripHtml";
+import { truncate } from "../utils/format";
 import {
   findDuplicates,
   buildNoteInfos,
@@ -109,20 +111,6 @@ function runSearch() {
   });
 }
 
-/** Strip HTML for display */
-function stripHtml(html: string | null): string {
-  if (!html) return "";
-  return html
-    .replace(/\[sound:[^\]]+\]/g, "")
-    .replace(/<[^>]*>/g, "")
-    .trim();
-}
-
-/** Truncate text for display */
-function truncate(text: string, maxLen: number = 120): string {
-  if (text.length <= maxLen) return text;
-  return text.slice(0, maxLen) + "...";
-}
 
 /** Get a preview of note fields (excluding the comparison field) */
 function getNotePreview(note: NoteInfo, skipFieldIndex: number): string {
