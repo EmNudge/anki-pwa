@@ -109,12 +109,13 @@ async function handleSync() {
     return;
   }
 
-  // Create a backup before sync (if enabled in backup settings)
-  await triggerPreSyncBackup();
-
   syncError.value = "";
   syncSummary.value = null;
   isSyncing.value = true;
+
+  // Create a backup before sync (if enabled in backup settings)
+  syncStatus.value = "Preparing backup...";
+  await triggerPreSyncBackup();
 
   try {
     // Check if we have a local collection — if not, do a full pull first
@@ -482,6 +483,23 @@ function formatLastSync(timestamp: number | null): string {
 
         <div class="sync-actions">
           <button class="sync-btn sync-btn--primary" :disabled="isSyncing" @click="handleSync">
+            <svg
+              v-if="isSyncing"
+              class="sync-spinner"
+              viewBox="0 0 24 24"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <circle
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                stroke-width="3"
+                stroke-linecap="round"
+                stroke-dasharray="50 20"
+              />
+            </svg>
             {{ isSyncing ? "Syncing..." : "Sync" }}
           </button>
           <button class="sync-btn sync-btn--secondary" :disabled="isSyncing" @click="handleLogout">
@@ -690,6 +708,9 @@ function formatLastSync(timestamp: number | null): string {
 }
 
 .sync-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-1);
   padding: var(--spacing-2) var(--spacing-4);
   font-size: var(--font-size-sm);
   font-family: inherit;
@@ -704,6 +725,19 @@ function formatLastSync(timestamp: number | null): string {
 .sync-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.sync-spinner {
+  width: 14px;
+  height: 14px;
+  animation: spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .sync-btn--primary {

@@ -161,7 +161,7 @@ export async function syncPostV11(
   return fetchWithTimeout(url, {
     method: "POST",
     headers,
-    body: compressed.buffer as ArrayBuffer,
+    body: compressed as unknown as BodyInit,
   });
 }
 

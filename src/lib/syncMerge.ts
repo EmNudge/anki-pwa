@@ -76,7 +76,7 @@ export const chunkSchema = z.object({
   done: z.boolean(),
   revlog: z.array(z.tuple([z.number(), z.number(), z.number(), z.number(), z.number(), z.number(), z.number(), z.number(), z.number()])).default([]),
   cards: z.array(z.tuple([z.number(), z.number(), z.number(), z.number(), z.number(), z.number(), z.number(), z.number(), z.number(), z.number(), z.number(), z.number(), z.number(), z.number(), z.number(), z.number(), z.number(), z.string()])).default([]),
-  notes: z.array(z.tuple([z.number(), z.string(), z.number(), z.number(), z.number(), z.string(), z.string(), z.string(), z.number(), z.number(), z.string()])).default([]),
+  notes: z.array(z.tuple([z.number(), z.string(), z.number(), z.number(), z.number(), z.string(), z.string(), z.string(), z.coerce.number(), z.number(), z.string()])).default([]),
 });
 
 export type Chunk = z.infer<typeof chunkSchema>;

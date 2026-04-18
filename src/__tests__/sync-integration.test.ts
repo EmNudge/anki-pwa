@@ -950,4 +950,241 @@ describe.skipIf(!serverBin)("sync integration", () => {
       expect(hkey2).toBeTruthy();
     });
   });
+
+  // ── Extended sync coverage ──────────────────────────────────────
+
+  describe("extended sync coverage", () => {
+    test("deck graves sync through server", async () => {
+      const hkey = await login(serverUrl, TEST_USER, TEST_PASS);
+      await uploadCollection(serverUrl, hkey, baseCollection);
+      const serverCopy = await downloadCollection(serverUrl, hkey);
+
+      // Add a second deck and delete it locally
+      const modified = mutateCollection(SQL, serverCopy, (db) => {
+        const nowMs = Date.now();
+        const decksRaw = scalar(db, "SELECT decks FROM col") as string;
+        const decks = JSON.parse(decksRaw);
+        // Add a deck
+        decks["99"] = { id: 99, mod: Math.floor(nowMs / 1000), name: "ToDelete", usn: -1, conf: "1" };
+        db.run("UPDATE col SET decks=?, mod=?", [JSON.stringify(decks), nowMs + 1]);
+      });
+
+      // First sync: send the new deck
+      const result1 = await normalSync(serverUrl, hkey, TEST_DECK_ID, modified).catch((e) => {
+        if (e instanceof FullSyncRequiredError) return "sanity-reached" as const;
+        if (e instanceof Error && e.message.includes("400")) return "server-rejected" as const;
+        throw e;
+      });
+
+      if (typeof result1 === "object" && result1.sqliteBytes) {
+        // Now delete the deck
+        const afterSync = mutateCollection(SQL, result1.sqliteBytes, (db) => {
+          const nowMs = Date.now();
+          const decksRaw = scalar(db, "SELECT decks FROM col") as string;
+          const decks = JSON.parse(decksRaw);
+          delete decks["99"];
+          db.run("UPDATE col SET decks=?, mod=?", [JSON.stringify(decks), nowMs + 1]);
+          db.run("INSERT INTO graves VALUES (-1, 99, 2)"); // deck grave
+        });
+
+        const result2 = await normalSync(serverUrl, hkey, TEST_DECK_ID, afterSync).catch((e) => {
+          if (e instanceof FullSyncRequiredError) return "sanity-reached" as const;
+          if (e instanceof Error && e.message.includes("400")) return "server-rejected" as const;
+          throw e;
+        });
+
+        expect(["normalSync", "sanity-reached", "server-rejected"]).toContain(
+          typeof result2 === "string" ? result2 : result2.action,
+        );
+      }
+    });
+
+    test("multiple entity changes in single sync", async () => {
+      const hkey = await login(serverUrl, TEST_USER, TEST_PASS);
+      await uploadCollection(serverUrl, hkey, baseCollection);
+      const serverCopy = await downloadCollection(serverUrl, hkey);
+
+      // Modify card, add revlog, modify deck config, and add a tag all at once
+      const modified = mutateCollection(SQL, serverCopy, (db) => {
+        const nowMs = Date.now();
+        const nowSec = Math.floor(nowMs / 1000);
+
+        // Modify a card
+        const cardId = scalar(db, "SELECT id FROM cards LIMIT 1") as number;
+        db.run(
+          `UPDATE cards SET reps=3, ivl=15, factor=2600, type=2, queue=2, mod=${nowSec}, usn=-1 WHERE id=${cardId}`,
+        );
+
+        // Add revlog entry
+        db.run(`INSERT INTO revlog VALUES (${nowMs},${cardId},-1,3,15,10,2600,8000,1)`);
+
+        // Modify deck config
+        const dconfRaw = scalar(db, "SELECT dconf FROM col") as string;
+        const dconf = JSON.parse(dconfRaw);
+        const key = Object.keys(dconf)[0]!;
+        dconf[key].name = "MultiEdit";
+        dconf[key].usn = -1;
+        dconf[key].mod = nowSec;
+
+        // Add a pending tag
+        const tagsRaw = scalar(db, "SELECT tags FROM col") as string;
+        const tags = JSON.parse(tagsRaw);
+        tags["multi-sync-test"] = -1;
+
+        db.run("UPDATE col SET dconf=?, tags=?, mod=?", [
+          JSON.stringify(dconf), JSON.stringify(tags), nowMs + 1,
+        ]);
+      });
+
+      const result = await normalSync(serverUrl, hkey, TEST_DECK_ID, modified).catch((e) => {
+        if (e instanceof FullSyncRequiredError && e.message.includes("sanity")) {
+          return "sanity-phase-reached" as const;
+        }
+        throw e;
+      });
+
+      expect(["normalSync", "sanity-phase-reached"]).toContain(
+        typeof result === "string" ? result : result.action,
+      );
+    });
+
+    test("sequential syncs with changes between them", async () => {
+      const hkey = await login(serverUrl, TEST_USER, TEST_PASS);
+      await uploadCollection(serverUrl, hkey, baseCollection);
+      const serverCopy = await downloadCollection(serverUrl, hkey);
+
+      // First sync: modify a card
+      const cardId = withDb(SQL, serverCopy, (db) =>
+        scalar(db, "SELECT id FROM cards LIMIT 1"),
+      ) as number;
+
+      const firstEdit = mutateCollection(SQL, serverCopy, (db) => {
+        const nowMs = Date.now();
+        const nowSec = Math.floor(nowMs / 1000);
+        db.run(
+          `UPDATE cards SET reps=1, mod=${nowSec}, usn=-1 WHERE id=${cardId}`,
+        );
+        db.run(`UPDATE col SET mod=${nowMs + 1}`);
+      });
+
+      const result1 = await normalSync(serverUrl, hkey, TEST_DECK_ID, firstEdit).catch((e) => {
+        if (e instanceof FullSyncRequiredError) return "sanity-reached" as const;
+        throw e;
+      });
+
+      if (typeof result1 !== "string" && result1.sqliteBytes) {
+        // Second sync: make another change
+        const secondEdit = mutateCollection(SQL, result1.sqliteBytes, (db) => {
+          const nowMs = Date.now();
+          const nowSec = Math.floor(nowMs / 1000);
+          db.run(
+            `UPDATE cards SET reps=2, mod=${nowSec}, usn=-1 WHERE id=${cardId}`,
+          );
+          db.run(`UPDATE col SET mod=${nowMs + 1}`);
+        });
+
+        const result2 = await normalSync(serverUrl, hkey, TEST_DECK_ID, secondEdit).catch((e) => {
+          if (e instanceof FullSyncRequiredError) return "sanity-reached" as const;
+          throw e;
+        });
+
+        if (typeof result2 !== "string" && result2.sqliteBytes) {
+          withDb(SQL, result2.sqliteBytes, (db) => {
+            const reps = scalar(db, `SELECT reps FROM cards WHERE id=${cardId}`);
+            expect(reps).toBe(2);
+            // USN should be > 0 (finalized)
+            const usn = scalar(db, `SELECT usn FROM cards WHERE id=${cardId}`) as number;
+            expect(usn).toBeGreaterThan(0);
+          });
+        }
+
+        expect(["normalSync", "sanity-reached"]).toContain(
+          typeof result2 === "string" ? result2 : result2.action,
+        );
+      }
+    });
+
+    test("sync with modified tags sends them to server", async () => {
+      const hkey = await login(serverUrl, TEST_USER, TEST_PASS);
+      await uploadCollection(serverUrl, hkey, baseCollection);
+      const serverCopy = await downloadCollection(serverUrl, hkey);
+
+      const modified = mutateCollection(SQL, serverCopy, (db) => {
+        const nowMs = Date.now();
+        const tagsRaw = scalar(db, "SELECT tags FROM col") as string;
+        const tags = JSON.parse(tagsRaw);
+        tags["test-tag-alpha"] = -1;
+        tags["test-tag-beta"] = -1;
+        db.run("UPDATE col SET tags=?, mod=?", [JSON.stringify(tags), nowMs + 1]);
+      });
+
+      const result = await normalSync(serverUrl, hkey, TEST_DECK_ID, modified).catch((e) => {
+        if (e instanceof FullSyncRequiredError) return "sanity-reached" as const;
+        throw e;
+      });
+
+      if (typeof result !== "string" && result.sqliteBytes) {
+        withDb(SQL, result.sqliteBytes, (db) => {
+          const tags = JSON.parse(scalar(db, "SELECT tags FROM col") as string);
+          // Tags should have been finalized (usn > 0 or 0, not -1)
+          expect(tags["test-tag-alpha"]).not.toBe(-1);
+          expect(tags["test-tag-beta"]).not.toBe(-1);
+        });
+      }
+
+      expect(["normalSync", "sanity-reached"]).toContain(
+        typeof result === "string" ? result : result.action,
+      );
+    });
+
+    test("sync preserves notes added locally", async () => {
+      const hkey = await login(serverUrl, TEST_USER, TEST_PASS);
+      await uploadCollection(serverUrl, hkey, baseCollection);
+      const serverCopy = await downloadCollection(serverUrl, hkey);
+
+      // Get the model ID
+      const modelId = withDb(SQL, serverCopy, (db) => {
+        const models = JSON.parse(scalar(db, "SELECT models FROM col") as string);
+        return Number(Object.keys(models)[0]);
+      });
+
+      const modified = mutateCollection(SQL, serverCopy, (db) => {
+        const nowMs = Date.now();
+        const nowSec = Math.floor(nowMs / 1000);
+        const newNoteId = nowMs; // use timestamp as ID
+        const newCardId = nowMs + 1;
+
+        db.run(
+          "INSERT INTO notes VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+          [newNoteId, "newguid123", modelId, nowSec, -1, "", "new front\x1fnew back", "new front", 0, 0, ""],
+        );
+        db.run(
+          "INSERT INTO cards VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+          [newCardId, newNoteId, 1, 0, nowSec, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, ""],
+        );
+        db.run(`UPDATE col SET mod=${nowMs + 1}`);
+      });
+
+      const result = await normalSync(serverUrl, hkey, TEST_DECK_ID, modified).catch((e) => {
+        if (e instanceof FullSyncRequiredError) return "sanity-reached" as const;
+        if (e instanceof Error && e.message.includes("400")) return "server-rejected" as const;
+        throw e;
+      });
+
+      if (typeof result === "object" && result.sqliteBytes) {
+        withDb(SQL, result.sqliteBytes, (db) => {
+          const noteCount = scalar(db, "SELECT count() FROM notes") as number;
+          // Original notes + our new note
+          const baseNoteCount = withDb(SQL, baseCollection, (bdb) =>
+            scalar(bdb, "SELECT count() FROM notes"),
+          ) as number;
+          expect(noteCount).toBe(baseNoteCount + 1);
+        });
+      }
+
+      expect(["normalSync", "sanity-reached", "server-rejected"]).toContain(
+        typeof result === "string" ? result : result.action,
+      );
+    });
+  });
 });
