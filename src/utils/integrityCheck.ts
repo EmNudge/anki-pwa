@@ -25,7 +25,16 @@ export type IntegrityIssue = {
 };
 
 type NoteRow = { id: number; mid: number; flds: string; guid: string };
-type CardRow = { id: number; nid: number; did: number; type: number; queue: number; due: number; ivl: number; odid: number };
+type CardRow = {
+  id: number;
+  nid: number;
+  did: number;
+  type: number;
+  queue: number;
+  due: number;
+  ivl: number;
+  odid: number;
+};
 
 function tableExists(db: Database, name: string): boolean {
   const rows = executeQueryAll<{ name: string }>(
@@ -42,7 +51,10 @@ function isAnki21b(db: Database): boolean {
   return tableExists(db, "notetypes");
 }
 
-function countByKey<T, K extends string | number>(items: T[], keyFn: (item: T) => K): Map<K, number> {
+function countByKey<T, K extends string | number>(
+  items: T[],
+  keyFn: (item: T) => K,
+): Map<K, number> {
   const map = new Map<K, number>();
   items.forEach((item) => {
     const key = keyFn(item);
@@ -53,7 +65,9 @@ function countByKey<T, K extends string | number>(items: T[], keyFn: (item: T) =
 
 function sumValues(map: Map<unknown, number>): number {
   let total = 0;
-  map.forEach((v) => { total += v; });
+  map.forEach((v) => {
+    total += v;
+  });
   return total;
 }
 
@@ -192,7 +206,10 @@ function checkMissingDecks(cards: CardRow[], deckIds: Set<number>): IntegrityIss
   };
 }
 
-function checkFieldCountMismatches(notes: NoteRow[], notetypeFieldCounts: Map<number, number>): IntegrityIssue | null {
+function checkFieldCountMismatches(
+  notes: NoteRow[],
+  notetypeFieldCounts: Map<number, number>,
+): IntegrityIssue | null {
   const fieldMismatches = notes
     .filter((note) => notetypeFieldCounts.has(note.mid))
     .map((note) => ({
@@ -208,20 +225,28 @@ function checkFieldCountMismatches(notes: NoteRow[], notetypeFieldCounts: Map<nu
     title: "Field Count Mismatches",
     description: "Notes whose field count doesn't match their note type definition.",
     count: fieldMismatches.length,
-    details: fieldMismatches.slice(0, 20).map(
-      (m) => `Note ${m.noteId}: expected ${m.expected} fields, has ${m.actual}`,
-    ),
+    details: fieldMismatches
+      .slice(0, 20)
+      .map((m) => `Note ${m.noteId}: expected ${m.expected} fields, has ${m.actual}`),
     fixable: false,
   };
 }
 
 function hasInvalidScheduling(card: CardRow): boolean {
-  return (card.ivl < 0 && card.type === 2) || card.type < 0 || card.type > 3 || card.queue < -3 || card.queue > 4;
+  return (
+    (card.ivl < 0 && card.type === 2) ||
+    card.type < 0 ||
+    card.type > 3 ||
+    card.queue < -3 ||
+    card.queue > 4
+  );
 }
 
 function describeSchedulingIssue(card: CardRow): string[] {
   return [
-    ...(card.ivl < 0 && card.type === 2 ? [`Card ${card.id}: negative interval on review card`] : []),
+    ...(card.ivl < 0 && card.type === 2
+      ? [`Card ${card.id}: negative interval on review card`]
+      : []),
     ...(card.type < 0 || card.type > 3 ? [`Card ${card.id}: invalid type ${card.type}`] : []),
     ...(card.queue < -3 || card.queue > 4 ? [`Card ${card.id}: invalid queue ${card.queue}`] : []),
   ];
@@ -235,7 +260,8 @@ function checkInvalidScheduling(cards: CardRow[]): IntegrityIssue | null {
     type: "invalid-scheduling",
     severity: "warning",
     title: "Invalid Scheduling Data",
-    description: "Cards with impossible scheduling values (negative intervals, invalid types/queues).",
+    description:
+      "Cards with impossible scheduling values (negative intervals, invalid types/queues).",
     count: details.length,
     details: details.slice(0, 20),
     fixable: true,
@@ -291,20 +317,29 @@ export function checkDatabaseIntegrity(db: Database): IntegrityIssue[] {
     checkFieldCountMismatches(notes, notetypeFieldCounts),
     checkInvalidScheduling(cards),
     checkDuplicateIds(
-      notes, (n) => n.id,
-      "duplicate-note-ids", "error", "Duplicate Note IDs",
+      notes,
+      (n) => n.id,
+      "duplicate-note-ids",
+      "error",
+      "Duplicate Note IDs",
       "Multiple notes share the same ID, which can cause data corruption.",
       (id, cnt) => `Note ID ${id}: ${cnt} occurrences`,
     ),
     checkDuplicateIds(
-      cards, (c) => c.id,
-      "duplicate-card-ids", "error", "Duplicate Card IDs",
+      cards,
+      (c) => c.id,
+      "duplicate-card-ids",
+      "error",
+      "Duplicate Card IDs",
       "Multiple cards share the same ID, which can cause data corruption.",
       (id, cnt) => `Card ID ${id}: ${cnt} occurrences`,
     ),
     checkDuplicateIds(
-      notes, (n) => n.guid,
-      "duplicate-guids", "warning", "Duplicate Note GUIDs",
+      notes,
+      (n) => n.guid,
+      "duplicate-guids",
+      "warning",
+      "Duplicate Note GUIDs",
       "Multiple notes share the same GUID. This can cause sync conflicts.",
       (guid, cnt) => `GUID "${guid}": ${cnt} occurrences`,
       20,

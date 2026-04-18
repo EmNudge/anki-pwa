@@ -100,21 +100,13 @@ function handleRebuild() {
 
       <div class="congrats-actions">
         <template v-if="isFilteredDeck">
-          <Button variant="secondary" @click="handleRebuild">
-            Rebuild Deck
-          </Button>
-          <Button variant="secondary" @click="handleEmptyDeck">
-            Empty Deck
-          </Button>
+          <Button variant="secondary" @click="handleRebuild"> Rebuild Deck </Button>
+          <Button variant="secondary" @click="handleEmptyDeck"> Empty Deck </Button>
         </template>
         <template v-else>
-          <Button variant="secondary" @click="customStudyOpen = true">
-            Custom Study
-          </Button>
+          <Button variant="secondary" @click="customStudyOpen = true"> Custom Study </Button>
         </template>
-        <Button variant="secondary" @click="reviewModeSig = 'deck-list'">
-          Back to Decks
-        </Button>
+        <Button variant="secondary" @click="reviewModeSig = 'deck-list'"> Back to Decks </Button>
       </div>
     </div>
 

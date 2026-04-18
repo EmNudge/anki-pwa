@@ -63,14 +63,11 @@ export function getImageFilename(imageFieldHtml: string): string | null {
 
 // --- Shape parsing (for rendering) ---
 
-export function parseOcclusionShapes(
-  svgString: string,
-): { ordinal: number; svgElement: string }[] {
+export function parseOcclusionShapes(svgString: string): { ordinal: number; svgElement: string }[] {
   if (!svgString.trim()) return [];
 
   const shapes: { ordinal: number; svgElement: string }[] = [];
-  const shapeRegex =
-    /<(rect|ellipse|circle|polygon|path)\b([^>]*?)\/?>(?:<\/\1>)?/gi;
+  const shapeRegex = /<(rect|ellipse|circle|polygon|path)\b([^>]*?)\/?>(?:<\/\1>)?/gi;
 
   let match;
   while ((match = shapeRegex.exec(svgString)) !== null) {
@@ -100,8 +97,7 @@ export function parseOcclusionShapesForEditor(svgString: string): OcclusionShape
   if (!svgString.trim()) return [];
 
   const shapes: OcclusionShape[] = [];
-  const shapeRegex =
-    /<(rect|ellipse|circle|polygon|path)\b([^>]*?)\/?>(?:<\/\1>)?/gi;
+  const shapeRegex = /<(rect|ellipse|circle|polygon|path)\b([^>]*?)\/?>(?:<\/\1>)?/gi;
 
   let match;
   while ((match = shapeRegex.exec(svgString)) !== null) {

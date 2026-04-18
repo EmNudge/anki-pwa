@@ -11,8 +11,7 @@ import {
   type DuplicateSearchOptions,
   type NoteInfo,
 } from "../utils/duplicates";
-import Button from "../design-system/components/primitives/Button.vue";
-import Modal from "../design-system/components/primitives/Modal.vue";
+import { Button, Modal } from "../design-system";
 import { deleteNotesByGuid } from "../stores";
 
 // Search options
@@ -111,7 +110,6 @@ function runSearch() {
   });
 }
 
-
 /** Get a preview of note fields (excluding the comparison field) */
 function getNotePreview(note: NoteInfo, skipFieldIndex: number): string {
   const entries: string[] = [];
@@ -180,7 +178,19 @@ watch(ankiDataSig, () => {
       <div class="find-duplicates__header">
         <div class="find-duplicates__title-row">
           <button class="find-duplicates__back-btn" @click="goBack" title="Back to Browse">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="m15 18-6-6 6-6" />
+            </svg>
           </button>
           <h1 class="find-duplicates__title">Find Duplicates</h1>
         </div>
@@ -193,28 +203,16 @@ watch(ankiDataSig, () => {
       <div class="find-duplicates__options">
         <div class="find-duplicates__option">
           <label class="find-duplicates__label" for="dup-field">Compare field</label>
-          <select
-            id="dup-field"
-            v-model="fieldIndex"
-            class="find-duplicates__select"
-          >
-            <option
-              v-for="(name, idx) in fieldNames"
-              :key="idx"
-              :value="idx"
-            >
-              {{ name }}{{ idx === 0 ? ' (sort field)' : '' }}
+          <select id="dup-field" v-model="fieldIndex" class="find-duplicates__select">
+            <option v-for="(name, idx) in fieldNames" :key="idx" :value="idx">
+              {{ name }}{{ idx === 0 ? " (sort field)" : "" }}
             </option>
           </select>
         </div>
 
         <div class="find-duplicates__option">
           <label class="find-duplicates__label" for="dup-scope">Scope</label>
-          <select
-            id="dup-scope"
-            v-model="scope"
-            class="find-duplicates__select"
-          >
+          <select id="dup-scope" v-model="scope" class="find-duplicates__select">
             <option value="all">Across all decks</option>
             <option value="deck">Within each deck</option>
           </select>
@@ -262,22 +260,20 @@ watch(ankiDataSig, () => {
         <template v-else>
           <div class="find-duplicates__results-header">
             <span class="find-duplicates__results-count">
-              {{ duplicateGroups.length }} duplicate group{{ duplicateGroups.length !== 1 ? 's' : '' }}
+              {{ duplicateGroups.length }} duplicate group{{
+                duplicateGroups.length !== 1 ? "s" : ""
+              }}
               ({{ totalDuplicateNotes }} notes total)
             </span>
           </div>
 
-          <div
-            v-for="group in duplicateGroups"
-            :key="group.key"
-            class="find-duplicates__group"
-          >
-            <button
-              class="find-duplicates__group-header"
-              @click="toggleGroup(group.key)"
-            >
+          <div v-for="group in duplicateGroups" :key="group.key" class="find-duplicates__group">
+            <button class="find-duplicates__group-header" @click="toggleGroup(group.key)">
               <svg
-                :class="['find-duplicates__chevron', { 'find-duplicates__chevron--open': expandedGroups.has(group.key) }]"
+                :class="[
+                  'find-duplicates__chevron',
+                  { 'find-duplicates__chevron--open': expandedGroups.has(group.key) },
+                ]"
                 xmlns="http://www.w3.org/2000/svg"
                 width="16"
                 height="16"
@@ -288,34 +284,24 @@ watch(ankiDataSig, () => {
                 stroke-linecap="round"
                 stroke-linejoin="round"
               >
-                <path d="m9 18 6-6-6-6"/>
+                <path d="m9 18 6-6-6-6" />
               </svg>
               <span class="find-duplicates__group-title">
                 {{ truncate(group.displayKey, 100) }}
               </span>
-              <span class="find-duplicates__group-badge">
-                {{ group.notes.length }} notes
-              </span>
-              <span
-                v-if="group.similarity < 1"
-                class="find-duplicates__group-similarity"
-              >
+              <span class="find-duplicates__group-badge"> {{ group.notes.length }} notes </span>
+              <span v-if="group.similarity < 1" class="find-duplicates__group-similarity">
                 ~{{ Math.round(group.similarity * 100) }}% similar
               </span>
             </button>
 
-            <div
-              v-if="expandedGroups.has(group.key)"
-              class="find-duplicates__group-body"
-            >
-              <div
-                v-for="note in group.notes"
-                :key="note.guid"
-                class="find-duplicates__note"
-              >
+            <div v-if="expandedGroups.has(group.key)" class="find-duplicates__group-body">
+              <div v-for="note in group.notes" :key="note.guid" class="find-duplicates__note">
                 <div class="find-duplicates__note-content">
                   <div class="find-duplicates__note-field">
-                    {{ truncate(stripHtml(note.values[note.fieldNames[fieldIndex] ?? ''] ?? ''), 150) }}
+                    {{
+                      truncate(stripHtml(note.values[note.fieldNames[fieldIndex] ?? ""] ?? ""), 150)
+                    }}
                   </div>
                   <div class="find-duplicates__note-preview">
                     {{ getNotePreview(note, fieldIndex) }}
@@ -323,7 +309,7 @@ watch(ankiDataSig, () => {
                   <div class="find-duplicates__note-meta">
                     <span class="find-duplicates__note-deck">{{ note.deckName }}</span>
                     <span v-if="note.tags.length > 0" class="find-duplicates__note-tags">
-                      {{ note.tags.join(', ') }}
+                      {{ note.tags.join(", ") }}
                     </span>
                   </div>
                 </div>
@@ -368,17 +354,15 @@ watch(ankiDataSig, () => {
         <p v-if="confirmAction.type === 'merge'">
           Keep the selected note and delete
           <strong>{{ confirmAction.deleteGuids?.length }}</strong>
-          duplicate{{ (confirmAction.deleteGuids?.length ?? 0) !== 1 ? 's' : '' }}?
-          This cannot be undone.
+          duplicate{{ (confirmAction.deleteGuids?.length ?? 0) !== 1 ? "s" : "" }}? This cannot be
+          undone.
         </p>
-        <p v-else>
-          Delete this note? This cannot be undone.
-        </p>
+        <p v-else>Delete this note? This cannot be undone.</p>
       </div>
       <template #footer>
         <Button variant="secondary" size="sm" @click="confirmAction = null">Cancel</Button>
         <Button variant="danger" size="sm" @click="confirmDeletion">
-          {{ confirmAction?.type === 'merge' ? 'Delete Duplicates' : 'Delete' }}
+          {{ confirmAction?.type === "merge" ? "Delete Duplicates" : "Delete" }}
         </Button>
       </template>
     </Modal>

@@ -17,7 +17,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import initSqlJs, { type SqlJsStatic, type Database } from "sql.js";
+import { type SqlJsStatic, type Database } from "sql.js";
 import {
   login,
   downloadCollection,
@@ -26,6 +26,7 @@ import {
   normalizeUrl,
 } from "../lib/ankiSync";
 import { normalSync, FullSyncRequiredError, ClockSkewError } from "../lib/normalSync";
+import { getSqlJs, scalar } from "./testDbUtils";
 
 // ── Constants ──────────────────────────────────────────────────────
 
@@ -166,11 +167,6 @@ function withDb<T>(SQL: SqlJsStatic, bytes: Uint8Array, fn: (db: Database) => T)
   }
 }
 
-function scalar(db: Database, sql: string): unknown {
-  const r = db.exec(sql);
-  return r[0]?.values[0]?.[0] ?? null;
-}
-
 function mutateCollection(
   SQL: SqlJsStatic,
   bytes: Uint8Array,
@@ -196,8 +192,7 @@ describe.skipIf(!serverBin)("sync integration", () => {
   let baseCollection: Uint8Array;
 
   beforeAll(async () => {
-    const wasmPath = join(process.cwd(), "node_modules", "sql.js", "dist", "sql-wasm.wasm");
-    SQL = await initSqlJs({ locateFile: () => wasmPath });
+    SQL = await getSqlJs();
 
     // Extract a real, valid collection from the test fixture
     const rawCollection = await extractCollectionFromApkg();
@@ -965,7 +960,13 @@ describe.skipIf(!serverBin)("sync integration", () => {
         const decksRaw = scalar(db, "SELECT decks FROM col") as string;
         const decks = JSON.parse(decksRaw);
         // Add a deck
-        decks["99"] = { id: 99, mod: Math.floor(nowMs / 1000), name: "ToDelete", usn: -1, conf: "1" };
+        decks["99"] = {
+          id: 99,
+          mod: Math.floor(nowMs / 1000),
+          name: "ToDelete",
+          usn: -1,
+          conf: "1",
+        };
         db.run("UPDATE col SET decks=?, mod=?", [JSON.stringify(decks), nowMs + 1]);
       });
 
@@ -1032,7 +1033,9 @@ describe.skipIf(!serverBin)("sync integration", () => {
         tags["multi-sync-test"] = -1;
 
         db.run("UPDATE col SET dconf=?, tags=?, mod=?", [
-          JSON.stringify(dconf), JSON.stringify(tags), nowMs + 1,
+          JSON.stringify(dconf),
+          JSON.stringify(tags),
+          nowMs + 1,
         ]);
       });
 
@@ -1061,9 +1064,7 @@ describe.skipIf(!serverBin)("sync integration", () => {
       const firstEdit = mutateCollection(SQL, serverCopy, (db) => {
         const nowMs = Date.now();
         const nowSec = Math.floor(nowMs / 1000);
-        db.run(
-          `UPDATE cards SET reps=1, mod=${nowSec}, usn=-1 WHERE id=${cardId}`,
-        );
+        db.run(`UPDATE cards SET reps=1, mod=${nowSec}, usn=-1 WHERE id=${cardId}`);
         db.run(`UPDATE col SET mod=${nowMs + 1}`);
       });
 
@@ -1077,9 +1078,7 @@ describe.skipIf(!serverBin)("sync integration", () => {
         const secondEdit = mutateCollection(SQL, result1.sqliteBytes, (db) => {
           const nowMs = Date.now();
           const nowSec = Math.floor(nowMs / 1000);
-          db.run(
-            `UPDATE cards SET reps=2, mod=${nowSec}, usn=-1 WHERE id=${cardId}`,
-          );
+          db.run(`UPDATE cards SET reps=2, mod=${nowSec}, usn=-1 WHERE id=${cardId}`);
           db.run(`UPDATE col SET mod=${nowMs + 1}`);
         });
 
@@ -1154,14 +1153,39 @@ describe.skipIf(!serverBin)("sync integration", () => {
         const newNoteId = nowMs; // use timestamp as ID
         const newCardId = nowMs + 1;
 
-        db.run(
-          "INSERT INTO notes VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-          [newNoteId, "newguid123", modelId, nowSec, -1, "", "new front\x1fnew back", "new front", 0, 0, ""],
-        );
-        db.run(
-          "INSERT INTO cards VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-          [newCardId, newNoteId, 1, 0, nowSec, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, ""],
-        );
+        db.run("INSERT INTO notes VALUES (?,?,?,?,?,?,?,?,?,?,?)", [
+          newNoteId,
+          "newguid123",
+          modelId,
+          nowSec,
+          -1,
+          "",
+          "new front\x1fnew back",
+          "new front",
+          0,
+          0,
+          "",
+        ]);
+        db.run("INSERT INTO cards VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", [
+          newCardId,
+          newNoteId,
+          1,
+          0,
+          nowSec,
+          -1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          "",
+        ]);
         db.run(`UPDATE col SET mod=${nowMs + 1}`);
       });
 

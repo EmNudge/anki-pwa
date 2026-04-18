@@ -11,10 +11,10 @@ describe("CSV Parser — property-based tests", () => {
     it("parse(serialize(data)) === data for safe cells", () => {
       fc.assert(
         fc.property(
-          fc.array(
-            fc.array(arbSafeCell, { minLength: 1, maxLength: 5 }),
-            { minLength: 1, maxLength: 10 },
-          ),
+          fc.array(fc.array(arbSafeCell, { minLength: 1, maxLength: 5 }), {
+            minLength: 1,
+            maxLength: 10,
+          }),
           fc.constantFrom(",", "\t", ";", "|"),
           (rows, delimiter) => {
             // Serialize: join fields with delimiter, rows with newlines
@@ -22,7 +22,10 @@ describe("CSV Parser — property-based tests", () => {
             const parsed = parseCsv(csv, delimiter);
 
             // Filter out empty rows (parseCsv trims empty lines)
-            const nonEmptyRows = rows.filter((row) => row.some((cell) => cell.trim().length > 0) || row.join(delimiter).trim().length > 0);
+            const nonEmptyRows = rows.filter(
+              (row) =>
+                row.some((cell) => cell.trim().length > 0) || row.join(delimiter).trim().length > 0,
+            );
 
             expect(parsed.length).toBe(nonEmptyRows.length);
             for (let i = 0; i < parsed.length; i++) {
@@ -171,10 +174,10 @@ describe("CSV Parser — property-based tests", () => {
     it("CRLF and LF produce the same result", () => {
       fc.assert(
         fc.property(
-          fc.array(
-            fc.array(arbSafeCell, { minLength: 1, maxLength: 3 }),
-            { minLength: 2, maxLength: 5 },
-          ),
+          fc.array(fc.array(arbSafeCell, { minLength: 1, maxLength: 3 }), {
+            minLength: 2,
+            maxLength: 5,
+          }),
           (rows) => {
             const lf = rows.map((r) => r.join(",")).join("\n");
             const crlf = rows.map((r) => r.join(",")).join("\r\n");

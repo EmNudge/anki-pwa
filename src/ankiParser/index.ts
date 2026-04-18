@@ -22,12 +22,30 @@ export async function getAnkiDataFromBlob(file: Blob): Promise<AnkiData> {
   if (ankiDb.type === "21b") {
     const { cards, deckName, decks, notesTypes, collectionCreationTime, deckConfigs } =
       getDataFromAnki21b(db);
-    return { cards, files, deckName, decks, notesTypes, collectionCreationTime, deckConfigs, colConf: null };
+    return {
+      cards,
+      files,
+      deckName,
+      decks,
+      notesTypes,
+      collectionCreationTime,
+      deckConfigs,
+      colConf: null,
+    };
   }
 
   const { cards, deckName, decks, notesTypes, collectionCreationTime, deckConfigs, colConf } =
     getDataFromAnki2(db);
-  return { cards, files, deckName, decks, notesTypes, collectionCreationTime, deckConfigs, colConf };
+  return {
+    cards,
+    files,
+    deckName,
+    decks,
+    notesTypes,
+    collectionCreationTime,
+    deckConfigs,
+    colConf,
+  };
 }
 
 /**
@@ -48,12 +66,30 @@ export async function getAnkiDataFromSqlite(
     if (tableNames.has("notetypes")) {
       const { cards, deckName, decks, notesTypes, collectionCreationTime, deckConfigs } =
         getDataFromAnki21b(db);
-      return { cards, files, deckName, decks, notesTypes, collectionCreationTime, deckConfigs, colConf: null };
+      return {
+        cards,
+        files,
+        deckName,
+        decks,
+        notesTypes,
+        collectionCreationTime,
+        deckConfigs,
+        colConf: null,
+      };
     }
 
     const { cards, deckName, decks, notesTypes, collectionCreationTime, deckConfigs, colConf } =
       getDataFromAnki2(db);
-    return { cards, files, deckName, decks, notesTypes, collectionCreationTime, deckConfigs, colConf };
+    return {
+      cards,
+      files,
+      deckName,
+      decks,
+      notesTypes,
+      collectionCreationTime,
+      deckConfigs,
+      colConf,
+    };
   } finally {
     db.close();
   }

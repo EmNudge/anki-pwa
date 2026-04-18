@@ -171,7 +171,7 @@ function setupIframe() {
   }
 
   // Wire up type-answer input fields
-  const typeans = doc.querySelector<HTMLInputElement>('input.typeans-input');
+  const typeans = doc.querySelector<HTMLInputElement>("input.typeans-input");
   if (typeans) {
     // Focus the input automatically
     setTimeout(() => typeans.focus(), 50);

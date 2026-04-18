@@ -49,9 +49,9 @@ describe("normalizeForComparison", () => {
   });
 
   it("handles complex HTML", () => {
-    expect(
-      normalizeForComparison('<div class="front"><p>What is a <b>cat</b>?</p></div>'),
-    ).toBe("what is a cat?");
+    expect(normalizeForComparison('<div class="front"><p>What is a <b>cat</b>?</p></div>')).toBe(
+      "what is a cat?",
+    );
   });
 
   it("handles nbsp entities", () => {

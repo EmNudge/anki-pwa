@@ -197,9 +197,7 @@ class ReviewDB {
   /**
    * Batch-patch multiple cards in a single transaction.
    */
-  async patchCards(
-    patches: { cardId: string; patch: Partial<CardReviewState> }[],
-  ): Promise<void> {
+  async patchCards(patches: { cardId: string; patch: Partial<CardReviewState> }[]): Promise<void> {
     if (patches.length === 0) return;
     const db = await this.ensureInit();
     return new Promise((resolve, reject) => {

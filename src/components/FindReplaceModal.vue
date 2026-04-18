@@ -3,8 +3,7 @@ import { ref, computed, watch } from "vue";
 import { ankiDataSig, bulkUpdateNoteFields } from "../stores";
 import { stripHtml } from "../utils/stripHtml";
 import { escapeHtml, truncate } from "../utils/format";
-import Modal from "../design-system/components/primitives/Modal.vue";
-import Button from "../design-system/components/primitives/Button.vue";
+import { Button, Modal } from "../design-system";
 
 type Scope = "all" | "selected" | "deck";
 

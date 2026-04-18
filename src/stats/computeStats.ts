@@ -92,9 +92,8 @@ export function computeAddedCards(
   startMs: number,
   endMs: number,
 ): DayCount[] {
-  const scaffoldDates = Array.from(
-    { length: Math.ceil((endMs - startMs) / MS_PER_DAY) },
-    (_, i) => formatDate(startMs + i * MS_PER_DAY),
+  const scaffoldDates = Array.from({ length: Math.ceil((endMs - startMs) / MS_PER_DAY) }, (_, i) =>
+    formatDate(startMs + i * MS_PER_DAY),
   );
 
   const cardsInRange = cards.filter((c) => c.createdAt >= startMs && c.createdAt < endMs);

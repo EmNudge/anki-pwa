@@ -55,4 +55,3 @@ export function tagMatchesOrIsChild(t: string, tag: string): boolean {
 export function removeTags(tags: string[], tag: string): string[] {
   return tags.filter((t) => !tagMatchesOrIsChild(t, tag));
 }
-

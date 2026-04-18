@@ -1,11 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from "vue";
 import { Button, Modal } from "../design-system";
-import {
-  ankiDataSig,
-  countFilteredDeckCards,
-  createFilteredDeck,
-} from "../stores";
+import { ankiDataSig, countFilteredDeckCards, createFilteredDeck } from "../stores";
 import type { FilteredDeckSortOrder } from "../scheduler/types";
 
 const props = defineProps<{
@@ -97,7 +93,7 @@ const SORT_OPTIONS: { value: FilteredDeckSortOrder; label: string }[] = [
           v-model="query"
           type="text"
           class="field-input"
-          placeholder='e.g. is:due deck:Biology'
+          placeholder="e.g. is:due deck:Biology"
           @keydown.enter.prevent="handleCreate"
         />
         <span class="field-hint">
@@ -126,7 +122,9 @@ const SORT_OPTIONS: { value: FilteredDeckSortOrder; label: string }[] = [
         <span>Reschedule cards based on my answers</span>
       </label>
       <span class="field-hint" style="margin-top: -8px">
-        {{ reschedule ? "Cards will be rescheduled normally." : "Cram mode: scheduling won't change." }}
+        {{
+          reschedule ? "Cards will be rescheduled normally." : "Cram mode: scheduling won't change."
+        }}
       </span>
 
       <div class="preview-bar">

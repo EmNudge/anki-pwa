@@ -103,10 +103,7 @@ async function loadStats() {
   addedCardsData.value = computeAddedCards(normalized, startMs, endMs);
 
   // Aggregate totals
-  totalReviews.value = filteredDailyStats.reduce(
-    (sum, s) => sum + s.newCount + s.reviewCount,
-    0,
-  );
+  totalReviews.value = filteredDailyStats.reduce((sum, s) => sum + s.newCount + s.reviewCount, 0);
   totalTimeMs.value = filteredDailyStats.reduce((sum, s) => sum + s.totalTimeMs, 0);
   streak.value = computeStudyStreak(dailyStats);
 

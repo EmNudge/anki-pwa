@@ -301,13 +301,17 @@ describe("matchExpr", () => {
     it("AND requires both conditions", () => {
       const card = makeCard({ queueName: "new", deck: "Biology" });
       expect(matchExpr(card, parseSearch("is:new deck:Biology")!, COLLECTION_CREATION)).toBe(true);
-      expect(matchExpr(card, parseSearch("is:new deck:Chemistry")!, COLLECTION_CREATION)).toBe(false);
+      expect(matchExpr(card, parseSearch("is:new deck:Chemistry")!, COLLECTION_CREATION)).toBe(
+        false,
+      );
     });
 
     it("OR requires either condition", () => {
       const card = makeCard({ queueName: "new" });
       expect(matchExpr(card, parseSearch("is:new OR is:review")!, COLLECTION_CREATION)).toBe(true);
-      expect(matchExpr(card, parseSearch("is:review OR is:suspended")!, COLLECTION_CREATION)).toBe(false);
+      expect(matchExpr(card, parseSearch("is:review OR is:suspended")!, COLLECTION_CREATION)).toBe(
+        false,
+      );
     });
   });
 });

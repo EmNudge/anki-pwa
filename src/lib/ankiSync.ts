@@ -471,10 +471,14 @@ export async function uploadMedia(
     form.append("k", hkey);
     form.append("data", zipBlob, "media.zip");
 
-    const uploadResponse = await fetchWithTimeout(`${base}/msync/uploadChanges`, {
-      method: "POST",
-      body: form,
-    }, TRANSFER_TIMEOUT_MS);
+    const uploadResponse = await fetchWithTimeout(
+      `${base}/msync/uploadChanges`,
+      {
+        method: "POST",
+        body: form,
+      },
+      TRANSFER_TIMEOUT_MS,
+    );
 
     if (!uploadResponse.ok) {
       const body = await uploadResponse.text().catch(() => "(unreadable)");
@@ -535,10 +539,14 @@ export async function uploadCollection(
   form.append("data", new Blob([sqliteBytes as BlobPart]), "collection.anki2");
   form.append("c", "0");
 
-  const response = await fetchWithTimeout(`${base}/sync/upload`, {
-    method: "POST",
-    body: form,
-  }, TRANSFER_TIMEOUT_MS);
+  const response = await fetchWithTimeout(
+    `${base}/sync/upload`,
+    {
+      method: "POST",
+      body: form,
+    },
+    TRANSFER_TIMEOUT_MS,
+  );
 
   if (response.status === 401 || response.status === 403) {
     throw new Error("Authentication expired. Please log in again.");

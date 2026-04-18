@@ -49,7 +49,15 @@ function revokeOldMediaUrls() {
 }
 
 // View state
-export type AppView = "review" | "browse" | "create" | "sync" | "duplicates" | "stats" | "backup" | "check-db";
+export type AppView =
+  | "review"
+  | "browse"
+  | "create"
+  | "sync"
+  | "duplicates"
+  | "stats"
+  | "backup"
+  | "check-db";
 export const activeViewSig = ref<AppView>("review");
 export const reviewModeSig = ref<"deck-list" | "studying">("deck-list");
 
@@ -287,7 +295,9 @@ export async function loadSyncedCollection(bytes: Uint8Array, mediaBlobs?: Map<s
     const entries = [...mediaBlobs];
     entries.forEach(([filename]) => newMediaFilenames.add(filename));
     mediaFiles = new Map(entries.map(([filename, blob]) => [filename, URL.createObjectURL(blob)]));
-    await Promise.all(entries.map(([filename, blob]) => cache.put(mediaCachePath(filename), new Response(blob))));
+    await Promise.all(
+      entries.map(([filename, blob]) => cache.put(mediaCachePath(filename), new Response(blob))),
+    );
   }
 
   // Clear old media entries that weren't replaced by new ones
@@ -1048,9 +1058,10 @@ export function moveToNextReviewCard() {
   // Third priority: soonest learning card (even if not yet due)
   const soonest = dueCards
     .filter((c) => c.cardId !== currentId && queue?.isCardInLearning(c))
-    .toSorted((a, b) =>
-      (a.reviewState.cardState as { due: number }).due -
-      (b.reviewState.cardState as { due: number }).due,
+    .toSorted(
+      (a, b) =>
+        (a.reviewState.cardState as { due: number }).due -
+        (b.reviewState.cardState as { due: number }).due,
     )[0];
   if (soonest) {
     currentReviewCardSig.value = soonest;
@@ -1366,7 +1377,9 @@ export async function updateNote(
  * Open the DB from current deck input, run a mutation callback, then persist and re-parse.
  * This is the standard pattern for all notetype (and other schema) mutations.
  */
-export async function withDbMutation(mutate: (db: import("sql.js").Database) => void): Promise<void> {
+export async function withDbMutation(
+  mutate: (db: import("sql.js").Database) => void,
+): Promise<void> {
   const input = activeDeckInputSig.value;
   if (input?.kind !== "sqlite") return;
 
@@ -1385,7 +1398,10 @@ const BASE91_CHARS =
   "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!#$%&()*+,-.:;<=>?@[]^_`{|}~";
 
 function generateGuid(): string {
-  return Array.from({ length: 10 }, () => BASE91_CHARS[Math.floor(Math.random() * BASE91_CHARS.length)]).join("");
+  return Array.from(
+    { length: 10 },
+    () => BASE91_CHARS[Math.floor(Math.random() * BASE91_CHARS.length)],
+  ).join("");
 }
 
 /**
@@ -1398,7 +1414,10 @@ export async function getOrCreateIONotetype(): Promise<string> {
 
   // Check existing notetypes for IO
   for (const nt of data.notesTypes) {
-    if ("originalStockKind" in nt && (nt as { originalStockKind?: number }).originalStockKind === 6) {
+    if (
+      "originalStockKind" in nt &&
+      (nt as { originalStockKind?: number }).originalStockKind === 6
+    ) {
       return String(nt.id);
     }
   }
@@ -1474,16 +1493,26 @@ export async function addNote(options: {
     );
 
     // Build flds string (field values joined by \x1f in field order)
-    const flds = fieldRows
-      .map((f) => options.fields[f.name] ?? "")
-      .join("\x1f");
+    const flds = fieldRows.map((f) => options.fields[f.name] ?? "").join("\x1f");
 
     const { sfld, csum } = computeSortField(options.fields[fieldRows[0]?.name ?? ""] ?? "");
 
     // Insert note
     db.run(
       "INSERT INTO notes (id, guid, mid, mod, usn, tags, flds, sfld, csum, flags, data) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-      [noteId, guid, options.notetypeId, mod, -1, formatTagsStr(options.tags), flds, sfld, csum, 0, ""],
+      [
+        noteId,
+        guid,
+        options.notetypeId,
+        mod,
+        -1,
+        formatTagsStr(options.tags),
+        flds,
+        sfld,
+        csum,
+        0,
+        "",
+      ],
     );
 
     // Insert cards (one per template, or numCards for cloze)
@@ -1590,9 +1619,19 @@ export async function importPresetJson(json: string): Promise<string | null> {
 
     // Pick only known keys to prevent injection of arbitrary properties
     const KNOWN_KEYS = [
-      "enabled", "algorithm", "dailyNewLimit", "dailyReviewLimit",
-      "showAheadOfSchedule", "learnAheadMins", "rolloverHour",
-      "sm2Params", "fsrsParams", "autoAdvance", "easyDays", "loadBalancer", "presetId",
+      "enabled",
+      "algorithm",
+      "dailyNewLimit",
+      "dailyReviewLimit",
+      "showAheadOfSchedule",
+      "learnAheadMins",
+      "rolloverHour",
+      "sm2Params",
+      "fsrsParams",
+      "autoAdvance",
+      "easyDays",
+      "loadBalancer",
+      "presetId",
     ];
     const sanitized: Record<string, unknown> = {};
     for (const key of KNOWN_KEYS) {
@@ -1649,8 +1688,9 @@ function gatherFilteredCards(config: FilteredDeckConfig): number[] {
   const expr = parseSearch(config.query);
   const matching = data.cards
     .map((card, index) => ({ index, card }))
-    .filter(({ card }) =>
-      !expr || matchExpr(ankiCardToSearchable(card), expr, data.collectionCreationTime),
+    .filter(
+      ({ card }) =>
+        !expr || matchExpr(ankiCardToSearchable(card), expr, data.collectionCreationTime),
     );
 
   // Sort
@@ -2072,15 +2112,17 @@ async function bulkPersistTags(guids: string[]): Promise<void> {
 
     const guidSet = new Set(guids);
     const cardsByGuid = new Map(
-      data.cards
-        .filter((card) => guidSet.has(card.guid))
-        .map((card) => [card.guid, card] as const),
+      data.cards.filter((card) => guidSet.has(card.guid)).map((card) => [card.guid, card] as const),
     );
 
     guids.forEach((guid) => {
       const card = cardsByGuid.get(guid);
       if (!card) return;
-      db.run("UPDATE notes SET tags=?, mod=?, usn=-1 WHERE guid=?", [formatTagsStr(card.tags), mod, guid]);
+      db.run("UPDATE notes SET tags=?, mod=?, usn=-1 WHERE guid=?", [
+        formatTagsStr(card.tags),
+        mod,
+        guid,
+      ]);
     });
 
     await persistSqliteBytes(db, input);

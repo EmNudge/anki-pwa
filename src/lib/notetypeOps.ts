@@ -92,7 +92,9 @@ export function createNotetype(db: Database, options: CreateNotetypeOptions): st
   const configBlob = encodeNotesTypeConfig({
     kind: options.kind ?? 0,
     originalStockKind: options.originalStockKind ?? 0,
-    css: options.css ?? ".card {\n  font-family: arial;\n  font-size: 20px;\n  text-align: center;\n  color: black;\n  background-color: white;\n}\n",
+    css:
+      options.css ??
+      ".card {\n  font-family: arial;\n  font-size: 20px;\n  text-align: center;\n  color: black;\n  background-color: white;\n}\n",
   });
 
   db.run("INSERT INTO notetypes (id, name, mtime_secs, usn, config) VALUES (?, ?, ?, -1, ?)", [
@@ -323,11 +325,9 @@ export function addTemplate(
   );
 
   // Generate a card for each existing note of this notetype
-  const notes = executeQueryAll<{ id: number }>(
-    db,
-    "SELECT id FROM notes WHERE mid=?",
-    [ntidNum] as unknown as Record<string, string>,
-  );
+  const notes = executeQueryAll<{ id: number }>(db, "SELECT id FROM notes WHERE mid=?", [
+    ntidNum,
+  ] as unknown as Record<string, string>);
 
   for (const note of notes) {
     const cardId = generateId();
@@ -438,9 +438,7 @@ export function convertNotes(
   const targetTemplates = getTemplatesForNotetype(db, targetNtid);
 
   // Get source notetype's fields (from the first note)
-  const firstNote = db.exec("SELECT cast(mid as text) as mid FROM notes WHERE id=?", [
-    noteIds[0]!,
-  ]);
+  const firstNote = db.exec("SELECT cast(mid as text) as mid FROM notes WHERE id=?", [noteIds[0]!]);
   const sourceMid = String(firstNote[0]?.values[0]?.[0]);
   const sourceFields = getFieldsForNotetype(db, sourceMid);
   const sourceFieldNames = sourceFields.map((f) => f.name);

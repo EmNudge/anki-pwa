@@ -2,7 +2,7 @@
 import { ref, onMounted } from "vue";
 import { formatFileSize } from "../utils/format";
 import { Download, Upload, Archive, Trash2, RotateCcw } from "lucide-vue-next";
-import Modal from "../design-system/components/primitives/Modal.vue";
+import { Modal } from "../design-system";
 import {
   exportToFile,
   importFromFile,
@@ -161,7 +161,6 @@ function formatDate(ts: number): string {
   return new Date(ts).toLocaleString();
 }
 
-
 const intervalOptions = [
   { label: "1 hour", value: 60 * 60 * 1000 },
   { label: "6 hours", value: 6 * 60 * 60 * 1000 },
@@ -175,8 +174,8 @@ const intervalOptions = [
   <div class="backup-panel">
     <h2 class="backup-title">Collection Backup</h2>
     <p class="backup-description">
-      Export and restore your collection as <code>.colpkg</code> files. Backups include
-      the full database and all media files.
+      Export and restore your collection as <code>.colpkg</code> files. Backups include the full
+      database and all media files.
     </p>
 
     <!-- Export / Import Actions -->
@@ -187,7 +186,11 @@ const intervalOptions = [
           <Download :size="14" />
           Export Collection
         </button>
-        <button class="backup-btn backup-btn--secondary" :disabled="isBusy" @click="handleImportClick">
+        <button
+          class="backup-btn backup-btn--secondary"
+          :disabled="isBusy"
+          @click="handleImportClick"
+        >
           <Upload :size="14" />
           Import Collection
         </button>
@@ -198,15 +201,17 @@ const intervalOptions = [
     <div class="backup-section">
       <div class="backup-section-header">
         <h3 class="backup-section-title">Stored Backups</h3>
-        <button class="backup-btn backup-btn--primary" :disabled="isBusy" @click="handleCreateBackup">
+        <button
+          class="backup-btn backup-btn--primary"
+          :disabled="isBusy"
+          @click="handleCreateBackup"
+        >
           <Archive :size="14" />
           Create Backup
         </button>
       </div>
 
-      <div v-if="backups.length === 0" class="backup-empty">
-        No backups stored yet.
-      </div>
+      <div v-if="backups.length === 0" class="backup-empty">No backups stored yet.</div>
 
       <div v-else class="backup-list">
         <div v-for="backup in backups" :key="backup.id" class="backup-item">
@@ -251,20 +256,12 @@ const intervalOptions = [
       <summary>Auto-Backup Settings</summary>
       <div class="backup-settings-content">
         <label class="backup-toggle">
-          <input
-            type="checkbox"
-            v-model="settings.autoBackupEnabled"
-            @change="updateSettings"
-          />
+          <input type="checkbox" v-model="settings.autoBackupEnabled" @change="updateSettings" />
           Enable periodic auto-backup
         </label>
 
         <label class="backup-toggle">
-          <input
-            type="checkbox"
-            v-model="settings.backupBeforeSync"
-            @change="updateSettings"
-          />
+          <input type="checkbox" v-model="settings.backupBeforeSync" @change="updateSettings" />
           Backup before sync
         </label>
 
@@ -311,13 +308,11 @@ const intervalOptions = [
       @close="showRestoreConfirm = false"
     >
       <p class="backup-confirm-text">
-        This will <strong>replace your current collection</strong> with the backup.
-        Any unsaved changes will be lost.
+        This will <strong>replace your current collection</strong> with the backup. Any unsaved
+        changes will be lost.
       </p>
       <div class="backup-confirm-actions">
-        <button class="backup-btn backup-btn--danger" @click="confirmRestore">
-          Restore
-        </button>
+        <button class="backup-btn backup-btn--danger" @click="confirmRestore">Restore</button>
         <button class="backup-btn backup-btn--secondary" @click="showRestoreConfirm = false">
           Cancel
         </button>
@@ -332,13 +327,11 @@ const intervalOptions = [
       @close="showImportConfirm = false"
     >
       <p class="backup-confirm-text">
-        This will <strong>replace your current collection</strong> with the imported file.
-        Any unsaved changes will be lost.
+        This will <strong>replace your current collection</strong> with the imported file. Any
+        unsaved changes will be lost.
       </p>
       <div class="backup-confirm-actions">
-        <button class="backup-btn backup-btn--danger" @click="confirmImport">
-          Import
-        </button>
+        <button class="backup-btn backup-btn--danger" @click="confirmImport">Import</button>
         <button class="backup-btn backup-btn--secondary" @click="showImportConfirm = false">
           Cancel
         </button>

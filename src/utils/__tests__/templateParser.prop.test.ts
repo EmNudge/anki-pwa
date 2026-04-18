@@ -229,19 +229,16 @@ describe("Template Parser — property-based tests", () => {
 
     it("multiple clozes produce the correct count", () => {
       fc.assert(
-        fc.property(
-          fc.integer({ min: 1, max: 5 }),
-          (count) => {
-            const parts: string[] = [];
-            for (let i = 1; i <= count; i++) {
-              parts.push(`{{c${i}::answer${i}}}`);
-            }
-            const text = parts.join(" ");
-            const nodes = parseClozeNodes(text);
-            const clozeNodes = nodes.filter(isClozeNode);
-            expect(clozeNodes.length).toBe(count);
-          },
-        ),
+        fc.property(fc.integer({ min: 1, max: 5 }), (count) => {
+          const parts: string[] = [];
+          for (let i = 1; i <= count; i++) {
+            parts.push(`{{c${i}::answer${i}}}`);
+          }
+          const text = parts.join(" ");
+          const nodes = parseClozeNodes(text);
+          const clozeNodes = nodes.filter(isClozeNode);
+          expect(clozeNodes.length).toBe(count);
+        }),
         { numRuns: NUM_RUNS ?? 50 },
       );
     });

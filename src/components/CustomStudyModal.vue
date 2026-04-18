@@ -9,11 +9,14 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: "close"): void;
-  (e: "create-filtered", payload: {
-    name: string;
-    query: string;
-    reschedule: boolean;
-  }): void;
+  (
+    e: "create-filtered",
+    payload: {
+      name: string;
+      query: string;
+      reschedule: boolean;
+    },
+  ): void;
 }>();
 
 const currentDeckName = computed(() => {
@@ -45,7 +48,7 @@ const presets = computed<Preset[]>(() => {
     {
       label: "Review forgotten cards",
       description: "Study cards you answered Again on recently",
-      getQuery: () => df ? `rated:7:1 ${df}` : "rated:7:1",
+      getQuery: () => (df ? `rated:7:1 ${df}` : "rated:7:1"),
       reschedule: true,
     },
     {
@@ -60,13 +63,13 @@ const presets = computed<Preset[]>(() => {
     {
       label: "Preview new cards",
       description: "Study new cards without affecting scheduling",
-      getQuery: () => df ? `is:new ${df}` : "is:new",
+      getQuery: () => (df ? `is:new ${df}` : "is:new"),
       reschedule: false,
     },
     {
       label: "Study by state: due",
       description: "Review all cards that are currently due",
-      getQuery: () => df ? `is:due ${df}` : "is:due",
+      getQuery: () => (df ? `is:due ${df}` : "is:due"),
       reschedule: true,
     },
     {

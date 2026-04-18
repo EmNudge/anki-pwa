@@ -22,10 +22,7 @@ export async function createColpkg(): Promise<Blob> {
   const zipWriter = new ZipWriter(new BlobWriter("application/zip"));
 
   // Add compressed SQLite database
-  await zipWriter.add(
-    "collection.anki21b",
-    new BlobReader(new Blob([compressed as BlobPart])),
-  );
+  await zipWriter.add("collection.anki21b", new BlobReader(new Blob([compressed as BlobPart])));
 
   // Add media files with numeric names and build the mapping
   const mediaMapping: Record<string, string> = {};
@@ -38,10 +35,7 @@ export async function createColpkg(): Promise<Blob> {
   }
 
   // Add media mapping JSON
-  await zipWriter.add(
-    "media",
-    new BlobReader(new Blob([JSON.stringify(mediaMapping)])),
-  );
+  await zipWriter.add("media", new BlobReader(new Blob([JSON.stringify(mediaMapping)])));
 
   return await zipWriter.close();
 }
@@ -89,9 +83,7 @@ export async function restoreColpkg(file: Blob): Promise<void> {
     }
 
     // Build filename → Blob map from numbered entries
-    const reverseMap = new Map(
-      Object.entries(mediaMapping).map(([num, name]) => [num, name]),
-    );
+    const reverseMap = new Map(Object.entries(mediaMapping).map(([num, name]) => [num, name]));
     mediaBlobs = new Map<string, Blob>();
 
     for (const [numKey, filename] of reverseMap) {

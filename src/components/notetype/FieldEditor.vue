@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { GripVertical, Plus, Trash2, ChevronDown, ChevronRight } from "lucide-vue-next";
-import Button from "~/design-system/components/primitives/Button.vue";
+import { Button } from "~/design-system";
 import type { Anki21bFieldConfig } from "~/ankiParser/anki21b/proto";
 
 export interface FieldEntry {
@@ -117,11 +117,7 @@ function handleDragEnd() {
           </template>
 
           <div class="field-actions">
-            <button
-              class="icon-btn"
-              title="Toggle options"
-              @click="toggleExpand(field.ord)"
-            >
+            <button class="icon-btn" title="Toggle options" @click="toggleExpand(field.ord)">
               <ChevronDown v-if="expandedField === field.ord" :size="14" />
               <ChevronRight v-else :size="14" />
             </button>
@@ -165,7 +161,11 @@ function handleDragEnd() {
             <input
               type="checkbox"
               :checked="field.config.excludeFromSearch"
-              @change="emit('updateFieldConfig', field.ord, { excludeFromSearch: !field.config.excludeFromSearch })"
+              @change="
+                emit('updateFieldConfig', field.ord, {
+                  excludeFromSearch: !field.config.excludeFromSearch,
+                })
+              "
             />
             <span>Exclude from search</span>
           </label>
@@ -177,7 +177,11 @@ function handleDragEnd() {
                 class="desc-input"
                 :value="field.config.description"
                 placeholder="Field description..."
-                @change="emit('updateFieldConfig', field.ord, { description: ($event.target as HTMLInputElement).value })"
+                @change="
+                  emit('updateFieldConfig', field.ord, {
+                    description: ($event.target as HTMLInputElement).value,
+                  })
+                "
               />
             </label>
           </div>
@@ -188,7 +192,11 @@ function handleDragEnd() {
                 type="text"
                 class="desc-input"
                 :value="field.config.fontName"
-                @change="emit('updateFieldConfig', field.ord, { fontName: ($event.target as HTMLInputElement).value })"
+                @change="
+                  emit('updateFieldConfig', field.ord, {
+                    fontName: ($event.target as HTMLInputElement).value,
+                  })
+                "
               />
             </label>
             <label>
@@ -199,7 +207,11 @@ function handleDragEnd() {
                 :value="field.config.fontSize"
                 min="8"
                 max="72"
-                @change="emit('updateFieldConfig', field.ord, { fontSize: Number(($event.target as HTMLInputElement).value) })"
+                @change="
+                  emit('updateFieldConfig', field.ord, {
+                    fontSize: Number(($event.target as HTMLInputElement).value),
+                  })
+                "
               />
             </label>
           </div>

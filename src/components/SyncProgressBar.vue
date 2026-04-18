@@ -33,7 +33,9 @@ const detail = computed(() => props.progress?.detail ?? "");
         :style="{ width: `${percentage}%` }"
       />
     </div>
-    <div class="sync-progress__percentage">{{ progress.fraction !== undefined ? `${percentage}%` : '' }}</div>
+    <div class="sync-progress__percentage">
+      {{ progress.fraction !== undefined ? `${percentage}%` : "" }}
+    </div>
   </div>
 </template>
 

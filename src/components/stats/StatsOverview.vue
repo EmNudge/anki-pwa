@@ -29,7 +29,11 @@ function formatTime(ms: number): string {
     </div>
     <div class="stat-card">
       <div class="stat-value">
-        {{ props.trueRetention.total > 0 ? (props.trueRetention.retention * 100).toFixed(1) + "%" : "—" }}
+        {{
+          props.trueRetention.total > 0
+            ? (props.trueRetention.retention * 100).toFixed(1) + "%"
+            : "—"
+        }}
       </div>
       <div class="stat-label">True Retention</div>
     </div>
@@ -44,7 +48,12 @@ function formatTime(ms: number): string {
     <div class="stat-card">
       <div class="stat-value">
         {{
-          (props.cardCounts.new + props.cardCounts.learning + props.cardCounts.young + props.cardCounts.mature).toLocaleString()
+          (
+            props.cardCounts.new +
+            props.cardCounts.learning +
+            props.cardCounts.young +
+            props.cardCounts.mature
+          ).toLocaleString()
         }}
       </div>
       <div class="stat-label">Total Cards</div>

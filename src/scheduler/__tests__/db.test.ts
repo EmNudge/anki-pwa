@@ -252,8 +252,14 @@ describe("ReviewDB", () => {
 
     it("should preserve different sort orders", async () => {
       const sortOrders = [
-        "random", "orderAdded", "orderDue", "intervalAsc",
-        "intervalDesc", "easeAsc", "easeDesc", "lapsesDesc",
+        "random",
+        "orderAdded",
+        "orderDue",
+        "intervalAsc",
+        "intervalDesc",
+        "easeAsc",
+        "easeDesc",
+        "lapsesDesc",
       ] as const;
 
       for (const sortOrder of sortOrders) {

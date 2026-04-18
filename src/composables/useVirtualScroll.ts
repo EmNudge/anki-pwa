@@ -6,7 +6,11 @@ interface VirtualScrollOptions<T> {
   overscan?: number;
 }
 
-export function useVirtualScroll<T>({ items, rowHeight = 30, overscan = 10 }: VirtualScrollOptions<T>) {
+export function useVirtualScroll<T>({
+  items,
+  rowHeight = 30,
+  overscan = 10,
+}: VirtualScrollOptions<T>) {
   const scrollContainerRef = ref<HTMLElement | null>(null);
   const scrollTop = ref(0);
   const containerHeight = ref(600);

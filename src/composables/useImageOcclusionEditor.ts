@@ -20,8 +20,8 @@ export function useImageOcclusionEditor(initialShapes: OcclusionShape[] = []) {
   let drawStartY = 0;
   let drawingShapeId: string | null = null;
 
-  const selectedShape = computed(() =>
-    shapes.value.find((s) => s.id === selectedShapeId.value) ?? null,
+  const selectedShape = computed(
+    () => shapes.value.find((s) => s.id === selectedShapeId.value) ?? null,
   );
 
   const nextOrdinal = computed(() => {
@@ -90,18 +90,14 @@ export function useImageOcclusionEditor(initialShapes: OcclusionShape[] = []) {
   }
 
   function moveShape(id: string, dx: number, dy: number) {
-    shapes.value = shapes.value.map((s) =>
-      s.id === id ? { ...s, x: s.x + dx, y: s.y + dy } : s,
-    );
+    shapes.value = shapes.value.map((s) => (s.id === id ? { ...s, x: s.x + dx, y: s.y + dy } : s));
   }
 
   function resizeShape(
     id: string,
     bounds: { x: number; y: number; width: number; height: number },
   ) {
-    shapes.value = shapes.value.map((s) =>
-      s.id === id ? { ...s, ...bounds } : s,
-    );
+    shapes.value = shapes.value.map((s) => (s.id === id ? { ...s, ...bounds } : s));
   }
 
   function deleteShape(id: string) {

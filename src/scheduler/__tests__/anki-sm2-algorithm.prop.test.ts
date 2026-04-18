@@ -253,24 +253,20 @@ describe("SM2 Algorithm — property-based tests", () => {
   describe("leech detection", () => {
     it("leech triggers at exact threshold boundary", () => {
       fc.assert(
-        fc.property(
-          fc.integer({ min: 2, max: 20 }),
-          arbCardId,
-          (threshold, cardId) => {
-            const custom = new AnkiSM2Algorithm({ leechThreshold: threshold });
-            const card: AnkiSM2CardState = {
-              phase: "review",
-              step: 0,
-              ease: 2.5,
-              interval: 10,
-              due: Date.now(),
-              lapses: threshold - 1,
-              reps: 50,
-            };
-            const result = custom.reviewCard(card, "again", cardId);
-            expect((result.reviewLog as AnkiSM2ReviewLog).leeched).toBe(true);
-          },
-        ),
+        fc.property(fc.integer({ min: 2, max: 20 }), arbCardId, (threshold, cardId) => {
+          const custom = new AnkiSM2Algorithm({ leechThreshold: threshold });
+          const card: AnkiSM2CardState = {
+            phase: "review",
+            step: 0,
+            ease: 2.5,
+            interval: 10,
+            due: Date.now(),
+            lapses: threshold - 1,
+            reps: 50,
+          };
+          const result = custom.reviewCard(card, "again", cardId);
+          expect((result.reviewLog as AnkiSM2ReviewLog).leeched).toBe(true);
+        }),
         { numRuns: NUM_RUNS ?? 50 },
       );
     });

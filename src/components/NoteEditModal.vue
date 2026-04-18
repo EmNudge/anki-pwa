@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from "vue";
-import Modal from "../design-system/components/primitives/Modal.vue";
-import Button from "../design-system/components/primitives/Button.vue";
+import { Button, Modal } from "../design-system";
 import TiptapEditor from "./TiptapEditor.vue";
 import ImageOcclusionNoteEditor from "./ImageOcclusionNoteEditor.vue";
 import type { AnkiDB2Data } from "../ankiParser/anki2";
@@ -77,7 +76,12 @@ function handleSave() {
 </script>
 
 <template>
-  <Modal :is-open="isOpen" :title="isIONote ? 'Edit Image Occlusion' : 'Edit Note'" :size="isIONote ? 'xl' : 'lg'" @close="emit('close')">
+  <Modal
+    :is-open="isOpen"
+    :title="isIONote ? 'Edit Image Occlusion' : 'Edit Note'"
+    :size="isIONote ? 'xl' : 'lg'"
+    @close="emit('close')"
+  >
     <!-- Image Occlusion editor -->
     <ImageOcclusionNoteEditor
       v-if="isIONote"

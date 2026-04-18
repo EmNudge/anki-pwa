@@ -1,4 +1,5 @@
 import katex from "katex";
+import { decodeHtmlEntities } from "./format";
 import { isClozeNode, parseClozeNodes, renderTemplateString } from "./templateParser";
 import { stripHtmlForComparison } from "./typeansDiff";
 
@@ -165,7 +166,9 @@ function stripAvTags(html: string): string {
  * Strip type: input fields from FrontSide HTML when injecting into answer side.
  */
 function stripTypeInputs(html: string): string {
-  return html.replace(/<input[^>]*id="typeans"[^>]*>/g, "").replace(/<input[^>]*class="typeans-input"[^>]*>/g, "");
+  return html
+    .replace(/<input[^>]*id="typeans"[^>]*>/g, "")
+    .replace(/<input[^>]*class="typeans-input"[^>]*>/g, "");
 }
 
 /**
@@ -504,22 +507,8 @@ function replaceLatex(renderedString: string, macros: Record<string, string> = {
     ...(hasMacros ? { macros } : {}),
   });
 
-  const cleanAndUnescapeLatex = (latex: string) => {
-    // Strip HTML tags that Anki may have inserted
-    let cleanLatex = latex.replace(/<[^>]+>/g, "");
-
-    // Unescape HTML entities
-    cleanLatex = cleanLatex
-      .replace(/&amp;/g, "&")
-      .replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">")
-      .replace(/&quot;/g, '"')
-      .replace(/&#39;/g, "'")
-      .replace(/&nbsp;/g, " ");
-
-    // Trim whitespace
-    return cleanLatex.trim();
-  };
+  const cleanAndUnescapeLatex = (latex: string) =>
+    decodeHtmlEntities(latex.replace(/<[^>]+>/g, "")).trim();
 
   const replaceMathBlock = (displayMode: boolean) => (_match: string, latex: string) => {
     try {
@@ -690,5 +679,9 @@ export function hasTypeAnswerField(html: string): boolean {
 export function extractExpectedAnswer(backHtml: string): string | null {
   const match = backHtml.match(/id="typeans"\s+data-expected="([^"]*)"/);
   if (!match) return null;
-  return match[1]!.replace(/&quot;/g, '"').replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
+  return match[1]!
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">");
 }

@@ -4,7 +4,12 @@ import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import FlashCard from "./components/FlashCard.vue";
 import CardButtons from "./components/CardButtons.vue";
 import type { Answer } from "./scheduler/types";
-import { getRenderedCardString, hasTypeAnswerField, extractExpectedAnswer, replaceMediaFiles } from "./utils/render";
+import {
+  getRenderedCardString,
+  hasTypeAnswerField,
+  extractExpectedAnswer,
+  replaceMediaFiles,
+} from "./utils/render";
 import { isImageOcclusionCard, renderImageOcclusion } from "./utils/imageOcclusion";
 import { renderDiffHtml } from "./utils/typeansDiff";
 import { computeDeckInfo } from "./utils/deckInfo";
@@ -47,7 +52,9 @@ import { defineAsyncComponent } from "vue";
 const StatsPanel = defineAsyncComponent(() => import("./components/StatsPanel.vue"));
 const NoteTypeManager = defineAsyncComponent(() => import("./components/NoteTypeManager.vue"));
 const BackupPanel = defineAsyncComponent(() => import("./components/BackupPanel.vue"));
-const DatabaseCheckPanel = defineAsyncComponent(() => import("./components/DatabaseCheckPanel.vue"));
+const DatabaseCheckPanel = defineAsyncComponent(
+  () => import("./components/DatabaseCheckPanel.vue"),
+);
 import CongratsScreen from "./components/CongratsScreen.vue";
 import SchedulerSettings from "./components/SchedulerSettings.vue";
 import FlagSettings from "./components/FlagSettings.vue";
@@ -55,13 +62,19 @@ import CommandPalette from "./components/CommandPalette.vue";
 import { useCommands } from "./composables/useCommands";
 import { getAutoplayAudioSources, playAudio } from "./utils/sound";
 import { Info } from "lucide-vue-next";
-import Modal from "./design-system/components/primitives/Modal.vue";
-import Tooltip from "./design-system/components/primitives/Tooltip.vue";
+import { Modal, Tooltip } from "./design-system";
 import { markDataChanged, startAutoSync } from "./lib/autoSync";
 import { startAutoBackup } from "./backup/autoBackup";
 import NoteEditModal from "./components/NoteEditModal.vue";
 import ImageOcclusionNoteEditor from "./components/ImageOcclusionNoteEditor.vue";
-import { updateNote, isSyncedCollection, addNote, getOrCreateIONotetype, addMediaToCache, getActiveDeckId } from "./stores";
+import {
+  updateNote,
+  isSyncedCollection,
+  addNote,
+  getOrCreateIONotetype,
+  addMediaToCache,
+  getActiveDeckId,
+} from "./stores";
 
 const activeSide = ref<"front" | "back">("front");
 const reviewStartTime = ref<number>(Date.now());
@@ -219,10 +232,7 @@ const backHtmlWithDiff = computed(() => {
   const diffHtml = renderDiffHtml(typedAnswer.value, expected);
 
   // Replace the typeans span with the diff HTML
-  return card.backSideHtml.replace(
-    /<span id="typeans"[^>]*>[\s\S]*?<\/span>/,
-    diffHtml,
-  );
+  return card.backSideHtml.replace(/<span id="typeans"[^>]*>[\s\S]*?<\/span>/, diffHtml);
 });
 
 // Reset typed answer when the card changes
@@ -288,7 +298,11 @@ async function handleNoteSave(payload: { fields: Record<string, string | null>; 
   editModalOpen.value = false;
 }
 
-async function handleIONoteCreate(payload: { fields: Record<string, string | null>; tags: string[]; imageFile?: File }) {
+async function handleIONoteCreate(payload: {
+  fields: Record<string, string | null>;
+  tags: string[];
+  imageFile?: File;
+}) {
   try {
     // Cache image file if provided
     if (payload.imageFile) {
@@ -372,10 +386,7 @@ async function handleUndoRedoKeydown(e: KeyboardEvent) {
     e.preventDefault();
     const desc = await executeUndo();
     if (desc) showUndoToast(`Undo: ${desc}`);
-  } else if (
-    (e.key.toLowerCase() === "z" && e.shiftKey) ||
-    e.key.toLowerCase() === "y"
-  ) {
+  } else if ((e.key.toLowerCase() === "z" && e.shiftKey) || e.key.toLowerCase() === "y") {
     e.preventDefault();
     const desc = await executeRedo();
     if (desc) showUndoToast(`Redo: ${desc}`);
@@ -523,13 +534,29 @@ onUnmounted(clearAutoAdvanceTimer);
       <template v-if="renderedCard">
         <div v-if="activeFilteredDeckSig" class="filtered-deck-header">
           <span class="filtered-deck-name">
-            <svg class="filtered-deck-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <svg
+              class="filtered-deck-icon"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
               <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
             </svg>
             {{ activeFilteredDeckSig.name }}
             <span v-if="!activeFilteredDeckSig.reschedule" class="cram-badge">Cram</span>
           </span>
-          <button class="filtered-deck-close" @click="emptyFilteredDeck(activeFilteredDeckSig.id); reviewModeSig = 'deck-list'">
+          <button
+            class="filtered-deck-close"
+            @click="
+              emptyFilteredDeck(activeFilteredDeckSig.id);
+              reviewModeSig = 'deck-list';
+            "
+          >
             &times;
           </button>
         </div>
@@ -545,7 +572,9 @@ onUnmounted(clearAutoAdvanceTimer);
             class="deck-info-btn io-add-btn"
             title="Add Image Occlusion Note"
             @click="ioCreateModalOpen = true"
-          >+IO</button>
+          >
+            +IO
+          </button>
         </div>
         <FlashCard
           :active-side="activeSide"
@@ -934,11 +963,15 @@ main {
 }
 
 .toast-enter-active {
-  transition: opacity 0.2s ease, transform 0.2s ease;
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
 }
 
 .toast-leave-active {
-  transition: opacity 0.3s ease, transform 0.3s ease;
+  transition:
+    opacity 0.3s ease,
+    transform 0.3s ease;
 }
 
 .toast-enter-from {

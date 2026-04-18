@@ -74,9 +74,62 @@ type CardRow = [
 
 export const chunkSchema = z.object({
   done: z.boolean(),
-  revlog: z.array(z.tuple([z.number(), z.number(), z.number(), z.number(), z.number(), z.number(), z.number(), z.number(), z.number()])).default([]),
-  cards: z.array(z.tuple([z.number(), z.number(), z.number(), z.number(), z.number(), z.number(), z.number(), z.number(), z.number(), z.number(), z.number(), z.number(), z.number(), z.number(), z.number(), z.number(), z.number(), z.string()])).default([]),
-  notes: z.array(z.tuple([z.number(), z.string(), z.number(), z.number(), z.number(), z.string(), z.string(), z.string(), z.coerce.number(), z.number(), z.string()])).default([]),
+  revlog: z
+    .array(
+      z.tuple([
+        z.number(),
+        z.number(),
+        z.number(),
+        z.number(),
+        z.number(),
+        z.number(),
+        z.number(),
+        z.number(),
+        z.number(),
+      ]),
+    )
+    .default([]),
+  cards: z
+    .array(
+      z.tuple([
+        z.number(),
+        z.number(),
+        z.number(),
+        z.number(),
+        z.number(),
+        z.number(),
+        z.number(),
+        z.number(),
+        z.number(),
+        z.number(),
+        z.number(),
+        z.number(),
+        z.number(),
+        z.number(),
+        z.number(),
+        z.number(),
+        z.number(),
+        z.string(),
+      ]),
+    )
+    .default([]),
+  notes: z
+    .array(
+      z.tuple([
+        z.number(),
+        z.string(),
+        z.number(),
+        z.number(),
+        z.number(),
+        z.string(),
+        z.string(),
+        z.string(),
+        z.coerce.number(),
+        z.number(),
+        z.string(),
+      ]),
+    )
+    .default([]),
 });
 
 export type Chunk = z.infer<typeof chunkSchema>;
@@ -192,10 +245,7 @@ function mergeColJsonField<T extends { id: number; mod?: number }>(
  * compared to the local version. A mismatch means cards could become corrupt
  * and a full sync is required (matching desktop Anki's ResyncRequired behavior).
  */
-function validateNotetypeSchema(
-  localModel: SyncModel,
-  remoteModel: SyncModel,
-): void {
+function validateNotetypeSchema(localModel: SyncModel, remoteModel: SyncModel): void {
   const localFlds = Array.isArray(localModel.flds) ? localModel.flds.length : -1;
   const remoteFlds = Array.isArray(remoteModel.flds) ? remoteModel.flds.length : -1;
   const localTmpls = Array.isArray(localModel.tmpls) ? localModel.tmpls.length : -1;
@@ -374,7 +424,11 @@ export function applyRemoteUnchunkedChanges(
   }
 }
 
-function applyRemoteUnchunkedAnki2(db: Database, changes: UnchunkedChanges, localIsNewer: boolean): void {
+function applyRemoteUnchunkedAnki2(
+  db: Database,
+  changes: UnchunkedChanges,
+  localIsNewer: boolean,
+): void {
   // Models — merge with mod-time conflict resolution + schema validation
   if (changes.models.length > 0) {
     const local = getColJson<Record<string, SyncModel>>(db, "models", {});
@@ -419,7 +473,11 @@ function applyRemoteUnchunkedAnki2(db: Database, changes: UnchunkedChanges, loca
   }
 }
 
-function applyRemoteUnchunkedAnki21b(db: Database, changes: UnchunkedChanges, localIsNewer: boolean): void {
+function applyRemoteUnchunkedAnki21b(
+  db: Database,
+  changes: UnchunkedChanges,
+  localIsNewer: boolean,
+): void {
   // Models (notetypes) — stored in notetypes table, with schema validation
   for (const m of changes.models) {
     const mtimeSecs = "mtime_secs" in m ? Number(m.mtime_secs) : undefined;
@@ -639,28 +697,55 @@ export function* buildLocalChunks(db: Database): Generator<Chunk> {
     "SELECT id, nid, did, ord, mod, usn, type, queue, due, ivl, factor, reps, lapses, left, odue, odid, flags, data FROM cards WHERE usn=-1",
   );
   const pendingCards: CardRow[] = (cardsResult[0]?.values ?? []).map((row) => [
-    Number(row[0]), Number(row[1]), Number(row[2]), Number(row[3]),
-    Number(row[4]), Number(row[5]), Number(row[6]), Number(row[7]),
-    Number(row[8]), Number(row[9]), Number(row[10]), Number(row[11]),
-    Number(row[12]), Number(row[13]), Number(row[14]), Number(row[15]),
-    Number(row[16]), String(row[17] ?? ""),
+    Number(row[0]),
+    Number(row[1]),
+    Number(row[2]),
+    Number(row[3]),
+    Number(row[4]),
+    Number(row[5]),
+    Number(row[6]),
+    Number(row[7]),
+    Number(row[8]),
+    Number(row[9]),
+    Number(row[10]),
+    Number(row[11]),
+    Number(row[12]),
+    Number(row[13]),
+    Number(row[14]),
+    Number(row[15]),
+    Number(row[16]),
+    String(row[17] ?? ""),
   ]);
 
   const notesResult = db.exec(
     "SELECT id, guid, mid, mod, usn, tags, flds, sfld, csum, flags, data FROM notes WHERE usn=-1",
   );
   const pendingNotes: NoteRow[] = (notesResult[0]?.values ?? []).map((row) => [
-    Number(row[0]), String(row[1] ?? ""), Number(row[2]), Number(row[3]),
-    Number(row[4]), String(row[5] ?? ""), String(row[6] ?? ""), String(row[7] ?? ""),
-    Number(row[8]), Number(row[9]), String(row[10] ?? ""),
+    Number(row[0]),
+    String(row[1] ?? ""),
+    Number(row[2]),
+    Number(row[3]),
+    Number(row[4]),
+    String(row[5] ?? ""),
+    String(row[6] ?? ""),
+    String(row[7] ?? ""),
+    Number(row[8]),
+    Number(row[9]),
+    String(row[10] ?? ""),
   ]);
 
   const revlogResult = db.exec(
     "SELECT id, cid, usn, ease, ivl, lastIvl, factor, time, type FROM revlog WHERE usn=-1",
   );
   const pendingRevlog: RevlogRow[] = (revlogResult[0]?.values ?? []).map((row) => [
-    Number(row[0]), Number(row[1]), Number(row[2]), Number(row[3]),
-    Number(row[4]), Number(row[5]), Number(row[6]), Number(row[7]),
+    Number(row[0]),
+    Number(row[1]),
+    Number(row[2]),
+    Number(row[3]),
+    Number(row[4]),
+    Number(row[5]),
+    Number(row[6]),
+    Number(row[7]),
     Number(row[8]),
   ]);
 
