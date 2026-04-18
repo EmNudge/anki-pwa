@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from "vue";
-import Modal from "~/design-system/components/primitives/Modal.vue";
-import Button from "~/design-system/components/primitives/Button.vue";
+import { Button, Modal } from "~/design-system";
 
 export interface NotetypeInfo {
   id: string;
@@ -24,9 +23,7 @@ const emit = defineEmits<{
 const targetNtid = ref("");
 const fieldMapping = ref<Record<string, string>>({});
 
-const targetNotetype = computed(() =>
-  props.allNotetypes.find((nt) => nt.id === targetNtid.value),
-);
+const targetNotetype = computed(() => props.allNotetypes.find((nt) => nt.id === targetNtid.value));
 
 const availableTargets = computed(() =>
   props.allNotetypes.filter((nt) => nt.id !== props.sourceNotetype.id),
@@ -42,9 +39,7 @@ watch(targetNtid, () => {
   // Auto-map fields with matching names
   const map: Record<string, string> = {};
   for (const tf of target.fields) {
-    const match = props.sourceNotetype.fields.find(
-      (sf) => sf.toLowerCase() === tf.toLowerCase(),
-    );
+    const match = props.sourceNotetype.fields.find((sf) => sf.toLowerCase() === tf.toLowerCase());
     if (match) map[tf] = match;
   }
   fieldMapping.value = map;
@@ -97,11 +92,7 @@ function handleConvert() {
               @change="fieldMapping[targetField] = ($event.target as HTMLSelectElement).value"
             >
               <option value="">(empty)</option>
-              <option
-                v-for="sf in sourceNotetype.fields"
-                :key="sf"
-                :value="sf"
-              >
+              <option v-for="sf in sourceNotetype.fields" :key="sf" :value="sf">
                 {{ sf }}
               </option>
             </select>

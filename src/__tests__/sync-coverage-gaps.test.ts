@@ -26,8 +26,7 @@
  */
 import "fake-indexeddb/auto";
 import { describe, test, expect, beforeEach } from "vitest";
-import initSqlJs, { type SqlJsStatic, type Database } from "sql.js";
-import { join } from "node:path";
+import { type SqlJsStatic } from "sql.js";
 import {
   applyRemoteChunk,
   applyRemoteGraves,
@@ -51,238 +50,16 @@ import {
   readDeckStepCounts,
 } from "../lib/syncWrite";
 import { reviewDB } from "../scheduler/db";
+import { getSqlJs, scalar, createAnki2Collection, createAnki21bDb } from "./testDbUtils";
 
 // ── SQL.js setup ──────────────────────────────────────────────────
 
 let SQL: SqlJsStatic;
 
 beforeEach(async () => {
-  if (!SQL) {
-    const wasmPath = join(process.cwd(), "node_modules", "sql.js", "dist", "sql-wasm.wasm");
-    SQL = await initSqlJs({ locateFile: () => wasmPath });
-  }
+  SQL = await getSqlJs();
   await reviewDB.clearAll();
 });
-
-/** Read a scalar value from the database. */
-function scalar(db: Database, sql: string): unknown {
-  const r = db.exec(sql);
-  return r[0]?.values[0]?.[0] ?? null;
-}
-
-/** Create a minimal anki2 collection with proper schema. */
-function createAnki2Collection(
-  opts: {
-    dconf?: Record<string, unknown>;
-    decks?: Record<string, unknown>;
-    models?: Record<string, unknown>;
-    tags?: Record<string, number>;
-    conf?: Record<string, unknown>;
-    cardOverrides?: Record<string, unknown>;
-    extraCards?: Array<Record<string, unknown>>;
-    extraNotes?: Array<Record<string, unknown>>;
-  } = {},
-): Database {
-  const db = new SQL.Database();
-  const nowMs = Date.now();
-  const nowSec = Math.floor(nowMs / 1000);
-  const crt = nowSec - 86400 * 30;
-
-  const defaultDconf = {
-    "1": {
-      id: 1, mod: nowSec, name: "Default", usn: 0,
-      new: { delays: [1, 10], order: 1, perDay: 20 },
-      lapse: { delays: [10], minInt: 1, mult: 0, leechFails: 8 },
-      rev: { perDay: 200, ease4: 1.3, hardFactor: 1.2, ivlFct: 1.0, maxIvl: 36500, fuzz: true },
-    },
-  };
-
-  const defaultDecks = {
-    "1": { id: 1, mod: nowSec, name: "Default", usn: 0, conf: "1" },
-  };
-
-  const defaultModels = {
-    "1234567890": {
-      id: 1234567890, mod: nowSec, name: "Basic", usn: 0,
-      flds: [{ name: "Front", ord: 0 }, { name: "Back", ord: 1 }],
-      tmpls: [{ name: "Card 1", qfmt: "{{Front}}", afmt: "{{Back}}", ord: 0 }],
-    },
-  };
-
-  db.run(`CREATE TABLE col (
-    id integer primary key, crt integer NOT NULL, mod integer NOT NULL,
-    scm integer NOT NULL, ver integer NOT NULL, dty integer NOT NULL,
-    usn integer NOT NULL, ls integer NOT NULL, conf text NOT NULL,
-    models text NOT NULL, decks text NOT NULL, dconf text NOT NULL, tags text NOT NULL
-  )`);
-  db.run(
-    `INSERT INTO col VALUES (1, ?, ?, ?, 11, 0, 0, 0, ?, ?, ?, ?, ?)`,
-    [
-      crt, nowMs, nowSec,
-      JSON.stringify(opts.conf ?? {}),
-      JSON.stringify(opts.models ?? defaultModels),
-      JSON.stringify(opts.decks ?? defaultDecks),
-      JSON.stringify(opts.dconf ?? defaultDconf),
-      JSON.stringify(opts.tags ?? {}),
-    ],
-  );
-
-  db.run(`CREATE TABLE notes (
-    id integer primary key, guid text NOT NULL, mid integer NOT NULL,
-    mod integer NOT NULL, usn integer NOT NULL, tags text NOT NULL,
-    flds text NOT NULL, sfld integer NOT NULL, csum integer NOT NULL,
-    flags integer NOT NULL, data text NOT NULL
-  )`);
-  db.run(`CREATE TABLE cards (
-    id integer primary key, nid integer NOT NULL, did integer NOT NULL,
-    ord integer NOT NULL, mod integer NOT NULL, usn integer NOT NULL,
-    type integer NOT NULL, queue integer NOT NULL, due integer NOT NULL,
-    ivl integer NOT NULL, factor integer NOT NULL, reps integer NOT NULL,
-    lapses integer NOT NULL, left integer NOT NULL, odue integer NOT NULL,
-    odid integer NOT NULL, flags integer NOT NULL, data text NOT NULL
-  )`);
-  db.run(`CREATE TABLE revlog (
-    id integer primary key, cid integer NOT NULL, usn integer NOT NULL,
-    ease integer NOT NULL, ivl integer NOT NULL, lastIvl integer NOT NULL,
-    factor integer NOT NULL, time integer NOT NULL, type integer NOT NULL
-  )`);
-  db.run(`CREATE TABLE graves (
-    usn integer NOT NULL, oid integer NOT NULL, type integer NOT NULL
-  )`);
-
-  // Insert default note
-  db.run(`INSERT INTO notes VALUES (100, 'abc123', 1234567890, ?, 0, '', 'front\x1fback', 'front', 0, 0, '')`, [nowSec]);
-
-  // Insert extra notes
-  for (const note of opts.extraNotes ?? []) {
-    const n = {
-      id: 101, guid: "def456", mid: 1234567890, mod: nowSec, usn: 0,
-      tags: "", flds: "q\x1fa", sfld: "q", csum: 0, flags: 0, data: "",
-      ...note,
-    };
-    db.run(
-      "INSERT INTO notes VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-      [n.id, n.guid, n.mid, n.mod, n.usn, n.tags, n.flds, n.sfld, n.csum, n.flags, n.data],
-    );
-  }
-
-  const cardDefaults = {
-    id: 200, nid: 100, did: 1, ord: 0, mod: nowSec, usn: 0,
-    type: 0, queue: 0, due: 0, ivl: 0, factor: 0, reps: 0,
-    lapses: 0, left: 0, odue: 0, odid: 0, flags: 0, data: "",
-    ...opts.cardOverrides,
-  };
-
-  db.run(
-    "INSERT INTO cards VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-    [
-      cardDefaults.id, cardDefaults.nid, cardDefaults.did, cardDefaults.ord,
-      cardDefaults.mod, cardDefaults.usn, cardDefaults.type, cardDefaults.queue,
-      cardDefaults.due, cardDefaults.ivl, cardDefaults.factor, cardDefaults.reps,
-      cardDefaults.lapses, cardDefaults.left, cardDefaults.odue, cardDefaults.odid,
-      cardDefaults.flags, cardDefaults.data,
-    ],
-  );
-
-  // Insert extra cards
-  for (const card of opts.extraCards ?? []) {
-    const c = {
-      id: 201, nid: 100, did: 1, ord: 0, mod: nowSec, usn: 0,
-      type: 0, queue: 0, due: 0, ivl: 0, factor: 0, reps: 0,
-      lapses: 0, left: 0, odue: 0, odid: 0, flags: 0, data: "",
-      ...card,
-    };
-    db.run(
-      "INSERT INTO cards VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-      [c.id, c.nid, c.did, c.ord, c.mod, c.usn, c.type, c.queue,
-       c.due, c.ivl, c.factor, c.reps, c.lapses, c.left, c.odue, c.odid, c.flags, c.data],
-    );
-  }
-
-  return db;
-}
-
-/** Create a minimal anki21b collection with separate tables. */
-function createAnki21bDb(
-  opts: {
-    notetypes?: Array<{ id: number; name: string; mtime_secs: number; usn: number; config: string }>;
-    decks?: Array<{ id: number; name: string; mtime: number; usn: number; common: string }>;
-    deckConfigs?: Array<{ id: number; name: string; mtime: number; usn: number; config: string }>;
-    tags?: Array<{ tag: string; usn: number }>;
-    conf?: Record<string, unknown>;
-  } = {},
-): Database {
-  const db = new SQL.Database();
-  const nowMs = Date.now();
-  const nowSec = Math.floor(nowMs / 1000);
-  const crt = nowSec - 86400 * 30;
-
-  db.run(`CREATE TABLE col (
-    id integer primary key, crt integer NOT NULL, mod integer NOT NULL,
-    scm integer NOT NULL, ver integer NOT NULL, dty integer NOT NULL,
-    usn integer NOT NULL, ls integer NOT NULL, conf text NOT NULL,
-    models text NOT NULL, decks text NOT NULL, dconf text NOT NULL, tags text NOT NULL
-  )`);
-  db.run(
-    `INSERT INTO col VALUES (1, ?, ?, ?, 11, 0, 0, 0, ?, '{}', '{}', '{}', '{}')`,
-    [crt, nowMs, nowSec, JSON.stringify(opts.conf ?? {})],
-  );
-
-  db.run(`CREATE TABLE notetypes (
-    id integer primary key, name text NOT NULL, mtime_secs integer NOT NULL,
-    usn integer NOT NULL, config text NOT NULL
-  )`);
-  db.run(`CREATE TABLE decks (
-    id integer primary key, name text NOT NULL, mtime integer NOT NULL,
-    usn integer NOT NULL, common text NOT NULL
-  )`);
-  db.run(`CREATE TABLE deck_config (
-    id integer primary key, name text NOT NULL, mtime integer NOT NULL,
-    usn integer NOT NULL, config text NOT NULL
-  )`);
-  db.run(`CREATE TABLE tags (tag text primary key, usn integer NOT NULL)`);
-
-  db.run(`CREATE TABLE notes (
-    id integer primary key, guid text NOT NULL, mid integer NOT NULL,
-    mod integer NOT NULL, usn integer NOT NULL, tags text NOT NULL,
-    flds text NOT NULL, sfld integer NOT NULL, csum integer NOT NULL,
-    flags integer NOT NULL, data text NOT NULL
-  )`);
-  db.run(`CREATE TABLE cards (
-    id integer primary key, nid integer NOT NULL, did integer NOT NULL,
-    ord integer NOT NULL, mod integer NOT NULL, usn integer NOT NULL,
-    type integer NOT NULL, queue integer NOT NULL, due integer NOT NULL,
-    ivl integer NOT NULL, factor integer NOT NULL, reps integer NOT NULL,
-    lapses integer NOT NULL, left integer NOT NULL, odue integer NOT NULL,
-    odid integer NOT NULL, flags integer NOT NULL, data text NOT NULL
-  )`);
-  db.run(`CREATE TABLE revlog (
-    id integer primary key, cid integer NOT NULL, usn integer NOT NULL,
-    ease integer NOT NULL, ivl integer NOT NULL, lastIvl integer NOT NULL,
-    factor integer NOT NULL, time integer NOT NULL, type integer NOT NULL
-  )`);
-  db.run(`CREATE TABLE graves (
-    usn integer NOT NULL, oid integer NOT NULL, type integer NOT NULL
-  )`);
-
-  // Insert default deck
-  db.run("INSERT INTO decks VALUES (1, 'Default', 0, 0, '{}')");
-
-  for (const d of opts.decks ?? []) {
-    db.run("INSERT OR REPLACE INTO decks VALUES (?,?,?,?,?)", [d.id, d.name, d.mtime, d.usn, d.common]);
-  }
-  for (const nt of opts.notetypes ?? []) {
-    db.run("INSERT INTO notetypes VALUES (?,?,?,?,?)", [nt.id, nt.name, nt.mtime_secs, nt.usn, nt.config]);
-  }
-  for (const dc of opts.deckConfigs ?? []) {
-    db.run("INSERT INTO deck_config VALUES (?,?,?,?,?)", [dc.id, dc.name, dc.mtime, dc.usn, dc.config]);
-  }
-  for (const t of opts.tags ?? []) {
-    db.run("INSERT INTO tags VALUES (?,?)", [t.tag, t.usn]);
-  }
-
-  return db;
-}
 
 // ── Tests ──────────────────────────────────────────────────────────
 
@@ -316,8 +93,8 @@ describe("sync coverage gaps", () => {
       const parsed = JSON.parse(data);
 
       expect(parsed.s).toBe(12.3457); // 4 decimal places
-      expect(parsed.d).toBe(5.679);   // 3 decimal places
-      expect(parsed.dr).toBe(0.91);   // 2 decimal places
+      expect(parsed.d).toBe(5.679); // 3 decimal places
+      expect(parsed.dr).toBe(0.91); // 2 decimal places
       expect(parsed.decay).toBe(0.123); // 3 decimal places
       expect(parsed.lrt).toBe(1700000000); // seconds, not ms
     });
@@ -329,9 +106,12 @@ describe("sync coverage gaps", () => {
         algorithm: "sm2" as const,
         cardState: {
           phase: "review" as const,
-          step: 0, ease: 2.5, interval: 10,
+          step: 0,
+          ease: 2.5,
+          interval: 10,
           due: Date.now() + 86400000 * 10,
-          lapses: 0, reps: 5,
+          lapses: 0,
+          reps: 5,
         },
         createdAt: Date.now() - 86400000,
         lastReviewed: Date.now(),
@@ -347,8 +127,12 @@ describe("sync coverage gaps", () => {
         algorithm: "fsrs" as const,
         cardState: {
           phase: "review" as const,
-          step: 0, ease: 2.5, interval: 10,
-          due: Date.now(), lapses: 0, reps: 3,
+          step: 0,
+          ease: 2.5,
+          interval: 10,
+          due: Date.now(),
+          lapses: 0,
+          reps: 3,
           stability: 5.0,
           difficulty: 3.0,
           // no desiredRetention, no decay
@@ -368,7 +152,7 @@ describe("sync coverage gaps", () => {
     });
 
     test("mergeIndexedDBToSqlite writes FSRS card data to SQLite", async () => {
-      const db = createAnki2Collection();
+      const db = createAnki2Collection(SQL);
 
       await reviewDB.saveCard({
         cardId: "200",
@@ -376,9 +160,12 @@ describe("sync coverage gaps", () => {
         algorithm: "fsrs",
         cardState: {
           phase: "review",
-          step: 0, ease: 2.5, interval: 10,
+          step: 0,
+          ease: 2.5,
+          interval: 10,
           due: Date.now() + 86400000 * 10,
-          lapses: 0, reps: 5,
+          lapses: 0,
+          reps: 5,
           stability: 12.345,
           difficulty: 5.678,
         },
@@ -398,7 +185,7 @@ describe("sync coverage gaps", () => {
     });
 
     test("FSRS factor encoding uses difficulty-to-ease mapping", async () => {
-      const db = createAnki2Collection();
+      const db = createAnki2Collection(SQL);
 
       await reviewDB.saveCard({
         cardId: "200",
@@ -406,9 +193,12 @@ describe("sync coverage gaps", () => {
         algorithm: "fsrs",
         cardState: {
           phase: "review",
-          step: 0, ease: 2.5, interval: 10,
+          step: 0,
+          ease: 2.5,
+          interval: 10,
           due: Date.now() + 86400000 * 10,
-          lapses: 0, reps: 5,
+          lapses: 0,
+          reps: 5,
           stability: 10.0,
           difficulty: 5.5,
         },
@@ -468,19 +258,44 @@ describe("sync coverage gaps", () => {
 
   describe("multi-chunk sequences", () => {
     test("buildLocalChunks yields multiple chunks for >250 items", () => {
-      const db = createAnki2Collection();
+      const db = createAnki2Collection(SQL);
 
       // Insert 300 cards with usn=-1 (pending)
       const nowSec = Math.floor(Date.now() / 1000);
       for (let i = 1; i <= 300; i++) {
-        db.run(
-          "INSERT INTO notes VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-          [1000 + i, `guid_${i}`, 1234567890, nowSec, -1, "", `front_${i}\x1fback_${i}`, `front_${i}`, 0, 0, ""],
-        );
-        db.run(
-          "INSERT INTO cards VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-          [2000 + i, 1000 + i, 1, 0, nowSec, -1, 0, 0, i, 0, 0, 0, 0, 0, 0, 0, 0, ""],
-        );
+        db.run("INSERT INTO notes VALUES (?,?,?,?,?,?,?,?,?,?,?)", [
+          1000 + i,
+          `guid_${i}`,
+          1234567890,
+          nowSec,
+          -1,
+          "",
+          `front_${i}\x1fback_${i}`,
+          `front_${i}`,
+          0,
+          0,
+          "",
+        ]);
+        db.run("INSERT INTO cards VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", [
+          2000 + i,
+          1000 + i,
+          1,
+          0,
+          nowSec,
+          -1,
+          0,
+          0,
+          i,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          "",
+        ]);
       }
 
       const chunks = [...buildLocalChunks(db)];
@@ -502,7 +317,7 @@ describe("sync coverage gaps", () => {
     });
 
     test("buildLocalChunks yields single done chunk for empty collection", () => {
-      const db = createAnki2Collection();
+      const db = createAnki2Collection(SQL);
       // All cards/notes have usn=0 (not pending), so no chunks to send
 
       const chunks = [...buildLocalChunks(db)];
@@ -516,7 +331,7 @@ describe("sync coverage gaps", () => {
     });
 
     test("buildLocalChunks interleaves revlog, notes, cards in order", () => {
-      const db = createAnki2Collection({
+      const db = createAnki2Collection(SQL, {
         cardOverrides: { usn: -1 },
       });
       // Also mark the default note as pending
@@ -539,14 +354,11 @@ describe("sync coverage gaps", () => {
 
   describe("anki21b table operations", () => {
     test("applyRemoteUnchunkedChanges merges decks into anki21b decks table", () => {
-      const db = createAnki21bDb();
+      const db = createAnki21bDb(SQL);
 
       const changes: UnchunkedChanges = {
         models: [],
-        decks: [
-          [{ id: 2, name: "Science", mtime: 100, usn: 5 }],
-          [],
-        ],
+        decks: [[{ id: 2, name: "Science", mtime: 100, usn: 5 }], []],
         tags: [],
       };
 
@@ -561,16 +373,13 @@ describe("sync coverage gaps", () => {
     });
 
     test("applyRemoteUnchunkedChanges skips older deck in anki21b", () => {
-      const db = createAnki21bDb({
+      const db = createAnki21bDb(SQL, {
         decks: [{ id: 2, name: "LocalDeck", mtime: 200, usn: 0, common: "{}" }],
       });
 
       const changes: UnchunkedChanges = {
         models: [],
-        decks: [
-          [{ id: 2, name: "OlderRemote", mtime: 100, usn: 5 }],
-          [],
-        ],
+        decks: [[{ id: 2, name: "OlderRemote", mtime: 100, usn: 5 }], []],
         tags: [],
       };
 
@@ -584,14 +393,11 @@ describe("sync coverage gaps", () => {
     });
 
     test("applyRemoteUnchunkedChanges merges deck_config in anki21b", () => {
-      const db = createAnki21bDb();
+      const db = createAnki21bDb(SQL);
 
       const changes: UnchunkedChanges = {
         models: [],
-        decks: [
-          [],
-          [{ id: 1, name: "Custom", mtime: 100, usn: 5 }],
-        ],
+        decks: [[], [{ id: 1, name: "Custom", mtime: 100, usn: 5 }]],
         tags: [],
       };
 
@@ -604,16 +410,13 @@ describe("sync coverage gaps", () => {
     });
 
     test("applyRemoteUnchunkedChanges skips older deck_config in anki21b", () => {
-      const db = createAnki21bDb({
+      const db = createAnki21bDb(SQL, {
         deckConfigs: [{ id: 1, name: "LocalConfig", mtime: 200, usn: 0, config: "{}" }],
       });
 
       const changes: UnchunkedChanges = {
         models: [],
-        decks: [
-          [],
-          [{ id: 1, name: "OlderConfig", mtime: 100, usn: 5 }],
-        ],
+        decks: [[], [{ id: 1, name: "OlderConfig", mtime: 100, usn: 5 }]],
         tags: [],
       };
 
@@ -626,7 +429,7 @@ describe("sync coverage gaps", () => {
     });
 
     test("applyRemoteUnchunkedChanges inserts new notetype in anki21b", () => {
-      const db = createAnki21bDb();
+      const db = createAnki21bDb(SQL);
 
       const changes: UnchunkedChanges = {
         models: [
@@ -653,16 +456,18 @@ describe("sync coverage gaps", () => {
     });
 
     test("buildLocalUnchunkedChanges returns pending anki21b items", () => {
-      const db = createAnki21bDb({
+      const db = createAnki21bDb(SQL, {
         notetypes: [
-          { id: 1001, name: "Basic", mtime_secs: 100, usn: -1, config: JSON.stringify({ id: 1001, name: "Basic", flds: [], tmpls: [] }) },
+          {
+            id: 1001,
+            name: "Basic",
+            mtime_secs: 100,
+            usn: -1,
+            config: JSON.stringify({ id: 1001, name: "Basic", flds: [], tmpls: [] }),
+          },
         ],
-        decks: [
-          { id: 2, name: "PendingDeck", mtime: 100, usn: -1, common: "{}" },
-        ],
-        deckConfigs: [
-          { id: 2, name: "PendingConfig", mtime: 100, usn: -1, config: "{}" },
-        ],
+        decks: [{ id: 2, name: "PendingDeck", mtime: 100, usn: -1, common: "{}" }],
+        deckConfigs: [{ id: 2, name: "PendingConfig", mtime: 100, usn: -1, config: "{}" }],
         tags: [
           { tag: "pending-tag", usn: -1 },
           { tag: "synced-tag", usn: 5 },
@@ -683,7 +488,7 @@ describe("sync coverage gaps", () => {
     });
 
     test("buildLocalUnchunkedChanges includes conf and crt when localIsNewer (anki21b)", () => {
-      const db = createAnki21bDb({ conf: { myKey: "myValue" } });
+      const db = createAnki21bDb(SQL, { conf: { myKey: "myValue" } });
 
       const changes = buildLocalUnchunkedChanges(db, true, true);
 
@@ -699,7 +504,7 @@ describe("sync coverage gaps", () => {
 
   describe("deck hierarchy operations", () => {
     test("merges parent::child deck names correctly (anki2)", () => {
-      const db = createAnki2Collection({
+      const db = createAnki2Collection(SQL, {
         decks: {
           "1": { id: 1, mod: 100, name: "Default", usn: 0, conf: "1" },
         },
@@ -729,7 +534,7 @@ describe("sync coverage gaps", () => {
     });
 
     test("merges parent::child deck names in anki21b", () => {
-      const db = createAnki21bDb();
+      const db = createAnki21bDb(SQL);
 
       const changes: UnchunkedChanges = {
         models: [],
@@ -758,7 +563,7 @@ describe("sync coverage gaps", () => {
 
   describe("graves lifecycle and finalizeUsn", () => {
     test("finalizeUsn updates graves usn from -1 to server usn", () => {
-      const db = createAnki2Collection();
+      const db = createAnki2Collection(SQL);
       db.run("INSERT INTO graves VALUES (-1, 100, 0)");
       db.run("INSERT INTO graves VALUES (-1, 200, 1)");
 
@@ -772,7 +577,7 @@ describe("sync coverage gaps", () => {
     });
 
     test("finalizeUsn updates cards, notes, revlog usn", () => {
-      const db = createAnki2Collection({
+      const db = createAnki2Collection(SQL, {
         cardOverrides: { usn: -1 },
       });
       db.run("UPDATE notes SET usn=-1");
@@ -788,7 +593,7 @@ describe("sync coverage gaps", () => {
     });
 
     test("finalizeUsn updates anki2 JSON columns (models, decks, dconf, tags)", () => {
-      const db = createAnki2Collection({
+      const db = createAnki2Collection(SQL, {
         models: {
           "1001": { id: 1001, mod: 100, name: "Basic", usn: -1, flds: [], tmpls: [] },
         },
@@ -820,7 +625,7 @@ describe("sync coverage gaps", () => {
     });
 
     test("finalizeUsn updates anki21b separate tables", () => {
-      const db = createAnki21bDb({
+      const db = createAnki21bDb(SQL, {
         notetypes: [{ id: 1001, name: "Basic", mtime_secs: 100, usn: -1, config: "{}" }],
         decks: [{ id: 2, name: "Test", mtime: 100, usn: -1, common: "{}" }],
         deckConfigs: [{ id: 1, name: "Default", mtime: 100, usn: -1, config: "{}" }],
@@ -842,7 +647,7 @@ describe("sync coverage gaps", () => {
     });
 
     test("finalizeUsn updates col.usn, col.mod, col.ls", () => {
-      const db = createAnki2Collection();
+      const db = createAnki2Collection(SQL);
       const serverMod = 9999999;
 
       finalizeUsn(db, 42, serverMod, false);
@@ -859,7 +664,7 @@ describe("sync coverage gaps", () => {
 
   describe("sequential syncs simulation", () => {
     test("after finalizeUsn, new pending changes have usn=-1 again", () => {
-      const db = createAnki2Collection({
+      const db = createAnki2Collection(SQL, {
         cardOverrides: { usn: -1 },
       });
       db.run("UPDATE notes SET usn=-1");
@@ -893,10 +698,13 @@ describe("sync coverage gaps", () => {
 
   describe("deck config edge cases", () => {
     test("readDeckStepCounts handles zero learning steps", () => {
-      const db = createAnki2Collection({
+      const db = createAnki2Collection(SQL, {
         dconf: {
           "1": {
-            id: 1, mod: 0, name: "NoSteps", usn: 0,
+            id: 1,
+            mod: 0,
+            name: "NoSteps",
+            usn: 0,
             new: { delays: [], perDay: 20 },
             lapse: { delays: [], minInt: 1, mult: 0, leechFails: 8 },
             rev: { perDay: 200 },
@@ -914,10 +722,13 @@ describe("sync coverage gaps", () => {
     });
 
     test("readDeckStepCounts handles many learning steps", () => {
-      const db = createAnki2Collection({
+      const db = createAnki2Collection(SQL, {
         dconf: {
           "1": {
-            id: 1, mod: 0, name: "ManySteps", usn: 0,
+            id: 1,
+            mod: 0,
+            name: "ManySteps",
+            usn: 0,
             new: { delays: [1, 5, 10, 30, 60, 120, 240, 480, 1440], perDay: 20 },
             lapse: { delays: [5, 10, 30, 60], minInt: 1, mult: 0, leechFails: 8 },
             rev: { perDay: 200 },
@@ -934,10 +745,13 @@ describe("sync coverage gaps", () => {
     });
 
     test("readDeckStepCounts handles missing delays field", () => {
-      const db = createAnki2Collection({
+      const db = createAnki2Collection(SQL, {
         dconf: {
           "1": {
-            id: 1, mod: 0, name: "NoDelays", usn: 0,
+            id: 1,
+            mod: 0,
+            name: "NoDelays",
+            usn: 0,
             new: { perDay: 20 },
             lapse: { minInt: 1, mult: 0, leechFails: 8 },
             rev: { perDay: 200 },
@@ -955,16 +769,22 @@ describe("sync coverage gaps", () => {
     });
 
     test("readDeckStepCounts maps multiple decks to their configs", () => {
-      const db = createAnki2Collection({
+      const db = createAnki2Collection(SQL, {
         dconf: {
           "1": {
-            id: 1, mod: 0, name: "Default", usn: 0,
+            id: 1,
+            mod: 0,
+            name: "Default",
+            usn: 0,
             new: { delays: [1, 10] },
             lapse: { delays: [10] },
             rev: { perDay: 200 },
           },
           "2": {
-            id: 2, mod: 0, name: "Hard", usn: 0,
+            id: 2,
+            mod: 0,
+            name: "Hard",
+            usn: 0,
             new: { delays: [1, 5, 10, 30, 60] },
             lapse: { delays: [5, 15, 30] },
             rev: { perDay: 300 },
@@ -986,13 +806,14 @@ describe("sync coverage gaps", () => {
     });
 
     test("readDeckStepCounts handles anki21b format", () => {
-      const db = createAnki21bDb({
-        decks: [
-          { id: 2, name: "MyDeck", mtime: 0, usn: 0, common: JSON.stringify({ conf: 1 }) },
-        ],
+      const db = createAnki21bDb(SQL, {
+        decks: [{ id: 2, name: "MyDeck", mtime: 0, usn: 0, common: JSON.stringify({ conf: 1 }) }],
         deckConfigs: [
           {
-            id: 1, name: "Default", mtime: 0, usn: 0,
+            id: 1,
+            name: "Default",
+            mtime: 0,
+            usn: 0,
             config: JSON.stringify({
               new: { delays: [1, 10, 30] },
               lapse: { delays: [5, 10] },
@@ -1013,11 +834,17 @@ describe("sync coverage gaps", () => {
 
   describe("model field reordering within same count", () => {
     test("accepts field name changes when count is unchanged (anki2)", () => {
-      const db = createAnki2Collection({
+      const db = createAnki2Collection(SQL, {
         models: {
           "1001": {
-            id: 1001, mod: 100, name: "Basic", usn: 0,
-            flds: [{ name: "Front", ord: 0 }, { name: "Back", ord: 1 }],
+            id: 1001,
+            mod: 100,
+            name: "Basic",
+            usn: 0,
+            flds: [
+              { name: "Front", ord: 0 },
+              { name: "Back", ord: 1 },
+            ],
             tmpls: [{ name: "Card 1", ord: 0 }],
           },
         },
@@ -1026,8 +853,14 @@ describe("sync coverage gaps", () => {
       const changes: UnchunkedChanges = {
         models: [
           {
-            id: 1001, mod: 200, name: "Basic", usn: 5,
-            flds: [{ name: "Question", ord: 0 }, { name: "Answer", ord: 1 }], // renamed but same count
+            id: 1001,
+            mod: 200,
+            name: "Basic",
+            usn: 5,
+            flds: [
+              { name: "Question", ord: 0 },
+              { name: "Answer", ord: 1 },
+            ], // renamed but same count
             tmpls: [{ name: "Card 1", ord: 0 }],
           },
         ],
@@ -1046,11 +879,17 @@ describe("sync coverage gaps", () => {
     });
 
     test("accepts template name changes when count is unchanged", () => {
-      const db = createAnki2Collection({
+      const db = createAnki2Collection(SQL, {
         models: {
           "1001": {
-            id: 1001, mod: 100, name: "Basic", usn: 0,
-            flds: [{ name: "Front", ord: 0 }, { name: "Back", ord: 1 }],
+            id: 1001,
+            mod: 100,
+            name: "Basic",
+            usn: 0,
+            flds: [
+              { name: "Front", ord: 0 },
+              { name: "Back", ord: 1 },
+            ],
             tmpls: [{ name: "Card 1", ord: 0 }],
           },
         },
@@ -1059,8 +898,14 @@ describe("sync coverage gaps", () => {
       const changes: UnchunkedChanges = {
         models: [
           {
-            id: 1001, mod: 200, name: "Basic", usn: 5,
-            flds: [{ name: "Front", ord: 0 }, { name: "Back", ord: 1 }],
+            id: 1001,
+            mod: 200,
+            name: "Basic",
+            usn: 5,
+            flds: [
+              { name: "Front", ord: 0 },
+              { name: "Back", ord: 1 },
+            ],
             tmpls: [{ name: "Forward Card", ord: 0 }], // renamed
           },
         ],
@@ -1198,7 +1043,7 @@ describe("sync coverage gaps", () => {
 
   describe("applyRemoteGraves", () => {
     test("deletes cards and their review logs from SQLite", async () => {
-      const db = createAnki2Collection();
+      const db = createAnki2Collection(SQL);
       db.run("INSERT INTO revlog VALUES (999, 200, 5, 3, 10, 5, 2500, 5000, 1)");
 
       await applyRemoteGraves(db, { cards: [200], notes: [], decks: [] });
@@ -1211,7 +1056,7 @@ describe("sync coverage gaps", () => {
     });
 
     test("deletes notes and cascades to their cards", async () => {
-      const db = createAnki2Collection();
+      const db = createAnki2Collection(SQL);
 
       await applyRemoteGraves(db, { cards: [], notes: [100], decks: [] });
 
@@ -1222,7 +1067,7 @@ describe("sync coverage gaps", () => {
     });
 
     test("deletes decks from anki2 JSON", async () => {
-      const db = createAnki2Collection({
+      const db = createAnki2Collection(SQL, {
         decks: {
           "1": { id: 1, mod: 100, name: "Default", usn: 0 },
           "2": { id: 2, mod: 100, name: "ToDelete", usn: 0 },
@@ -1239,10 +1084,8 @@ describe("sync coverage gaps", () => {
     });
 
     test("deletes decks from anki21b table", async () => {
-      const db = createAnki21bDb({
-        decks: [
-          { id: 2, name: "ToDelete", mtime: 100, usn: 0, common: "{}" },
-        ],
+      const db = createAnki21bDb(SQL, {
+        decks: [{ id: 2, name: "ToDelete", mtime: 100, usn: 0, common: "{}" }],
       });
 
       await applyRemoteGraves(db, { cards: [], notes: [], decks: [2] });
@@ -1255,7 +1098,7 @@ describe("sync coverage gaps", () => {
     });
 
     test("handles empty graves gracefully", async () => {
-      const db = createAnki2Collection();
+      const db = createAnki2Collection(SQL);
 
       // Should not throw
       await applyRemoteGraves(db, { cards: [], notes: [], decks: [] });
@@ -1271,7 +1114,7 @@ describe("sync coverage gaps", () => {
 
   describe("creation timestamp (crt) merge", () => {
     test("updates crt when remote is newer (anki2)", () => {
-      const db = createAnki2Collection();
+      const db = createAnki2Collection(SQL);
       const oldCrt = scalar(db, "SELECT crt FROM col") as number;
 
       const changes: UnchunkedChanges = {
@@ -1289,7 +1132,7 @@ describe("sync coverage gaps", () => {
     });
 
     test("does not update crt when remote is older", () => {
-      const db = createAnki2Collection();
+      const db = createAnki2Collection(SQL);
       const oldCrt = scalar(db, "SELECT crt FROM col") as number;
 
       const changes: UnchunkedChanges = {
@@ -1307,7 +1150,7 @@ describe("sync coverage gaps", () => {
     });
 
     test("updates crt in anki21b format", () => {
-      const db = createAnki21bDb();
+      const db = createAnki21bDb(SQL);
       const oldCrt = scalar(db, "SELECT crt FROM col") as number;
 
       const changes: UnchunkedChanges = {
@@ -1329,7 +1172,7 @@ describe("sync coverage gaps", () => {
 
   describe("referential integrity during merge", () => {
     test("applyRemoteChunk inserts card even if referenced note doesn't exist", async () => {
-      const db = createAnki2Collection();
+      const db = createAnki2Collection(SQL);
 
       // Send a card that references a non-existent note
       const chunk: Chunk = {
@@ -1349,7 +1192,7 @@ describe("sync coverage gaps", () => {
     });
 
     test("applyRemoteGraves for notes deletes all associated cards", async () => {
-      const db = createAnki2Collection({
+      const db = createAnki2Collection(SQL, {
         extraCards: [
           { id: 201, nid: 100, did: 1, ord: 1 },
           { id: 202, nid: 100, did: 1, ord: 2 },
@@ -1372,13 +1215,20 @@ describe("sync coverage gaps", () => {
 
   describe("card state transitions via mergeIndexedDBToSqlite", () => {
     test("new → learning: type=1, queue=1", async () => {
-      const db = createAnki2Collection();
+      const db = createAnki2Collection(SQL);
 
       await reviewDB.saveCard({
-        cardId: "200", deckId: "deck-1", algorithm: "sm2",
+        cardId: "200",
+        deckId: "deck-1",
+        algorithm: "sm2",
         cardState: {
-          phase: "learning", step: 0, ease: 2.5, interval: 0.007,
-          due: Date.now() + 600_000, lapses: 0, reps: 1,
+          phase: "learning",
+          step: 0,
+          ease: 2.5,
+          interval: 0.007,
+          due: Date.now() + 600_000,
+          lapses: 0,
+          reps: 1,
         },
         createdAt: Date.now() - 60000,
         lastReviewed: Date.now(),
@@ -1393,13 +1243,20 @@ describe("sync coverage gaps", () => {
     });
 
     test("learning → review: type=2, queue=2", async () => {
-      const db = createAnki2Collection();
+      const db = createAnki2Collection(SQL);
 
       await reviewDB.saveCard({
-        cardId: "200", deckId: "deck-1", algorithm: "sm2",
+        cardId: "200",
+        deckId: "deck-1",
+        algorithm: "sm2",
         cardState: {
-          phase: "review", step: 0, ease: 2.5, interval: 1,
-          due: Date.now() + 86400000, lapses: 0, reps: 3,
+          phase: "review",
+          step: 0,
+          ease: 2.5,
+          interval: 1,
+          due: Date.now() + 86400000,
+          lapses: 0,
+          reps: 3,
         },
         createdAt: Date.now() - 86400000,
         lastReviewed: Date.now(),
@@ -1414,13 +1271,20 @@ describe("sync coverage gaps", () => {
     });
 
     test("review → relearning: type=3, queue=1 (intraday)", async () => {
-      const db = createAnki2Collection();
+      const db = createAnki2Collection(SQL);
 
       await reviewDB.saveCard({
-        cardId: "200", deckId: "deck-1", algorithm: "sm2",
+        cardId: "200",
+        deckId: "deck-1",
+        algorithm: "sm2",
         cardState: {
-          phase: "relearning", step: 0, ease: 2.0, interval: 0.01,
-          due: Date.now() + 600_000, lapses: 1, reps: 5,
+          phase: "relearning",
+          step: 0,
+          ease: 2.0,
+          interval: 0.01,
+          due: Date.now() + 600_000,
+          lapses: 1,
+          reps: 5,
         },
         createdAt: Date.now() - 86400000 * 10,
         lastReviewed: Date.now(),
@@ -1435,13 +1299,20 @@ describe("sync coverage gaps", () => {
     });
 
     test("dayLearning: learning with interval >= 1 day gets queue=3", async () => {
-      const db = createAnki2Collection();
+      const db = createAnki2Collection(SQL);
 
       await reviewDB.saveCard({
-        cardId: "200", deckId: "deck-1", algorithm: "sm2",
+        cardId: "200",
+        deckId: "deck-1",
+        algorithm: "sm2",
         cardState: {
-          phase: "learning", step: 1, ease: 2.5, interval: 1,
-          due: Date.now() + 86400000, lapses: 0, reps: 2,
+          phase: "learning",
+          step: 1,
+          ease: 2.5,
+          interval: 1,
+          due: Date.now() + 86400000,
+          lapses: 0,
+          reps: 2,
         },
         createdAt: Date.now() - 86400000,
         lastReviewed: Date.now(),
@@ -1460,13 +1331,13 @@ describe("sync coverage gaps", () => {
 
   describe("isAnki21bFormat detection", () => {
     test("returns false for anki2 format", () => {
-      const db = createAnki2Collection();
+      const db = createAnki2Collection(SQL);
       expect(isAnki21bFormat(db)).toBe(false);
       db.close();
     });
 
     test("returns true for anki21b format", () => {
-      const db = createAnki21bDb();
+      const db = createAnki21bDb(SQL);
       expect(isAnki21bFormat(db)).toBe(true);
       db.close();
     });
@@ -1476,20 +1347,23 @@ describe("sync coverage gaps", () => {
 
   describe("getSanityCounts for anki21b", () => {
     test("counts from separate tables for anki21b", () => {
-      const db = createAnki21bDb({
+      const db = createAnki21bDb(SQL, {
         notetypes: [
           { id: 1001, name: "Basic", mtime_secs: 0, usn: 0, config: "{}" },
           { id: 1002, name: "Cloze", mtime_secs: 0, usn: 0, config: "{}" },
         ],
-        deckConfigs: [
-          { id: 1, name: "Default", mtime: 0, usn: 0, config: "{}" },
-        ],
+        deckConfigs: [{ id: 1, name: "Default", mtime: 0, usn: 0, config: "{}" }],
       });
 
       // Insert a card and note
       const nowSec = Math.floor(Date.now() / 1000);
-      db.run("INSERT INTO notes VALUES (100, 'abc', 1001, ?, 0, '', 'f\x1fb', 'f', 0, 0, '')", [nowSec]);
-      db.run("INSERT INTO cards VALUES (200, 100, 1, 0, ?, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, '')", [nowSec]);
+      db.run("INSERT INTO notes VALUES (100, 'abc', 1001, ?, 0, '', 'f\x1fb', 'f', 0, 0, '')", [
+        nowSec,
+      ]);
+      db.run(
+        "INSERT INTO cards VALUES (200, 100, 1, 0, ?, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, '')",
+        [nowSec],
+      );
 
       const counts = getSanityCounts(db, true);
       const [dueCounts, cards, notes, revlog, graves, models, decks, deckConfig] = counts;
@@ -1511,12 +1385,12 @@ describe("sync coverage gaps", () => {
 
   describe("buildLocalGraves filtering", () => {
     test("only includes usn=-1 graves, excludes already-synced ones", () => {
-      const db = createAnki2Collection();
+      const db = createAnki2Collection(SQL);
 
       db.run("INSERT INTO graves VALUES (-1, 100, 0)"); // pending card
       db.run("INSERT INTO graves VALUES (-1, 200, 1)"); // pending note
       db.run("INSERT INTO graves VALUES (-1, 300, 2)"); // pending deck
-      db.run("INSERT INTO graves VALUES (5, 400, 0)");  // synced card
+      db.run("INSERT INTO graves VALUES (5, 400, 0)"); // synced card
       db.run("INSERT INTO graves VALUES (10, 500, 1)"); // synced note
 
       const graves = buildLocalGraves(db);
@@ -1528,7 +1402,7 @@ describe("sync coverage gaps", () => {
     });
 
     test("returns empty arrays when no pending graves", () => {
-      const db = createAnki2Collection();
+      const db = createAnki2Collection(SQL);
       db.run("INSERT INTO graves VALUES (5, 100, 0)"); // already synced
 
       const graves = buildLocalGraves(db);
@@ -1544,7 +1418,7 @@ describe("sync coverage gaps", () => {
 
   describe("buildLocalUnchunkedChanges for anki2", () => {
     test("only includes pending (usn=-1) items", () => {
-      const db = createAnki2Collection({
+      const db = createAnki2Collection(SQL, {
         models: {
           "1001": { id: 1001, mod: 100, name: "Pending", usn: -1, flds: [], tmpls: [] },
           "1002": { id: 1002, mod: 100, name: "Synced", usn: 5, flds: [], tmpls: [] },
@@ -1575,7 +1449,7 @@ describe("sync coverage gaps", () => {
     });
 
     test("includes conf and crt when localIsNewer", () => {
-      const db = createAnki2Collection({ conf: { myKey: "test" } });
+      const db = createAnki2Collection(SQL, { conf: { myKey: "test" } });
 
       const changes = buildLocalUnchunkedChanges(db, false, true);
 
@@ -1592,20 +1466,16 @@ describe("sync coverage gaps", () => {
 
   describe("applyRemoteChunk comprehensive", () => {
     test("applies notes, cards, and revlog in a single chunk", async () => {
-      const db = createAnki2Collection();
+      const db = createAnki2Collection(SQL);
       const nowSec = Math.floor(Date.now() / 1000);
 
       const chunk: Chunk = {
         done: true,
-        revlog: [
-          [Date.now(), 300, 5, 3, 10, 5, 2500, 5000, 1],
-        ],
+        revlog: [[Date.now(), 300, 5, 3, 10, 5, 2500, 5000, 1]],
         notes: [
           [300, "newguid", 1234567890, nowSec, 5, "", "newfront\x1fnewback", "newfront", 0, 0, ""],
         ],
-        cards: [
-          [300, 300, 1, 0, nowSec, 5, 2, 2, 5, 10, 2500, 3, 0, 0, 0, 0, 0, ""],
-        ],
+        cards: [[300, 300, 1, 0, nowSec, 5, 2, 2, 5, 10, 2500, 3, 0, 0, 0, 0, 0, ""]],
       };
 
       await applyRemoteChunk(db, chunk);
@@ -1618,29 +1488,21 @@ describe("sync coverage gaps", () => {
     });
 
     test("applies multiple chunks sequentially", async () => {
-      const db = createAnki2Collection();
+      const db = createAnki2Collection(SQL);
       const nowSec = Math.floor(Date.now() / 1000);
 
       const chunk1: Chunk = {
         done: false,
         revlog: [],
-        notes: [
-          [301, "g1", 1234567890, nowSec, 5, "", "a\x1fb", "a", 0, 0, ""],
-        ],
-        cards: [
-          [301, 301, 1, 0, nowSec, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, ""],
-        ],
+        notes: [[301, "g1", 1234567890, nowSec, 5, "", "a\x1fb", "a", 0, 0, ""]],
+        cards: [[301, 301, 1, 0, nowSec, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, ""]],
       };
 
       const chunk2: Chunk = {
         done: true,
         revlog: [],
-        notes: [
-          [302, "g2", 1234567890, nowSec, 5, "", "c\x1fd", "c", 0, 0, ""],
-        ],
-        cards: [
-          [302, 302, 1, 0, nowSec, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, ""],
-        ],
+        notes: [[302, "g2", 1234567890, nowSec, 5, "", "c\x1fd", "c", 0, 0, ""]],
+        cards: [[302, 302, 1, 0, nowSec, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, ""]],
       };
 
       await applyRemoteChunk(db, chunk1);
@@ -1658,13 +1520,20 @@ describe("sync coverage gaps", () => {
 
   describe("flags preservation", () => {
     test("mergeIndexedDBToSqlite writes card flags to SQLite", async () => {
-      const db = createAnki2Collection();
+      const db = createAnki2Collection(SQL);
 
       await reviewDB.saveCard({
-        cardId: "200", deckId: "deck-1", algorithm: "sm2",
+        cardId: "200",
+        deckId: "deck-1",
+        algorithm: "sm2",
         cardState: {
-          phase: "review", step: 0, ease: 2.5, interval: 10,
-          due: Date.now() + 86400000 * 10, lapses: 0, reps: 3,
+          phase: "review",
+          step: 0,
+          ease: 2.5,
+          interval: 10,
+          due: Date.now() + 86400000 * 10,
+          lapses: 0,
+          reps: 3,
         },
         createdAt: Date.now() - 86400000,
         lastReviewed: Date.now(),
@@ -1679,13 +1548,20 @@ describe("sync coverage gaps", () => {
     });
 
     test("defaults flags to 0 when not set", async () => {
-      const db = createAnki2Collection();
+      const db = createAnki2Collection(SQL);
 
       await reviewDB.saveCard({
-        cardId: "200", deckId: "deck-1", algorithm: "sm2",
+        cardId: "200",
+        deckId: "deck-1",
+        algorithm: "sm2",
         cardState: {
-          phase: "review", step: 0, ease: 2.5, interval: 10,
-          due: Date.now() + 86400000 * 10, lapses: 0, reps: 3,
+          phase: "review",
+          step: 0,
+          ease: 2.5,
+          interval: 10,
+          due: Date.now() + 86400000 * 10,
+          lapses: 0,
+          reps: 3,
         },
         createdAt: Date.now() - 86400000,
         lastReviewed: Date.now(),
@@ -1704,7 +1580,7 @@ describe("sync coverage gaps", () => {
 
   describe("deck and dconf merge conflict resolution (anki2)", () => {
     test("remote deck wins when mod >= local mod", () => {
-      const db = createAnki2Collection({
+      const db = createAnki2Collection(SQL, {
         decks: {
           "1": { id: 1, mod: 100, name: "OldLocal", usn: 0 },
         },
@@ -1712,10 +1588,7 @@ describe("sync coverage gaps", () => {
 
       const changes: UnchunkedChanges = {
         models: [],
-        decks: [
-          [{ id: 1, mod: 200, name: "NewRemote", usn: 5 }],
-          [],
-        ],
+        decks: [[{ id: 1, mod: 200, name: "NewRemote", usn: 5 }], []],
         tags: [],
       };
 
@@ -1728,7 +1601,7 @@ describe("sync coverage gaps", () => {
     });
 
     test("local deck wins when remote mod < local mod", () => {
-      const db = createAnki2Collection({
+      const db = createAnki2Collection(SQL, {
         decks: {
           "1": { id: 1, mod: 200, name: "NewerLocal", usn: 0 },
         },
@@ -1736,10 +1609,7 @@ describe("sync coverage gaps", () => {
 
       const changes: UnchunkedChanges = {
         models: [],
-        decks: [
-          [{ id: 1, mod: 100, name: "OlderRemote", usn: 5 }],
-          [],
-        ],
+        decks: [[{ id: 1, mod: 100, name: "OlderRemote", usn: 5 }], []],
         tags: [],
       };
 
@@ -1752,7 +1622,7 @@ describe("sync coverage gaps", () => {
     });
 
     test("remote dconf wins when mod >= local mod", () => {
-      const db = createAnki2Collection({
+      const db = createAnki2Collection(SQL, {
         dconf: {
           "1": { id: 1, mod: 100, name: "LocalConfig", usn: 0 },
         },
@@ -1760,10 +1630,7 @@ describe("sync coverage gaps", () => {
 
       const changes: UnchunkedChanges = {
         models: [],
-        decks: [
-          [],
-          [{ id: 1, mod: 200, name: "RemoteConfig", usn: 5 }],
-        ],
+        decks: [[], [{ id: 1, mod: 200, name: "RemoteConfig", usn: 5 }]],
         tags: [],
       };
 

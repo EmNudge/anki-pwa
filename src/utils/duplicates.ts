@@ -14,7 +14,9 @@ export type NoteInfo = {
   fieldNames: string[];
 };
 
+import { decodeHtmlEntities } from "./format";
 import { groupBy } from "./groupBy";
+import { stripHtml } from "./stripHtml";
 
 export type DuplicateGroup = {
   /** The normalized key used to group these notes */
@@ -45,24 +47,7 @@ export type DuplicateSearchOptions = {
  */
 export function normalizeForComparison(html: string | null): string {
   if (!html) return "";
-  return (
-    html
-      // Remove sound tags
-      .replace(/\[sound:[^\]]+\]/g, "")
-      // Remove HTML tags
-      .replace(/<[^>]*>/g, "")
-      // Decode common HTML entities
-      .replace(/&nbsp;/gi, " ")
-      .replace(/&amp;/gi, "&")
-      .replace(/&lt;/gi, "<")
-      .replace(/&gt;/gi, ">")
-      .replace(/&quot;/gi, '"')
-      .replace(/&#39;/gi, "'")
-      // Collapse whitespace
-      .replace(/\s+/g, " ")
-      .trim()
-      .toLowerCase()
-  );
+  return decodeHtmlEntities(stripHtml(html)).replace(/\s+/g, " ").trim().toLowerCase();
 }
 
 /**
@@ -130,6 +115,10 @@ export function buildNoteInfos(
     }));
 }
 
+function cleanDisplayKey(html: string | null): string {
+  return stripHtml(html);
+}
+
 /**
  * Find duplicate notes based on exact matching of the specified field.
  */
@@ -154,14 +143,10 @@ export function findExactDuplicates(
     .filter(([, entries]) => entries !== undefined && entries.length >= 2)
     .map(([key, entries]) => {
       const noteGroup = entries!.map((e) => e.note);
-      const displayKey = getFieldValue(noteGroup[0]!, fieldIndex) ?? key;
-      const cleanDisplayKey = displayKey
-        .replace(/<[^>]*>/g, "")
-        .replace(/\[sound:[^\]]+\]/g, "")
-        .trim();
+      const rawDisplayKey = getFieldValue(noteGroup[0]!, fieldIndex) ?? key;
       return {
         key,
-        displayKey: cleanDisplayKey || key,
+        displayKey: cleanDisplayKey(rawDisplayKey) || key,
         notes: noteGroup,
         similarity: 1.0,
       };
@@ -245,11 +230,7 @@ export function findFuzzyDuplicates(
           }
           const avgSim = count > 0 ? totalSim / count : 1.0;
           const clusterNotes = indices.map((i) => scopeNotes[i]!.note);
-          const displayKey =
-            getFieldValue(clusterNotes[0]!, fieldIndex)
-              ?.replace(/<[^>]*>/g, "")
-              .replace(/\[sound:[^\]]+\]/g, "")
-              .trim() ?? "";
+          const displayKey = cleanDisplayKey(getFieldValue(clusterNotes[0]!, fieldIndex));
           return {
             key: `fuzzy-${clusterNotes.map((n) => n.guid).join("-")}`,
             displayKey: displayKey || "(empty)",

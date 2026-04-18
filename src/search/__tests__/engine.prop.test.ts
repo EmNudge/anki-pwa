@@ -12,11 +12,10 @@ import { NUM_RUNS } from "~/test/pbt";
 // ── Custom arbitraries ──
 
 const arbSearchableCard: fc.Arbitrary<SearchableCard> = fc.record({
-  fields: fc.dictionary(
-    fc.stringMatching(/^[A-Za-z]{1,8}$/),
-    fc.string({ maxLength: 50 }),
-    { minKeys: 1, maxKeys: 3 },
-  ),
+  fields: fc.dictionary(fc.stringMatching(/^[A-Za-z]{1,8}$/), fc.string({ maxLength: 50 }), {
+    minKeys: 1,
+    maxKeys: 3,
+  }),
   deck: fc.stringMatching(/^[A-Za-z]{1,15}$/),
   tags: fc.array(fc.stringMatching(/^[a-z]{1,10}$/), { maxLength: 3 }),
   templateName: fc.stringMatching(/^[A-Za-z ]{1,15}$/),
@@ -246,11 +245,7 @@ describe("Search Engine — property-based tests", () => {
         fc.property(arbSearchableCard, (card) => {
           const isDue = matchExpr(card, { type: "is", value: "due" }, collectionCreationTime);
           const isLearn = matchExpr(card, { type: "is", value: "learn" }, collectionCreationTime);
-          const isReview = matchExpr(
-            card,
-            { type: "is", value: "review" },
-            collectionCreationTime,
-          );
+          const isReview = matchExpr(card, { type: "is", value: "review" }, collectionCreationTime);
           expect(isDue).toBe(isLearn || isReview);
         }),
         { numRuns: NUM_RUNS ?? 200 },

@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from "vue";
 import { Copy, Plus, Trash2 } from "lucide-vue-next";
-import Modal from "~/design-system/components/primitives/Modal.vue";
-import Button from "~/design-system/components/primitives/Button.vue";
+import { Button, Modal } from "~/design-system";
 import FieldEditor, { type FieldEntry } from "./notetype/FieldEditor.vue";
 import TemplateEditor, { type TemplateEntry } from "./notetype/TemplateEditor.vue";
 import CssEditor from "./notetype/CssEditor.vue";
@@ -75,8 +74,8 @@ const filteredNotetypes = computed(() => {
   return notetypes.value.filter((nt) => nt.name.toLowerCase().includes(q));
 });
 
-const selectedNotetype = computed(() =>
-  notetypes.value.find((nt) => nt.id === selectedNtid.value) ?? null,
+const selectedNotetype = computed(
+  () => notetypes.value.find((nt) => nt.id === selectedNtid.value) ?? null,
 );
 
 const allNotetypeInfos = computed<NotetypeInfo[]>(() =>
@@ -288,11 +287,9 @@ async function handleConvert(targetNtid: string, fieldMapping: Record<string, st
   const db = await createDatabase(bytes);
   let noteIds: number[];
   try {
-    noteIds = executeQueryAll<{ id: number }>(
-      db,
-      "SELECT id FROM notes WHERE mid=?",
-      [Number(ntid)] as unknown as Record<string, string>,
-    ).map((r) => r.id);
+    noteIds = executeQueryAll<{ id: number }>(db, "SELECT id FROM notes WHERE mid=?", [
+      Number(ntid),
+    ] as unknown as Record<string, string>).map((r) => r.id);
   } finally {
     db.close();
   }
@@ -323,11 +320,7 @@ function commitRename() {
     <div class="manager-layout">
       <!-- Left sidebar -->
       <div class="sidebar">
-        <input
-          v-model="searchQuery"
-          class="search-input"
-          placeholder="Search note types..."
-        />
+        <input v-model="searchQuery" class="search-input" placeholder="Search note types..." />
 
         <div class="notetype-list">
           <button
@@ -339,9 +332,7 @@ function commitRename() {
             <span class="notetype-name">{{ nt.name }}</span>
             <span class="notetype-count">{{ nt.noteCount }} notes</span>
           </button>
-          <div v-if="filteredNotetypes.length === 0" class="empty-list">
-            No note types found
-          </div>
+          <div v-if="filteredNotetypes.length === 0" class="empty-list">No note types found</div>
         </div>
 
         <div class="sidebar-actions">
@@ -375,7 +366,12 @@ function commitRename() {
                 {{ selectedNotetype.name }}
               </h3>
             </template>
-            <span :class="['kind-badge', `kind-badge--${selectedNotetype.kind === 1 ? 'cloze' : 'normal'}`]">
+            <span
+              :class="[
+                'kind-badge',
+                `kind-badge--${selectedNotetype.kind === 1 ? 'cloze' : 'normal'}`,
+              ]"
+            >
               {{ selectedNotetype.kind === 1 ? "Cloze" : "Normal" }}
             </span>
           </div>
@@ -441,7 +437,11 @@ function commitRename() {
             size="sm"
             variant="danger"
             :disabled="selectedNotetype.noteCount > 0"
-            :title="selectedNotetype.noteCount > 0 ? `Cannot delete: ${selectedNotetype.noteCount} note(s) use this type` : 'Delete note type'"
+            :title="
+              selectedNotetype.noteCount > 0
+                ? `Cannot delete: ${selectedNotetype.noteCount} note(s) use this type`
+                : 'Delete note type'
+            "
             @click="handleDelete"
           >
             <template #iconLeft><Trash2 :size="14" /></template>
@@ -459,12 +459,7 @@ function commitRename() {
     </div>
 
     <!-- New notetype dialog -->
-    <Modal
-      :is-open="showNewDialog"
-      title="New Note Type"
-      size="sm"
-      @close="showNewDialog = false"
-    >
+    <Modal :is-open="showNewDialog" title="New Note Type" size="sm" @close="showNewDialog = false">
       <div class="new-form">
         <div class="form-group">
           <label class="form-label">Name</label>

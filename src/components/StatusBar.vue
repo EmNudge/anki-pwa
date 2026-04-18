@@ -3,7 +3,7 @@ import { type AppView, activeViewSig, reviewModeSig } from "../stores";
 import { canUndo, canRedo, undoDescription, redoDescription } from "../undoRedo";
 import { executeUndo, executeRedo } from "../undoRedoExecutor";
 import { Undo2, Redo2 } from "lucide-vue-next";
-import Tooltip from "../design-system/components/primitives/Tooltip.vue";
+import { Tooltip } from "../design-system";
 
 const emit = defineEmits<{
   undoToast: [message: string];
@@ -43,7 +43,15 @@ async function handleRedo() {
       <button
         v-for="tab in tabs"
         :key="tab.id"
-        :class="['tab', { 'tab--active': activeViewSig === tab.id || (tab.id === 'browse' && (activeViewSig === 'duplicates' || activeViewSig === 'check-db')) }]"
+        :class="[
+          'tab',
+          {
+            'tab--active':
+              activeViewSig === tab.id ||
+              (tab.id === 'browse' &&
+                (activeViewSig === 'duplicates' || activeViewSig === 'check-db')),
+          },
+        ]"
         @click="handleTabClick(tab.id)"
       >
         {{ tab.label }}
@@ -51,20 +59,14 @@ async function handleRedo() {
     </div>
     <div class="status-bar-actions">
       <Tooltip :text="undoDescription ? `Undo: ${undoDescription} (Ctrl+Z)` : 'Nothing to undo'">
-        <button
-          class="undo-redo-btn"
-          :disabled="!canUndo"
-          @click="handleUndo"
-        >
+        <button class="undo-redo-btn" :disabled="!canUndo" @click="handleUndo">
           <Undo2 :size="16" />
         </button>
       </Tooltip>
-      <Tooltip :text="redoDescription ? `Redo: ${redoDescription} (Ctrl+Shift+Z)` : 'Nothing to redo'">
-        <button
-          class="undo-redo-btn"
-          :disabled="!canRedo"
-          @click="handleRedo"
-        >
+      <Tooltip
+        :text="redoDescription ? `Redo: ${redoDescription} (Ctrl+Shift+Z)` : 'Nothing to redo'"
+      >
+        <button class="undo-redo-btn" :disabled="!canRedo" @click="handleRedo">
           <Redo2 :size="16" />
         </button>
       </Tooltip>

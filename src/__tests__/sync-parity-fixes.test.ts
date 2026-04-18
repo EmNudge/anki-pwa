@@ -12,8 +12,8 @@
  */
 import "fake-indexeddb/auto";
 import { describe, test, expect, beforeEach } from "vitest";
-import initSqlJs, { type SqlJsStatic, type Database } from "sql.js";
 import { join } from "node:path";
+import { type SqlJsStatic, type Database } from "sql.js";
 import {
   applyRemoteChunk,
   applyRemoteUnchunkedChanges,
@@ -23,25 +23,18 @@ import {
   type UnchunkedChanges,
 } from "../lib/syncMerge";
 import { reviewDB } from "../scheduler/db";
+import { getSqlJs, scalar } from "./testDbUtils";
 
 // ── SQL.js setup ──────────────────────────────────────────────────
 
 let SQL: SqlJsStatic;
 
 beforeEach(async () => {
-  if (!SQL) {
-    const wasmPath = join(process.cwd(), "node_modules", "sql.js", "dist", "sql-wasm.wasm");
-    SQL = await initSqlJs({ locateFile: () => wasmPath });
-  }
+  SQL = await getSqlJs();
   await reviewDB.clearAll();
 });
 
 /** Helper: read a scalar value from the database. */
-function scalar(db: Database, sql: string): unknown {
-  const r = db.exec(sql);
-  return r[0]?.values[0]?.[0] ?? null;
-}
-
 /** Create a minimal anki2 collection. */
 function createAnki2Db(
   opts: {

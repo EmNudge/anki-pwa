@@ -2,7 +2,7 @@
 import { ref, watch, computed } from "vue";
 import ImageOcclusionEditor from "./ImageOcclusionEditor.vue";
 import TiptapEditor from "./TiptapEditor.vue";
-import Button from "../design-system/components/primitives/Button.vue";
+import { Button } from "../design-system";
 import type { AnkiDB2Data } from "../ankiParser/anki2";
 import {
   IO_FIELD_NAMES,
@@ -158,7 +158,12 @@ function handleTagKeydown(e: KeyboardEvent) {
 }
 
 function handleSave() {
-  const occSvg = serializeShapesToSvg(shapes.value, imageNaturalWidth.value, imageNaturalHeight.value, occlusionMode.value);
+  const occSvg = serializeShapesToSvg(
+    shapes.value,
+    imageNaturalWidth.value,
+    imageNaturalHeight.value,
+    occlusionMode.value,
+  );
   const imgTag = imageFilename.value ? `<img src="${imageFilename.value}">` : "";
 
   const fields: Record<string, string | null> = {
@@ -182,12 +187,7 @@ function handleSave() {
     <div v-if="!hasImage" class="io-image-picker" @drop="handleDrop" @dragover="handleDragOver">
       <div class="io-picker-content">
         <p class="io-picker-text">Drop an image here or click to select</p>
-        <input
-          type="file"
-          accept="image/*"
-          class="io-picker-input"
-          @change="handleImagePick"
-        />
+        <input type="file" accept="image/*" class="io-picker-input" @change="handleImagePick" />
         <Button variant="secondary" @click="($refs.fileInput as HTMLInputElement)?.click()">
           Choose Image
         </Button>
@@ -207,17 +207,11 @@ function handleSave() {
     <div class="io-text-fields">
       <div class="field-group">
         <label class="field-label">Header</label>
-        <TiptapEditor
-          v-model="headerText"
-          :media-files="mediaFiles"
-        />
+        <TiptapEditor v-model="headerText" :media-files="mediaFiles" />
       </div>
       <div class="field-group">
         <label class="field-label">Back Extra</label>
-        <TiptapEditor
-          v-model="backExtraText"
-          :media-files="mediaFiles"
-        />
+        <TiptapEditor v-model="backExtraText" :media-files="mediaFiles" />
       </div>
     </div>
 

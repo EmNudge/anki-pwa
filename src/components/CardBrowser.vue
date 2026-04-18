@@ -18,8 +18,7 @@ import { isImageOcclusionCard, renderImageOcclusion } from "../utils/imageOcclus
 import { sanitizeHtmlForPreview } from "../utils/sanitize";
 import { stripHtml } from "../utils/stripHtml";
 import { playAudio } from "../utils/sound";
-import Button from "../design-system/components/primitives/Button.vue";
-import Modal from "../design-system/components/primitives/Modal.vue";
+import { Button, Modal } from "../design-system";
 import NoteEditModal from "./NoteEditModal.vue";
 import TagTree from "./TagTree.vue";
 import { buildTagTree, tagMatchesOrIsChild } from "../utils/tagTree";
@@ -131,7 +130,6 @@ watch(viewMode, () => {
   selectedRowKeys.value = new Set();
   lastClickedKey.value = null;
 });
-
 
 /** Single-pass extraction of tags, tag note counts, decks, and note types from cards */
 const cardMetadata = computed(() => {
@@ -270,7 +268,8 @@ async function applyReposition() {
   );
 
   if (count === 0) {
-    repositionResultMsg.value = "No new cards found in selection. Only new (unseen) cards can be repositioned.";
+    repositionResultMsg.value =
+      "No new cards found in selection. Only new (unseen) cards can be repositioned.";
   } else {
     repositionResultMsg.value = `Repositioned ${count} new card${count === 1 ? "" : "s"}.`;
     setTimeout(() => {
@@ -797,9 +796,7 @@ const filteredRows = computed(() => {
   // Apply tag sidebar filter
   const tagFilter = activeTagFilter.value;
   if (tagFilter) {
-    result = result.filter((row) =>
-      row.tags.some((t) => tagMatchesOrIsChild(t, tagFilter)),
-    );
+    result = result.filter((row) => row.tags.some((t) => tagMatchesOrIsChild(t, tagFilter)));
   }
 
   if (expr) {
@@ -874,7 +871,11 @@ function getCellValue(row: Row, col: string): string {
 
 // ── Virtual scrolling ──
 
-const { scrollContainerRef, onScroll: onTableScroll, virtualSlice } = useVirtualScroll({
+const {
+  scrollContainerRef,
+  onScroll: onTableScroll,
+  virtualSlice,
+} = useVirtualScroll({
   items: filteredRows,
 });
 
@@ -1089,7 +1090,12 @@ async function bulkUnsuspend() {
 
   // Map card type to the appropriate queue to restore to
   const TYPE_TO_QUEUE: Record<number, number> = { 0: 0, 1: 1, 2: 2, 3: 1 };
-  const TYPE_TO_QUEUE_NAME: Record<number, string> = { 0: "new", 1: "learning", 2: "review", 3: "dayLearning" };
+  const TYPE_TO_QUEUE_NAME: Record<number, string> = {
+    0: "new",
+    1: "learning",
+    2: "review",
+    3: "dayLearning",
+  };
 
   bulkOperationInProgress.value = true;
   try {

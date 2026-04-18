@@ -122,7 +122,10 @@ export class ReviewQueue {
     const cards = await reviewDB.getCardsForDeck(this.deckId);
     const patches = cards
       .filter((c) => c.queueOverride === QUEUE_USER_BURIED)
-      .map((c) => ({ cardId: c.cardId, patch: { queueOverride: undefined } as Partial<import("./types").CardReviewState> }));
+      .map((c) => ({
+        cardId: c.cardId,
+        patch: { queueOverride: undefined } as Partial<import("./types").CardReviewState>,
+      }));
     await reviewDB.patchCards(patches);
   }
 
@@ -198,7 +201,9 @@ export class ReviewQueue {
     const dueDateCache = new Map<string, number>(
       activeCards.flatMap((card) => {
         try {
-          return [[card.cardId, this.algorithm.getDueDate(card.reviewState.cardState).getTime()] as const];
+          return [
+            [card.cardId, this.algorithm.getDueDate(card.reviewState.cardState).getTime()] as const,
+          ];
         } catch (error) {
           console.error("Error processing card in queue:", error, card);
           return [];

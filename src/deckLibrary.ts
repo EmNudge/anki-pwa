@@ -94,7 +94,6 @@ export function removeCachedFileEntry(cachedFiles: CachedFileEntry[], name: stri
   return cachedFiles.filter((file) => file.name !== name);
 }
 
-
 function formatAddedDate(timestamp: number): string {
   return new Date(timestamp).toLocaleDateString(undefined, {
     month: "short",

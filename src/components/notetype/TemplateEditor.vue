@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from "vue";
 import { Plus, Trash2 } from "lucide-vue-next";
-import Button from "~/design-system/components/primitives/Button.vue";
+import { Button } from "~/design-system";
 
 export interface TemplateEntry {
   ord: number;
@@ -25,8 +25,8 @@ const emit = defineEmits<{
 const selectedOrd = ref(0);
 const editSide = ref<"front" | "back">("front");
 
-const selectedTemplate = computed(() =>
-  props.templates.find((t) => t.ord === selectedOrd.value) ?? props.templates[0],
+const selectedTemplate = computed(
+  () => props.templates.find((t) => t.ord === selectedOrd.value) ?? props.templates[0],
 );
 
 // Reset selection if current template is removed
@@ -154,13 +154,28 @@ function handleAddTemplate() {
         <summary>Template syntax help</summary>
         <!-- v-pre prevents Vue from parsing mustache-like Anki template syntax -->
         <div v-pre class="help-content">
-          <p><code>{{FieldName}}</code> — Insert field value</p>
-          <p><code>{{#FieldName}}...{{/FieldName}}</code> — Conditional (show if field is non-empty)</p>
-          <p><code>{{^FieldName}}...{{/FieldName}}</code> — Inverted conditional (show if field is empty)</p>
-          <p><code>{{FrontSide}}</code> — Insert front template content (back template only)</p>
-          <p><code>{{type:FieldName}}</code> — Type-in-the-answer input</p>
-          <p><code>{{cloze:FieldName}}</code> — Cloze deletion</p>
-          <p><code>{{hint:FieldName}}</code> — Hint (click to reveal)</p>
+          <p>
+            <code>{{ FieldName }}</code> — Insert field value
+          </p>
+          <p>
+            <code>{{#FieldName}}...{{/FieldName}}</code> — Conditional (show if field is non-empty)
+          </p>
+          <p>
+            <code>{{^FieldName}}...{{/FieldName}}</code> — Inverted conditional (show if field is
+            empty)
+          </p>
+          <p>
+            <code>{{ FrontSide }}</code> — Insert front template content (back template only)
+          </p>
+          <p>
+            <code>{{type:FieldName}}</code> — Type-in-the-answer input
+          </p>
+          <p>
+            <code>{{cloze:FieldName}}</code> — Cloze deletion
+          </p>
+          <p>
+            <code>{{hint:FieldName}}</code> — Hint (click to reveal)
+          </p>
         </div>
       </details>
     </div>

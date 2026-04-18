@@ -39,16 +39,13 @@ describe("Duplicate detection — property-based tests", () => {
 
     it("returns 0 when one string has length < 2 and strings differ", () => {
       fc.assert(
-        fc.property(
-          fc.string({ minLength: 2, maxLength: 50 }),
-          (b) => {
-            // Single char 'x' vs longer string — should be 0 unless b === "x"
-            const a = "x";
-            if (a !== b) {
-              expect(stringSimilarity(a, b)).toBe(0);
-            }
-          },
-        ),
+        fc.property(fc.string({ minLength: 2, maxLength: 50 }), (b) => {
+          // Single char 'x' vs longer string — should be 0 unless b === "x"
+          const a = "x";
+          if (a !== b) {
+            expect(stringSimilarity(a, b)).toBe(0);
+          }
+        }),
         { numRuns: NUM_RUNS ?? 100 },
       );
     });

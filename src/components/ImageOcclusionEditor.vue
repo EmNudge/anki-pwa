@@ -2,7 +2,7 @@
 import { ref, onMounted, onUnmounted, watch } from "vue";
 import { useImageOcclusionEditor, type IoTool } from "../composables/useImageOcclusionEditor";
 import type { OcclusionShape, OcclusionMode } from "../utils/imageOcclusion";
-import Button from "../design-system/components/primitives/Button.vue";
+import { Button } from "../design-system";
 
 const props = defineProps<{
   imageUrl: string;
@@ -108,7 +108,8 @@ let dragState: {
   origW: number;
   origH: number;
 } | null = null;
-let resizeHandle: { shapeId: string; dir: HandleDir; anchorX: number; anchorY: number } | null = null;
+let resizeHandle: { shapeId: string; dir: HandleDir; anchorX: number; anchorY: number } | null =
+  null;
 const MIN_DRAG_THRESHOLD = 5;
 let hasDragged = false;
 
@@ -182,7 +183,10 @@ function onPointerMove(e: PointerEvent) {
     const shape = editor.shapes.value.find((s) => s.id === shapeId);
     if (!shape) return;
 
-    let newX = shape.x, newY = shape.y, newW = shape.width, newH = shape.height;
+    let newX = shape.x,
+      newY = shape.y,
+      newW = shape.width,
+      newH = shape.height;
 
     if (dir.includes("w") || dir.includes("e")) {
       const minX = dir.includes("w") ? pt.x : anchorX;
@@ -197,8 +201,14 @@ function onPointerMove(e: PointerEvent) {
       newH = Math.abs(maxY - minY);
     }
     // Edge-only handles: preserve the other axis
-    if (dir === "n" || dir === "s") { newX = shape.x; newW = shape.width; }
-    if (dir === "e" || dir === "w") { newY = shape.y; newH = shape.height; }
+    if (dir === "n" || dir === "s") {
+      newX = shape.x;
+      newW = shape.width;
+    }
+    if (dir === "e" || dir === "w") {
+      newY = shape.y;
+      newH = shape.height;
+    }
 
     // Enforce minimum size
     if (newW < 10) newW = 10;
@@ -208,7 +218,8 @@ function onPointerMove(e: PointerEvent) {
   } else if (dragState) {
     const dx = pt.x - dragState.startX;
     const dy = pt.y - dragState.startY;
-    if (!hasDragged && Math.abs(dx) < MIN_DRAG_THRESHOLD && Math.abs(dy) < MIN_DRAG_THRESHOLD) return;
+    if (!hasDragged && Math.abs(dx) < MIN_DRAG_THRESHOLD && Math.abs(dy) < MIN_DRAG_THRESHOLD)
+      return;
     hasDragged = true;
     editor.resizeShape(dragState.shapeId, {
       x: dragState.origX + dx,
@@ -252,8 +263,14 @@ function getHandles(shape: OcclusionShape): HandleDef[] {
 }
 
 const handleCursors: Record<HandleDir, string> = {
-  nw: "nwse-resize", n: "ns-resize", ne: "nesw-resize", e: "ew-resize",
-  se: "nwse-resize", s: "ns-resize", sw: "nesw-resize", w: "ew-resize",
+  nw: "nwse-resize",
+  n: "ns-resize",
+  ne: "nesw-resize",
+  e: "ew-resize",
+  se: "nwse-resize",
+  s: "ns-resize",
+  sw: "nesw-resize",
+  w: "ew-resize",
 };
 </script>
 
@@ -319,7 +336,10 @@ const handleCursors: Record<HandleDir, string> = {
             fill-opacity="0.6"
             stroke="#2d2d2d"
             stroke-width="1"
-            :class="{ 'io-shape': true, 'io-shape-selected': shape.id === editor.selectedShapeId.value }"
+            :class="{
+              'io-shape': true,
+              'io-shape-selected': shape.id === editor.selectedShapeId.value,
+            }"
             style="cursor: pointer"
           />
           <ellipse
@@ -333,7 +353,10 @@ const handleCursors: Record<HandleDir, string> = {
             fill-opacity="0.6"
             stroke="#2d2d2d"
             stroke-width="1"
-            :class="{ 'io-shape': true, 'io-shape-selected': shape.id === editor.selectedShapeId.value }"
+            :class="{
+              'io-shape': true,
+              'io-shape-selected': shape.id === editor.selectedShapeId.value,
+            }"
             style="cursor: pointer"
           />
           <!-- Ordinal label -->

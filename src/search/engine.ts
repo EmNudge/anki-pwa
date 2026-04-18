@@ -25,8 +25,16 @@ export type SearchExpr =
 export const IS_VALUES = ["new", "learn", "review", "due", "suspended", "buried"] as const;
 
 export const QUALIFIERS = [
-  "deck:", "tag:", "is:", "flag:", "card:", "note:",
-  "prop:", "added:", "edited:", "rated:",
+  "deck:",
+  "tag:",
+  "is:",
+  "flag:",
+  "card:",
+  "note:",
+  "prop:",
+  "added:",
+  "edited:",
+  "rated:",
 ] as const;
 
 // ── Searchable card interface ──
@@ -401,28 +409,26 @@ export function matchExpr(
 
 // ── Helper to convert AnkiData card to SearchableCard ──
 
-export function ankiCardToSearchable(
-  card: {
-    values: Record<string, string | null>;
-    tags: string[];
-    templates: { name: string }[];
-    deckName: string;
-    guid: string;
-    scheduling: {
-      queueName: string;
-      flags: number;
-      easeFactor: number | null;
-      ivl: number;
-      due: number;
-      dueType: string;
-      reps: number;
-      lapses: number;
-    } | null;
-    ankiCardId?: number;
-    noteMod?: number;
-    cardMod?: number;
-  },
-): SearchableCard {
+export function ankiCardToSearchable(card: {
+  values: Record<string, string | null>;
+  tags: string[];
+  templates: { name: string }[];
+  deckName: string;
+  guid: string;
+  scheduling: {
+    queueName: string;
+    flags: number;
+    easeFactor: number | null;
+    ivl: number;
+    due: number;
+    dueType: string;
+    reps: number;
+    lapses: number;
+  } | null;
+  ankiCardId?: number;
+  noteMod?: number;
+  cardMod?: number;
+}): SearchableCard {
   const fields: Record<string, string> = {};
   for (const [k, v] of Object.entries(card.values)) {
     fields[k] = stripHtml(v);

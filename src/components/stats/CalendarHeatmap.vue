@@ -94,11 +94,7 @@ function handleMouseLeave() {
   <div class="chart-card">
     <h3 class="chart-title">Review Activity</h3>
     <div class="heatmap-wrapper">
-      <svg
-        :width="LABEL_WIDTH + WEEKS * TOTAL"
-        :height="7 * TOTAL"
-        class="heatmap-svg"
-      >
+      <svg :width="LABEL_WIDTH + WEEKS * TOTAL" :height="7 * TOTAL" class="heatmap-svg">
         <!-- Day labels -->
         <text
           v-for="(label, i) in dayLabels"

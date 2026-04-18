@@ -6,7 +6,7 @@
  * - Grey (#888) with strikethrough for missing characters
  */
 
-import { escapeHtml } from "./format";
+import { decodeHtmlEntities, escapeHtml } from "./format";
 
 type DiffEntry =
   | { type: "correct"; value: string }
@@ -203,15 +203,7 @@ export function renderDiffHtml(typed: string, expected: string): string {
  * Used to get the plain-text expected answer from a field value.
  */
 export function stripHtmlForComparison(html: string): string {
-  // Remove HTML tags
-  let text = html.replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]*>/g, "");
-  // Decode common HTML entities
-  text = text
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&nbsp;/g, " ");
-  return text.trim();
+  // Remove HTML tags (convert <br> to newline first)
+  const text = html.replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]*>/g, "");
+  return decodeHtmlEntities(text).trim();
 }

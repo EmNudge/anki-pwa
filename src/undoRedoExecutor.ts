@@ -1,22 +1,9 @@
 import { triggerRef } from "vue";
-import {
-  popUndo,
-  popRedo,
-  pushUndo,
-  pushRedo,
-  canUndo,
-  canRedo,
-  type UndoEntry,
-} from "./undoRedo";
+import { popUndo, popRedo, pushUndo, pushRedo, canUndo, canRedo, type UndoEntry } from "./undoRedo";
 import { reviewDB } from "./scheduler/db";
 import type { CardReviewState, StoredReviewLog } from "./scheduler/types";
 import { removeTags } from "./utils/tagTree";
-import {
-  ankiDataSig,
-  currentReviewCardSig,
-  initializeReviewQueue,
-  updateNote,
-} from "./stores";
+import { ankiDataSig, currentReviewCardSig, initializeReviewQueue, updateNote } from "./stores";
 import { markDataChanged } from "./lib/autoSync";
 import { QUEUE_USER_BURIED, QUEUE_SUSPENDED } from "./lib/syncWrite";
 

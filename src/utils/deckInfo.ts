@@ -23,7 +23,9 @@ export function computeDeckInfo(ankiData: AnkiData) {
       const displayName = deck.name.includes("::") ? deck.name.split("::").pop()! : deck.name;
 
       // Compute new/learn/due counts from Anki scheduling data
-      const activeCards = cardsInDeck.filter((item) => !item.card.scheduling || item.card.scheduling.queue >= 0);
+      const activeCards = cardsInDeck.filter(
+        (item) => !item.card.scheduling || item.card.scheduling.queue >= 0,
+      );
       const grouped = groupBy(activeCards, (item) => {
         const q = item.card.scheduling?.queue;
         if (q === undefined || q === 0) return "new";

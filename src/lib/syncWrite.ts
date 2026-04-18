@@ -1,6 +1,7 @@
 import { createDatabase } from "~/utils/sql";
 import type { CardReviewState } from "../scheduler/types";
 import { MS_PER_DAY } from "../utils/constants";
+import { isAnki21bFormat } from "./syncMerge";
 
 /**
  * SM-2 card state shape (from anki-sm2-algorithm.ts).
@@ -160,11 +161,7 @@ interface DeckStepInfo {
 export function readDeckStepCounts(db: import("sql.js").Database): Map<number, DeckStepInfo> {
   const result = new Map<number, DeckStepInfo>();
 
-  // Detect format
-  const hasNotetypes = db.exec(
-    "SELECT name FROM sqlite_master WHERE type='table' AND name='notetypes'",
-  );
-  const isAnki21b = (hasNotetypes[0]?.values.length ?? 0) > 0;
+  const isAnki21b = isAnki21bFormat(db);
 
   if (isAnki21b) {
     const dcResult = db.exec("SELECT id, config FROM deck_config");
@@ -173,10 +170,13 @@ export function readDeckStepCounts(db: import("sql.js").Database): Map<number, D
         const id = row[0] as number;
         try {
           const cfg = JSON.parse(row[1] as string);
-          return [id, {
-            learnSteps: Array.isArray(cfg.new?.delays) ? cfg.new.delays.length : 2,
-            relearnSteps: Array.isArray(cfg.lapse?.delays) ? cfg.lapse.delays.length : 1,
-          }];
+          return [
+            id,
+            {
+              learnSteps: Array.isArray(cfg.new?.delays) ? cfg.new.delays.length : 2,
+              relearnSteps: Array.isArray(cfg.lapse?.delays) ? cfg.lapse.delays.length : 1,
+            },
+          ];
         } catch {
           return [id, { learnSteps: 2, relearnSteps: 1 }];
         }
@@ -191,7 +191,9 @@ export function readDeckStepCounts(db: import("sql.js").Database): Map<number, D
         const confId = common.conf ?? common.config_id ?? 1;
         const steps = configMap.get(confId);
         return steps ? [[deckId, steps] as const] : [];
-      } catch { return []; }
+      } catch {
+        return [];
+      }
     });
     deckEntries.forEach(([deckId, steps]) => result.set(deckId, steps));
   } else {
@@ -199,20 +201,29 @@ export function readDeckStepCounts(db: import("sql.js").Database): Map<number, D
     const colResult = db.exec("SELECT dconf, decks FROM col");
     if (colResult[0]?.values[0]) {
       try {
-        const dconf = JSON.parse(colResult[0].values[0][0] as string) as Record<string, {
-          new?: { delays?: number[] };
-          lapse?: { delays?: number[] };
-        }>;
-        const decks = JSON.parse(colResult[0].values[0][1] as string) as Record<string, {
-          id: number;
-          conf?: string | number;
-        }>;
+        const dconf = JSON.parse(colResult[0].values[0][0] as string) as Record<
+          string,
+          {
+            new?: { delays?: number[] };
+            lapse?: { delays?: number[] };
+          }
+        >;
+        const decks = JSON.parse(colResult[0].values[0][1] as string) as Record<
+          string,
+          {
+            id: number;
+            conf?: string | number;
+          }
+        >;
 
         const configMap = new Map<string, DeckStepInfo>(
-          Object.entries(dconf).map(([id, cfg]) => [id, {
-            learnSteps: Array.isArray(cfg.new?.delays) ? cfg.new.delays.length : 2,
-            relearnSteps: Array.isArray(cfg.lapse?.delays) ? cfg.lapse.delays.length : 1,
-          }]),
+          Object.entries(dconf).map(([id, cfg]) => [
+            id,
+            {
+              learnSteps: Array.isArray(cfg.new?.delays) ? cfg.new.delays.length : 2,
+              relearnSteps: Array.isArray(cfg.lapse?.delays) ? cfg.lapse.delays.length : 1,
+            },
+          ]),
         );
 
         Object.values(decks)
@@ -221,7 +232,9 @@ export function readDeckStepCounts(db: import("sql.js").Database): Map<number, D
             return steps ? [[deck.id, steps] as const] : [];
           })
           .forEach(([deckId, steps]) => result.set(deckId, steps));
-      } catch { /* use defaults */ }
+      } catch {
+        /* use defaults */
+      }
     }
   }
 
@@ -251,6 +264,19 @@ export async function mergeIndexedDBToSqlite(
   // Build a map of deckId → deck config step counts from SQLite
   const deckStepCounts = readDeckStepCounts(db);
 
+  // Pre-fetch odue/odid/did for all cards in one query to avoid N+1
+  const cardInfoMap = new Map<number, { odue: number; odid: number; did: number }>();
+  const allRows = db.exec("SELECT id, odue, odid, did FROM cards");
+  if (allRows[0]) {
+    for (const row of allRows[0].values) {
+      cardInfoMap.set(row[0] as number, {
+        odue: (row[1] as number) ?? 0,
+        odid: (row[2] as number) ?? 0,
+        did: (row[3] as number) ?? 0,
+      });
+    }
+  }
+
   // Update each reviewed card in the SQLite database
   const updateStmt = db.prepare(CARD_UPDATE_SQL);
 
@@ -268,19 +294,11 @@ export async function mergeIndexedDBToSqlite(
       card.queueOverride === QUEUE_USER_BURIED;
     if (!card.lastReviewed && !hasOverride && card.flags === undefined) continue;
 
-    // Read existing odue/odid from SQLite to preserve filtered deck state
-    let odue = 0;
-    let odid = 0;
-    const existingRow = db.exec(
-      "SELECT odue, odid, did FROM cards WHERE id=?",
-      [ankiCardId],
-    );
-    let cardDeckId: number | undefined;
-    if (existingRow[0]?.values[0]) {
-      odue = (existingRow[0].values[0][0] as number) ?? 0;
-      odid = (existingRow[0].values[0][1] as number) ?? 0;
-      cardDeckId = (existingRow[0].values[0][2] as number) ?? undefined;
-    }
+    // Look up existing odue/odid/did from pre-fetched map
+    const existing = cardInfoMap.get(ankiCardId);
+    const odue = existing?.odue ?? 0;
+    const odid = existing?.odid ?? 0;
+    const cardDeckId: number | undefined = existing?.did;
 
     const state = card.cardState as SM2CardState;
     const type = phaseToType(state.phase);
@@ -479,9 +497,7 @@ async function insertGraves(db: import("sql.js").Database, deckId: string): Prom
     ...deletedDecks.map((d) => [Number(d.deletedDeckId), 2] as [number, number]),
   ];
 
-  graves
-    .filter(([id]) => !isNaN(id))
-    .forEach(([id, type]) => insertStmt.run([-1, id, type]));
+  graves.filter(([id]) => !isNaN(id)).forEach(([id, type]) => insertStmt.run([-1, id, type]));
 
   insertStmt.free();
 }

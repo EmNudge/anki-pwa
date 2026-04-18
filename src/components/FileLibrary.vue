@@ -149,24 +149,41 @@ function handleDeleteFiltered(id: string, event: Event) {
         >
           <div class="file-info">
             <span class="file-name">
-              <svg class="filtered-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <svg
+                class="filtered-icon"
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
                 <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
               </svg>
               {{ fd.name }}
             </span>
-            <span class="file-meta">{{ fd.matchCount }} card{{ fd.matchCount === 1 ? "" : "s" }} · {{ fd.reschedule ? "Normal" : "Cram" }}</span>
+            <span class="file-meta"
+              >{{ fd.matchCount }} card{{ fd.matchCount === 1 ? "" : "s" }} ·
+              {{ fd.reschedule ? "Normal" : "Cram" }}</span
+            >
           </div>
           <div class="filtered-actions">
             <button
               class="filtered-action-btn"
               title="Rebuild"
               @click.stop="rebuildFilteredDeck(fd.id)"
-            >&#8635;</button>
+            >
+              &#8635;
+            </button>
             <button
               class="delete-btn"
               title="Delete"
               @click.stop="handleDeleteFiltered(fd.id, $event)"
-            >&times;</button>
+            >
+              &times;
+            </button>
           </div>
         </div>
       </div>
@@ -178,10 +195,7 @@ function handleDeleteFiltered(id: string, event: Event) {
       </Button>
     </div>
 
-    <FilteredDeckModal
-      :is-open="filteredDeckModalOpen"
-      @close="filteredDeckModalOpen = false"
-    />
+    <FilteredDeckModal :is-open="filteredDeckModalOpen" @close="filteredDeckModalOpen = false" />
 
     <section
       v-if="(syncActiveSig || isSampleCollectionActive) && deckInfoSig"

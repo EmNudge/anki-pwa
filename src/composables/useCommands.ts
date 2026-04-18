@@ -257,8 +257,10 @@ export function useCommands(options: UseCommandsOptions = {}) {
   });
 }
 
-
-function buildCardActionCommands(ankiData: AnkiData | null, options: UseCommandsOptions): Command[] {
+function buildCardActionCommands(
+  ankiData: AnkiData | null,
+  options: UseCommandsOptions,
+): Command[] {
   const reviewCard = currentReviewCardSig.value;
   if (!reviewCard || activeViewSig.value !== "review" || reviewModeSig.value !== "studying")
     return [];
@@ -419,7 +421,10 @@ function buildCardInfoMetadata(
   type MetadataEntry = { label: string; value: string | ReturnType<typeof h> };
   const conditionalEntries: (MetadataEntry | null)[] = [
     displayInfo.ease !== undefined
-      ? { label: "Ease Factor", value: String(Math.round((displayInfo.ease as number) * 100)) + "%" }
+      ? {
+          label: "Ease Factor",
+          value: String(Math.round((displayInfo.ease as number) * 100)) + "%",
+        }
       : null,
     displayInfo.interval !== undefined
       ? { label: "Interval", value: displayInfo.interval + " days" }

@@ -7,7 +7,6 @@ function generateId(): number {
   return Date.now() + Math.floor(Math.random() * 1000);
 }
 
-
 function guidFromId(_id: number): string {
   // Generate a random base91-like GUID (random source, not derived from ID)
   const chars =

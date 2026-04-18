@@ -24,7 +24,9 @@ export function getBackupSettings(): BackupSettings {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
     if (raw) return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
-  } catch { /* use defaults */ }
+  } catch {
+    /* use defaults */
+  }
   return { ...DEFAULT_SETTINGS };
 }
 
