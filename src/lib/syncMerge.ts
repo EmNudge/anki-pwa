@@ -749,7 +749,8 @@ export function* buildLocalChunks(db: Database): Generator<Chunk> {
     Number(row[8]),
   ]);
 
-  // Yield in chunks of CHUNK_SIZE (interleaving types)
+  // Yield in chunks of CHUNK_SIZE, round-robin interleaving types
+  // (matches upstream Rust: one revlog, one note, one card per iteration)
   let ci = 0,
     ni = 0,
     ri = 0;
@@ -763,20 +764,24 @@ export function* buildLocalChunks(db: Database): Generator<Chunk> {
     const chunk: Chunk = { done: false, cards: [], notes: [], revlog: [] };
     let count = 0;
 
-    while (count < CHUNK_SIZE && ri < pendingRevlog.length) {
-      chunk.revlog.push(pendingRevlog[ri]!);
-      ri++;
-      count++;
-    }
-    while (count < CHUNK_SIZE && ni < pendingNotes.length) {
-      chunk.notes.push(pendingNotes[ni]!);
-      ni++;
-      count++;
-    }
-    while (count < CHUNK_SIZE && ci < pendingCards.length) {
-      chunk.cards.push(pendingCards[ci]!);
-      ci++;
-      count++;
+    while (count < CHUNK_SIZE) {
+      const lastCount = count;
+      if (ri < pendingRevlog.length) {
+        chunk.revlog.push(pendingRevlog[ri]!);
+        ri++;
+        count++;
+      }
+      if (count < CHUNK_SIZE && ni < pendingNotes.length) {
+        chunk.notes.push(pendingNotes[ni]!);
+        ni++;
+        count++;
+      }
+      if (count < CHUNK_SIZE && ci < pendingCards.length) {
+        chunk.cards.push(pendingCards[ci]!);
+        ci++;
+        count++;
+      }
+      if (count === lastCount) break;
     }
 
     if (ci >= pendingCards.length && ni >= pendingNotes.length && ri >= pendingRevlog.length) {
