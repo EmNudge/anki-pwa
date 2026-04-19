@@ -115,18 +115,18 @@
   --color-neutral-900: #f4f4f5;
   --color-neutral-950: #fafafa;
 
-  /* Primary Scale - Violet (same hues, used via semantic aliases) */
-  --color-primary-50: #f5f3ff;
-  --color-primary-100: #ede9fe;
-  --color-primary-200: #ddd6fe;
-  --color-primary-300: #c4b5fd;
-  --color-primary-400: #a78bfa;
-  --color-primary-500: #8b5cf6;
-  --color-primary-600: #7c3aed;
-  --color-primary-700: #6d28d9;
-  --color-primary-800: #5b21b6;
-  --color-primary-900: #4c1d95;
-  --color-primary-950: #2e1065;
+  /* Primary Scale - Muted Violet (softer, desaturated purple) */
+  --color-primary-50: #f7f5fb;
+  --color-primary-100: #eeeaf7;
+  --color-primary-200: #dfd8ef;
+  --color-primary-300: #c8bce3;
+  --color-primary-400: #a996d4;
+  --color-primary-500: #8a72c1;
+  --color-primary-600: #7559ab;
+  --color-primary-700: #634a94;
+  --color-primary-800: #523e7b;
+  --color-primary-900: #433465;
+  --color-primary-950: #291e3e;
 
   /* Success Scale - Emerald */
   --color-success-50: #ecfdf5;

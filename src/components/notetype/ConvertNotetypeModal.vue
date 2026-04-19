@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from "vue";
-import { Button, Modal } from "~/design-system";
+import { Button, Modal, Select } from "~/design-system";
 
 export interface NotetypeInfo {
   id: string;
@@ -72,12 +72,12 @@ function handleConvert() {
 
       <div class="form-group">
         <label class="form-label">Target Note Type</label>
-        <select v-model="targetNtid" class="form-select">
+        <Select v-model="targetNtid" size="sm">
           <option value="" disabled>Select a note type...</option>
           <option v-for="nt in availableTargets" :key="nt.id" :value="nt.id">
             {{ nt.name }}
           </option>
-        </select>
+        </Select>
       </div>
 
       <div v-if="targetNotetype" class="mapping-section">
@@ -86,16 +86,17 @@ function handleConvert() {
           <div v-for="targetField in targetNotetype.fields" :key="targetField" class="mapping-row">
             <span class="mapping-target">{{ targetField }}</span>
             <span class="mapping-arrow">&larr;</span>
-            <select
-              :value="fieldMapping[targetField] ?? ''"
-              class="form-select form-select--sm"
-              @change="fieldMapping[targetField] = ($event.target as HTMLSelectElement).value"
+            <Select
+              :model-value="fieldMapping[targetField] ?? ''"
+              size="sm"
+              class="form-select--sm"
+              @update:model-value="fieldMapping[targetField] = $event"
             >
               <option value="">(empty)</option>
               <option v-for="sf in sourceNotetype.fields" :key="sf" :value="sf">
                 {{ sf }}
               </option>
-            </select>
+            </Select>
           </div>
         </div>
       </div>
@@ -134,17 +135,7 @@ function handleConvert() {
   color: var(--color-text-primary);
 }
 
-.form-select {
-  padding: var(--spacing-2) var(--spacing-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  font-size: var(--font-size-sm);
-  background: var(--color-surface);
-  color: var(--color-text-primary);
-}
-
 .form-select--sm {
-  padding: var(--spacing-1) var(--spacing-2);
   flex: 1;
 }
 

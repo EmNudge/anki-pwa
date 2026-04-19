@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, reactive, computed } from "vue";
-import { Button, Tooltip } from "../design-system";
+import { Button, Page, Tooltip } from "../design-system";
 import { createCachedDeckLibraryItem, createSampleDeckLibraryItem } from "../deckLibrary";
 import { sampleDecks as sampleDeckData } from "../sampleDecks";
 import {
@@ -121,18 +121,20 @@ function handleDeleteFiltered(id: string, event: Event) {
 </script>
 
 <template>
-  <div class="file-library">
-    <div class="header">
-      <h2 class="title">Deck Library</h2>
-      <input
-        ref="fileInput"
-        type="file"
-        accept=".apkg"
-        class="hidden-input"
-        @change="handleFileInput"
-      />
-      <Button variant="primary" size="sm" @click="fileInput?.click()"> Add File </Button>
-    </div>
+  <Page data-testid="file-library">
+    <template #title>
+      <div class="header">
+        <h2 class="title">Deck Library</h2>
+        <input
+          ref="fileInput"
+          type="file"
+          accept=".apkg"
+          class="hidden-input"
+          @change="handleFileInput"
+        />
+        <Button variant="primary" size="sm" @click="fileInput?.click()"> Add File </Button>
+      </div>
+    </template>
 
     <!-- Filtered Decks -->
     <section v-if="ankiDataSig && filteredDecksWithCounts.length > 0" class="library-section">
@@ -144,8 +146,12 @@ function handleDeleteFiltered(id: string, event: Event) {
         <div
           v-for="fd in filteredDecksWithCounts"
           :key="fd.id"
-          class="file-card file-card--filtered"
+          class="file-card file-card--filtered" data-testid="filtered-deck-card"
+          role="button"
+          tabindex="0"
           @click="studyFilteredDeck(fd.id)"
+          @keydown.enter="studyFilteredDeck(fd.id)"
+          @keydown.space.prevent="studyFilteredDeck(fd.id)"
         >
           <div class="file-info">
             <span class="file-name">
@@ -170,20 +176,24 @@ function handleDeleteFiltered(id: string, event: Event) {
             >
           </div>
           <div class="filtered-actions">
-            <button
-              class="filtered-action-btn"
+            <Button
+              variant="ghost"
+              size="sm"
+              square
               title="Rebuild"
               @click.stop="rebuildFilteredDeck(fd.id)"
             >
               &#8635;
-            </button>
-            <button
-              class="delete-btn"
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              square
               title="Delete"
               @click.stop="handleDeleteFiltered(fd.id, $event)"
             >
               &times;
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -212,14 +222,20 @@ function handleDeleteFiltered(id: string, event: Event) {
         <div
           v-for="node in flatTree"
           :key="node.fullName"
-          :class="['deck-row', { 'deck-row--active': selectedDeckIdSig === node.id }]"
+          :class="['deck-row', { 'deck-row--active': selectedDeckIdSig === node.id }]" data-testid="deck-row"
           :style="{ paddingLeft: `${12 + node.depth * 20}px` }"
+          role="button"
+          tabindex="0"
           @click="selectSubdeck(node.id)"
+          @keydown.enter="selectSubdeck(node.id)"
+          @keydown.space.prevent="selectSubdeck(node.id)"
         >
           <div class="deck-row-left">
-            <button
+            <Button
               v-if="node.children.length > 0"
-              class="collapse-btn"
+              variant="ghost"
+              size="xs"
+              square
               :title="collapsed.has(node.fullName) ? 'Expand' : 'Collapse'"
               @click="toggleCollapse(node.fullName, $event)"
             >
@@ -230,7 +246,7 @@ function handleDeleteFiltered(id: string, event: Event) {
                 ]"
                 >&#9662;</span
               >
-            </button>
+            </Button>
             <span v-else class="collapse-spacer" />
             <span class="deck-name">{{ node.name }}</span>
           </div>
@@ -244,8 +260,10 @@ function handleDeleteFiltered(id: string, event: Event) {
             <Tooltip text="Due"
               ><span class="stat stat--due">{{ node.dueCount }}</span></Tooltip
             >
-            <button
-              class="settings-btn"
+            <Button
+              variant="ghost"
+              size="xs"
+              square
               title="Deck settings"
               @click="handleOpenSettings(node, $event)"
             >
@@ -264,7 +282,7 @@ function handleDeleteFiltered(id: string, event: Event) {
                 />
                 <circle cx="12" cy="12" r="3" />
               </svg>
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -293,37 +311,49 @@ function handleDeleteFiltered(id: string, event: Event) {
             v-for="deck in adoptedSampleDecks"
             :key="deck.id"
             :class="['file-card', { 'file-card--active': activeDeckSourceIdSig === deck.id }]"
+            role="button"
+            tabindex="0"
             @click="loadSampleDeck(deck.id)"
+            @keydown.enter="loadSampleDeck(deck.id)"
+            @keydown.space.prevent="loadSampleDeck(deck.id)"
           >
             <div class="file-info">
               <span class="file-name">{{ deck.title }}</span>
               <span class="file-meta">{{ deck.detail }}</span>
             </div>
-            <button
-              class="delete-btn"
+            <Button
+              variant="ghost"
+              size="sm"
+              square
               title="Remove from library"
               @click.stop="removeAdoptedSample(deck.id)"
             >
               &times;
-            </button>
+            </Button>
           </div>
           <div
             v-for="deck in uploadedDecks"
             :key="deck.id"
             :class="['file-card', { 'file-card--active': activeDeckSourceIdSig === deck.id }]"
+            role="button"
+            tabindex="0"
             @click="loadCachedFile(deck.id)"
+            @keydown.enter="loadCachedFile(deck.id)"
+            @keydown.space.prevent="loadCachedFile(deck.id)"
           >
             <div class="file-info">
               <span class="file-name">{{ deck.title }}</span>
               <span class="file-meta">{{ deck.detail }}</span>
             </div>
-            <button
-              class="delete-btn"
+            <Button
+              variant="ghost"
+              size="sm"
+              square
               title="Remove from library"
               @click.stop="deleteCachedFile(deck.id)"
             >
               &times;
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -335,14 +365,20 @@ function handleDeleteFiltered(id: string, event: Event) {
           <div
             v-for="node in flatTree"
             :key="node.fullName"
-            :class="['deck-row', { 'deck-row--active': selectedDeckIdSig === node.id }]"
+            :class="['deck-row', { 'deck-row--active': selectedDeckIdSig === node.id }]" data-testid="deck-row"
             :style="{ paddingLeft: `${12 + node.depth * 20}px` }"
+            role="button"
+            tabindex="0"
             @click="selectSubdeck(node.id)"
+            @keydown.enter="selectSubdeck(node.id)"
+            @keydown.space.prevent="selectSubdeck(node.id)"
           >
             <div class="deck-row-left">
-              <button
+              <Button
                 v-if="node.children.length > 0"
-                class="collapse-btn"
+                variant="ghost"
+                size="xs"
+                square
                 :title="collapsed.has(node.fullName) ? 'Expand' : 'Collapse'"
                 @click="toggleCollapse(node.fullName, $event)"
               >
@@ -353,7 +389,7 @@ function handleDeleteFiltered(id: string, event: Event) {
                   ]"
                   >&#9662;</span
                 >
-              </button>
+              </Button>
               <span v-else class="collapse-spacer" />
               <span class="deck-name">{{ node.name }}</span>
             </div>
@@ -367,8 +403,10 @@ function handleDeleteFiltered(id: string, event: Event) {
               <Tooltip text="Due"
                 ><span class="stat stat--due">{{ node.dueCount }}</span></Tooltip
               >
-              <button
-                class="settings-btn"
+              <Button
+                variant="ghost"
+                size="xs"
+                square
                 title="Deck settings"
                 @click="handleOpenSettings(node, $event)"
               >
@@ -387,27 +425,21 @@ function handleDeleteFiltered(id: string, event: Event) {
                   />
                   <circle cx="12" cy="12" r="3" />
                 </svg>
-              </button>
+              </Button>
             </div>
           </div>
         </div>
       </template>
     </section>
-  </div>
+  </Page>
 </template>
 
 <style scoped>
-.file-library {
-  max-width: 700px;
-  margin: 0 auto;
-  padding: var(--spacing-8) var(--spacing-4);
-}
-
 .header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: var(--spacing-6);
+  margin-bottom: var(--spacing-4);
 }
 
 .title {
@@ -560,33 +592,6 @@ function handleDeleteFiltered(id: string, event: Event) {
   flex: 1;
 }
 
-.collapse-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  padding: 0;
-  background: none;
-  border: none;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  color: var(--color-text-tertiary);
-  flex-shrink: 0;
-  box-shadow: none;
-}
-
-.collapse-btn:hover {
-  color: var(--color-text-primary);
-  background: var(--color-surface-hover);
-}
-
-.collapse-btn:focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: -2px;
-  color: var(--color-text-primary);
-}
-
 .collapse-icon {
   display: inline-block;
   font-size: 10px;
@@ -619,33 +624,6 @@ function handleDeleteFiltered(id: string, event: Event) {
   margin-left: var(--spacing-3);
 }
 
-.settings-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  background: none;
-  border: none;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  color: var(--color-text-tertiary);
-  box-shadow: none;
-  transition: var(--transition-colors);
-}
-
-.settings-btn:hover {
-  color: var(--color-text-primary);
-  background: var(--color-surface-hover);
-}
-
-.settings-btn:focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: -2px;
-  color: var(--color-text-primary);
-}
-
 .stat {
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-semibold);
@@ -664,35 +642,6 @@ function handleDeleteFiltered(id: string, event: Event) {
 
 .stat--due {
   color: #22c55e;
-}
-
-.delete-btn {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  font-size: var(--font-size-lg);
-  color: var(--color-text-tertiary);
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: var(--transition-colors);
-  box-shadow: none;
-}
-
-.delete-btn:hover {
-  color: var(--color-error);
-  background: var(--color-surface-hover);
-}
-
-.delete-btn:focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: -2px;
-  color: var(--color-text-primary);
 }
 
 /* Filtered decks */
@@ -718,27 +667,5 @@ function handleDeleteFiltered(id: string, event: Event) {
   align-items: center;
   gap: var(--spacing-1);
   flex-shrink: 0;
-}
-
-.filtered-action-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  font-size: var(--font-size-lg);
-  color: var(--color-text-tertiary);
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: var(--transition-colors);
-  box-shadow: none;
-}
-
-.filtered-action-btn:hover {
-  color: var(--color-text-primary);
-  background: var(--color-surface-hover);
 }
 </style>

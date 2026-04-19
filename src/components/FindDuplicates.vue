@@ -11,7 +11,7 @@ import {
   type DuplicateSearchOptions,
   type NoteInfo,
 } from "../utils/duplicates";
-import { Button, Modal } from "../design-system";
+import { Button, Checkbox, Modal, Page, Select } from "../design-system";
 import { deleteNotesByGuid } from "../stores";
 
 // Search options
@@ -173,8 +173,8 @@ watch(ankiDataSig, () => {
 </script>
 
 <template>
-  <main class="find-duplicates">
-    <div class="find-duplicates__container">
+  <Page>
+    <template #title>
       <div class="find-duplicates__header">
         <div class="find-duplicates__title-row">
           <button class="find-duplicates__back-btn" @click="goBack" title="Back to Browse">
@@ -198,149 +198,146 @@ watch(ankiDataSig, () => {
           Detect and manage duplicate notes in your collection.
         </p>
       </div>
+    </template>
 
-      <!-- Search Options -->
-      <div class="find-duplicates__options">
-        <div class="find-duplicates__option">
-          <label class="find-duplicates__label" for="dup-field">Compare field</label>
-          <select id="dup-field" v-model="fieldIndex" class="find-duplicates__select">
-            <option v-for="(name, idx) in fieldNames" :key="idx" :value="idx">
-              {{ name }}{{ idx === 0 ? " (sort field)" : "" }}
-            </option>
-          </select>
-        </div>
-
-        <div class="find-duplicates__option">
-          <label class="find-duplicates__label" for="dup-scope">Scope</label>
-          <select id="dup-scope" v-model="scope" class="find-duplicates__select">
-            <option value="all">Across all decks</option>
-            <option value="deck">Within each deck</option>
-          </select>
-        </div>
-
-        <div class="find-duplicates__option find-duplicates__option--inline">
-          <label class="find-duplicates__checkbox-label">
-            <input type="checkbox" v-model="fuzzy" class="find-duplicates__checkbox" />
-            <span>Include fuzzy matches</span>
-          </label>
-        </div>
-
-        <div v-if="fuzzy" class="find-duplicates__option">
-          <label class="find-duplicates__label" for="dup-threshold">
-            Similarity threshold: {{ Math.round(fuzzyThreshold * 100) }}%
-          </label>
-          <input
-            id="dup-threshold"
-            type="range"
-            v-model.number="fuzzyThreshold"
-            min="0.5"
-            max="0.99"
-            step="0.01"
-            class="find-duplicates__range"
-          />
-        </div>
-
-        <Button
-          variant="primary"
-          size="md"
-          :loading="isSearching"
-          :disabled="!ankiDataSig || noteInfos.length === 0"
-          @click="runSearch"
-        >
-          Search for Duplicates
-        </Button>
+    <!-- Search Options -->
+    <div class="find-duplicates__options" data-testid="find-duplicates-options">
+      <div class="find-duplicates__option">
+        <label class="find-duplicates__label" for="dup-field">Compare field</label>
+        <Select id="dup-field" v-model="fieldIndex" :full-width="false" style="min-width: 160px">
+          <option v-for="(name, idx) in fieldNames" :key="idx" :value="idx">
+            {{ name }}{{ idx === 0 ? " (sort field)" : "" }}
+          </option>
+        </Select>
       </div>
 
-      <!-- Results -->
-      <div v-if="hasSearched" class="find-duplicates__results">
-        <div v-if="duplicateGroups.length === 0" class="find-duplicates__empty">
-          <p>No duplicates found.</p>
+      <div class="find-duplicates__option">
+        <label class="find-duplicates__label" for="dup-scope">Scope</label>
+        <Select id="dup-scope" v-model="scope" :full-width="false" style="min-width: 160px">
+          <option value="all">Across all decks</option>
+          <option value="deck">Within each deck</option>
+        </Select>
+      </div>
+
+      <div class="find-duplicates__option find-duplicates__option--inline">
+        <Checkbox v-model="fuzzy" label="Include fuzzy matches" />
+      </div>
+
+      <div v-if="fuzzy" class="find-duplicates__option">
+        <label class="find-duplicates__label" for="dup-threshold">
+          Similarity threshold: {{ Math.round(fuzzyThreshold * 100) }}%
+        </label>
+        <input
+          id="dup-threshold"
+          type="range"
+          v-model.number="fuzzyThreshold"
+          min="0.5"
+          max="0.99"
+          step="0.01"
+          class="find-duplicates__range"
+        />
+      </div>
+
+      <Button
+        variant="primary"
+        size="md"
+        :loading="isSearching"
+        :disabled="!ankiDataSig || noteInfos.length === 0"
+        @click="runSearch"
+      >
+        Search for Duplicates
+      </Button>
+    </div>
+
+    <!-- Results -->
+    <div v-if="hasSearched" class="find-duplicates__results" data-testid="find-duplicates-results">
+      <div v-if="duplicateGroups.length === 0" class="find-duplicates__empty">
+        <p>No duplicates found.</p>
+      </div>
+
+      <template v-else>
+        <div class="find-duplicates__results-header">
+          <span class="find-duplicates__results-count">
+            {{ duplicateGroups.length }} duplicate group{{
+              duplicateGroups.length !== 1 ? "s" : ""
+            }}
+            ({{ totalDuplicateNotes }} notes total)
+          </span>
         </div>
 
-        <template v-else>
-          <div class="find-duplicates__results-header">
-            <span class="find-duplicates__results-count">
-              {{ duplicateGroups.length }} duplicate group{{
-                duplicateGroups.length !== 1 ? "s" : ""
-              }}
-              ({{ totalDuplicateNotes }} notes total)
+        <div v-for="group in duplicateGroups" :key="group.key" class="find-duplicates__group">
+          <button class="find-duplicates__group-header" @click="toggleGroup(group.key)">
+            <svg
+              :class="[
+                'find-duplicates__chevron',
+                { 'find-duplicates__chevron--open': expandedGroups.has(group.key) },
+              ]"
+              xmlns="http://www.w3.org/2000/svg"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="m9 18 6-6-6-6" />
+            </svg>
+            <span class="find-duplicates__group-title">
+              {{ truncate(group.displayKey, 100) }}
             </span>
-          </div>
+            <span class="find-duplicates__group-badge"> {{ group.notes.length }} notes </span>
+            <span v-if="group.similarity < 1" class="find-duplicates__group-similarity">
+              ~{{ Math.round(group.similarity * 100) }}% similar
+            </span>
+          </button>
 
-          <div v-for="group in duplicateGroups" :key="group.key" class="find-duplicates__group">
-            <button class="find-duplicates__group-header" @click="toggleGroup(group.key)">
-              <svg
-                :class="[
-                  'find-duplicates__chevron',
-                  { 'find-duplicates__chevron--open': expandedGroups.has(group.key) },
-                ]"
-                xmlns="http://www.w3.org/2000/svg"
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <path d="m9 18 6-6-6-6" />
-              </svg>
-              <span class="find-duplicates__group-title">
-                {{ truncate(group.displayKey, 100) }}
-              </span>
-              <span class="find-duplicates__group-badge"> {{ group.notes.length }} notes </span>
-              <span v-if="group.similarity < 1" class="find-duplicates__group-similarity">
-                ~{{ Math.round(group.similarity * 100) }}% similar
-              </span>
-            </button>
-
-            <div v-if="expandedGroups.has(group.key)" class="find-duplicates__group-body">
-              <div v-for="note in group.notes" :key="note.guid" class="find-duplicates__note">
-                <div class="find-duplicates__note-content">
-                  <div class="find-duplicates__note-field">
-                    {{
-                      truncate(stripHtml(note.values[note.fieldNames[fieldIndex] ?? ""] ?? ""), 150)
-                    }}
-                  </div>
-                  <div class="find-duplicates__note-preview">
-                    {{ getNotePreview(note, fieldIndex) }}
-                  </div>
-                  <div class="find-duplicates__note-meta">
-                    <span class="find-duplicates__note-deck">{{ note.deckName }}</span>
-                    <span v-if="note.tags.length > 0" class="find-duplicates__note-tags">
-                      {{ note.tags.join(", ") }}
-                    </span>
-                  </div>
+          <div v-if="expandedGroups.has(group.key)" class="find-duplicates__group-body">
+            <div v-for="note in group.notes" :key="note.guid" class="find-duplicates__note">
+              <div class="find-duplicates__note-content">
+                <div class="find-duplicates__note-field">
+                  {{
+                    truncate(stripHtml(note.values[note.fieldNames[fieldIndex] ?? ""] ?? ""), 150)
+                  }}
                 </div>
-                <div class="find-duplicates__note-actions">
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    title="Keep this note, delete all others in this group"
-                    @click="handleDeleteAllBut(group, note.guid)"
-                  >
-                    Keep
-                  </Button>
-                  <Button
-                    variant="danger"
-                    size="sm"
-                    title="Delete this note"
-                    @click="handleDeleteDuplicate(group, note.guid)"
-                  >
-                    Delete
-                  </Button>
+                <div class="find-duplicates__note-preview">
+                  {{ getNotePreview(note, fieldIndex) }}
                 </div>
+                <div class="find-duplicates__note-meta">
+                  <span class="find-duplicates__note-deck">{{ note.deckName }}</span>
+                  <span v-if="note.tags.length > 0" class="find-duplicates__note-tags">
+                    {{ note.tags.join(", ") }}
+                  </span>
+                </div>
+              </div>
+              <div class="find-duplicates__note-actions">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  title="Keep this note, delete all others in this group"
+                  @click="handleDeleteAllBut(group, note.guid)"
+                >
+                  Keep
+                </Button>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  title="Delete this note"
+                  @click="handleDeleteDuplicate(group, note.guid)"
+                >
+                  Delete
+                </Button>
               </div>
             </div>
           </div>
-        </template>
-      </div>
+        </div>
+      </template>
+    </div>
 
-      <!-- No deck loaded -->
-      <div v-else-if="!ankiDataSig" class="find-duplicates__empty">
-        <p>No deck loaded. Load a deck first to search for duplicates.</p>
-      </div>
+    <!-- No deck loaded -->
+    <div v-else-if="!ankiDataSig" class="find-duplicates__empty">
+      <p>No deck loaded. Load a deck first to search for duplicates.</p>
     </div>
 
     <!-- Confirmation Modal -->
@@ -366,22 +363,12 @@ watch(ankiDataSig, () => {
         </Button>
       </template>
     </Modal>
-  </main>
+  </Page>
 </template>
 
 <style scoped>
-.find-duplicates {
-  min-height: calc(100vh - 44px);
-  padding: var(--spacing-6) var(--spacing-4);
-}
-
-.find-duplicates__container {
-  max-width: 900px;
-  margin: 0 auto;
-}
-
 .find-duplicates__header {
-  margin-bottom: var(--spacing-6);
+  margin-bottom: var(--spacing-4);
 }
 
 .find-duplicates__title-row {
@@ -458,39 +445,6 @@ watch(ankiDataSig, () => {
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
   color: var(--color-text-secondary);
-}
-
-.find-duplicates__select {
-  padding: var(--spacing-1-5) var(--spacing-3);
-  font-size: var(--font-size-sm);
-  color: var(--color-text-primary);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  min-width: 160px;
-}
-
-.find-duplicates__select:focus-visible {
-  outline: 2px solid var(--color-border-focus);
-  outline-offset: 2px;
-  box-shadow: var(--shadow-focus-ring);
-}
-
-.find-duplicates__checkbox-label {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--spacing-2);
-  font-size: var(--font-size-sm);
-  color: var(--color-text-primary);
-  cursor: pointer;
-}
-
-.find-duplicates__checkbox {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--color-primary);
-  cursor: pointer;
 }
 
 .find-duplicates__range {

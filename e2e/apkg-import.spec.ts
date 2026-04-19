@@ -18,18 +18,18 @@ const test = base.extend<{ cleanPage: import('@playwright/test').Page }>({
 
 test.describe('APKG File Import', () => {
   test('should show file library when no deck is loaded', async ({ cleanPage: page }) => {
-    await expect(page.locator('.file-library')).toBeVisible({ timeout: 10000 });
-    await expect(page.locator('.title:has-text("Deck Library")')).toBeVisible();
+    await expect(page.getByTestId('file-library')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('heading', { name: 'Deck Library' })).toBeVisible();
   });
 
   test('should show Add File button on clean state', async ({ cleanPage: page }) => {
-    await expect(page.locator('button:has-text("Add File")')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('button', { name: 'Add File' })).toBeVisible({ timeout: 10000 });
   });
 
   test('should have a file input that accepts .apkg files', async ({ cleanPage: page }) => {
-    await expect(page.locator('.file-library')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('file-library')).toBeVisible({ timeout: 10000 });
 
-    const fileInput = page.locator('.hidden-input');
+    const fileInput = page.locator('input[type="file"]');
     await expect(fileInput).toBeAttached();
 
     // Verify it accepts .apkg
@@ -38,10 +38,10 @@ test.describe('APKG File Import', () => {
   });
 
   test('should show the hidden file input that accepts .apkg', async ({ cleanPage: page }) => {
-    await expect(page.locator('.file-library')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('file-library')).toBeVisible({ timeout: 10000 });
 
     // The hidden file input should exist and accept .apkg files
-    const fileInput = page.locator('.hidden-input');
+    const fileInput = page.locator('input[type="file"]');
     await expect(fileInput).toBeAttached();
     const accept = await fileInput.getAttribute('accept');
     expect(accept).toContain('.apkg');

@@ -57,7 +57,8 @@ export type AppView =
   | "duplicates"
   | "stats"
   | "backup"
-  | "check-db";
+  | "check-db"
+  | "design-system";
 export const activeViewSig = ref<AppView>("review");
 export const reviewModeSig = ref<"deck-list" | "studying">("deck-list");
 

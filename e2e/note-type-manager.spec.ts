@@ -9,25 +9,25 @@ import { test, expect } from './fixtures';
 test.describe('Note Type Manager', () => {
   test('should open via command palette', async ({ loadedDeckPage: page }) => {
     await page.keyboard.press('Control+k');
-    await page.locator('.command-palette-input').fill('manage note types');
+    await page.getByPlaceholder(/command/i).fill('manage note types');
     await page.waitForTimeout(200);
     await page.keyboard.press('Enter');
 
-    await expect(page.locator('.ds-modal__title:has-text("Manage Note Types")')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Manage Note Types' })).toBeVisible();
   });
 
   test('should show sidebar and detail layout', async ({ loadedDeckPage: page }) => {
     await page.keyboard.press('Control+k');
-    await page.locator('.command-palette-input').fill('manage note types');
+    await page.getByPlaceholder(/command/i).fill('manage note types');
     await page.waitForTimeout(200);
     await page.keyboard.press('Enter');
-    await expect(page.locator('.ds-modal__title:has-text("Manage Note Types")')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Manage Note Types' })).toBeVisible();
 
     // Sidebar should be visible
-    await expect(page.locator('.sidebar')).toBeVisible();
+    await expect(page.getByTestId('sidebar')).toBeVisible();
 
     // Search input should be available
-    await expect(page.locator('.search-input')).toBeVisible();
+    await expect(page.getByTestId('sidebar').getByRole('textbox')).toBeVisible();
 
     // New button should be in sidebar actions
     await expect(page.locator('.sidebar-actions button').first()).toBeVisible();
@@ -35,14 +35,14 @@ test.describe('Note Type Manager', () => {
 
   test('should close modal', async ({ loadedDeckPage: page }) => {
     await page.keyboard.press('Control+k');
-    await page.locator('.command-palette-input').fill('manage note types');
+    await page.getByPlaceholder(/command/i).fill('manage note types');
     await page.waitForTimeout(200);
     await page.keyboard.press('Enter');
 
-    await expect(page.locator('.ds-modal__title:has-text("Manage Note Types")')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Manage Note Types' })).toBeVisible();
 
-    await page.locator('.ds-modal__close').click();
+    await page.getByRole('button', { name: /close/i }).click();
 
-    await expect(page.locator('.ds-modal__title:has-text("Manage Note Types")')).not.toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Manage Note Types' })).not.toBeVisible();
   });
 });

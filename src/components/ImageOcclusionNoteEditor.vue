@@ -2,7 +2,7 @@
 import { ref, watch, computed } from "vue";
 import ImageOcclusionEditor from "./ImageOcclusionEditor.vue";
 import TiptapEditor from "./TiptapEditor.vue";
-import { Button } from "../design-system";
+import { Button, TextInput } from "../design-system";
 import type { AnkiDB2Data } from "../ankiParser/anki2";
 import {
   IO_FIELD_NAMES,
@@ -225,10 +225,9 @@ function handleSave() {
         </span>
       </div>
       <div class="tag-add">
-        <input
+        <TextInput
           v-model="newTagInput"
-          type="text"
-          class="tag-input"
+          size="sm"
           placeholder="Add tag..."
           @keydown="handleTagKeydown"
         />
@@ -353,23 +352,6 @@ function handleSave() {
   display: flex;
   gap: var(--spacing-2);
   align-items: center;
-}
-
-.tag-input {
-  flex: 1;
-  padding: var(--spacing-1) var(--spacing-2);
-  font-size: var(--font-size-sm);
-  color: var(--color-text-primary);
-  background: var(--color-surface-elevated);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  box-sizing: border-box;
-}
-
-.tag-input:focus {
-  outline: none;
-  border-color: var(--color-border-focus);
-  box-shadow: var(--shadow-focus-ring);
 }
 
 .io-actions {

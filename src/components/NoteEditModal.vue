@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from "vue";
-import { Button, Modal } from "../design-system";
+import { Button, Modal, TextInput } from "../design-system";
 import TiptapEditor from "./TiptapEditor.vue";
 import ImageOcclusionNoteEditor from "./ImageOcclusionNoteEditor.vue";
 import type { AnkiDB2Data } from "../ankiParser/anki2";
@@ -95,8 +95,9 @@ function handleSave() {
     <template v-else>
       <div class="edit-form">
         <div v-for="(val, key) in editFields" :key="key" class="field-group">
-          <label class="field-label">{{ key }}</label>
+          <label :for="'edit-field-' + key" class="field-label">{{ key }}</label>
           <TiptapEditor
+            :id="'edit-field-' + key"
             v-model="editFields[key]"
             :media-files="mediaFiles"
             :field-description="card?.fieldDescriptions?.[key as string]"
@@ -108,14 +109,13 @@ function handleSave() {
           <div class="tags-list">
             <span v-for="(tag, i) in editTags" :key="tag" class="tag-badge">
               {{ tag }}
-              <button class="tag-remove" @click="removeTag(i)">&times;</button>
+              <button class="tag-remove" aria-label="Remove tag" @click="removeTag(i)">&times;</button>
             </span>
           </div>
           <div class="tag-add">
-            <input
+            <TextInput
               v-model="newTagInput"
-              type="text"
-              class="tag-input"
+              size="sm"
               placeholder="Add tag..."
               @keydown="handleTagKeydown"
             />
@@ -202,22 +202,5 @@ function handleSave() {
   display: flex;
   gap: var(--spacing-2);
   align-items: center;
-}
-
-.tag-input {
-  flex: 1;
-  padding: var(--spacing-1) var(--spacing-2);
-  font-size: var(--font-size-sm);
-  color: var(--color-text-primary);
-  background: var(--color-surface-elevated);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  box-sizing: border-box;
-}
-
-.tag-input:focus {
-  outline: none;
-  border-color: var(--color-border-focus);
-  box-shadow: var(--shadow-focus-ring);
 }
 </style>

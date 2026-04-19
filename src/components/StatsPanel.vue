@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, shallowRef, watch, onMounted } from "vue";
+import { Page } from "../design-system";
 import { reviewDB } from "../scheduler/db";
 import { normalizeCard } from "../stats/normalizeCard";
 import {
@@ -115,11 +116,13 @@ watch(period, loadStats);
 </script>
 
 <template>
-  <div class="stats-panel">
-    <div class="stats-header">
-      <h2 class="stats-title">Statistics</h2>
-      <StatsPeriodSelector v-model="period" />
-    </div>
+  <Page class="stats-panel" data-testid="stats-panel">
+    <template #title>
+      <div class="stats-header">
+        <h2 class="title stats-title">Statistics</h2>
+        <StatsPeriodSelector v-model="period" />
+      </div>
+    </template>
 
     <div v-if="loading" class="stats-loading">Loading statistics...</div>
 
@@ -134,36 +137,27 @@ watch(period, loadStats);
 
       <CalendarHeatmap :data="calendarData" :colors="colors" />
 
-      <div class="chart-grid">
+      <div class="chart-grid" data-testid="chart-grid">
         <CardCountsChart :data="cardCounts" :colors="colors" />
         <AnswerButtonsChart :data="answerButtons" :colors="colors" />
       </div>
 
       <FutureDueChart :data="futureDue" :colors="colors" />
 
-      <div class="chart-grid">
+      <div class="chart-grid" data-testid="chart-grid">
         <IntervalChart :data="intervalDist" :colors="colors" />
         <EaseChart :data="easeDist" :colors="colors" />
       </div>
 
-      <div class="chart-grid">
+      <div class="chart-grid" data-testid="chart-grid">
         <HourlyReviewChart :data="hourlyData" :colors="colors" />
         <AddedCardsChart :data="addedCardsData" :colors="colors" />
       </div>
     </template>
-  </div>
+  </Page>
 </template>
 
 <style scoped>
-.stats-panel {
-  max-width: 900px;
-  margin: 0 auto;
-  padding: var(--spacing-6) var(--spacing-4);
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-5);
-}
-
 .stats-header {
   display: flex;
   align-items: center;
@@ -172,10 +166,10 @@ watch(period, loadStats);
   gap: var(--spacing-3);
 }
 
-.stats-title {
+.title {
   font-size: var(--font-size-xl);
   font-weight: var(--font-weight-semibold);
-  color: var(--color-neutral-900);
+  color: var(--color-text-primary);
   margin: 0;
 }
 

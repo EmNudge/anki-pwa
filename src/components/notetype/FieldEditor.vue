@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { GripVertical, Plus, Trash2, ChevronDown, ChevronRight } from "lucide-vue-next";
-import { Button } from "~/design-system";
+import { Button, Checkbox, TextInput } from "~/design-system";
 import type { Anki21bFieldConfig } from "~/ankiParser/anki21b/proto";
 
 export interface FieldEntry {
@@ -103,9 +103,9 @@ function handleDragEnd() {
           <span class="field-ord">{{ idx + 1 }}</span>
 
           <template v-if="editingField === field.ord">
-            <input
+            <TextInput
               v-model="editName"
-              class="field-name-input"
+              size="sm"
               @keydown.enter="commitRename(field.ord)"
               @keydown.escape="editingField = null"
               @blur="commitRename(field.ord)"
@@ -117,69 +117,81 @@ function handleDragEnd() {
           </template>
 
           <div class="field-actions">
-            <button class="icon-btn" title="Toggle options" @click="toggleExpand(field.ord)">
+            <Button
+              variant="ghost"
+              size="sm"
+              square
+              title="Toggle options"
+              @click="toggleExpand(field.ord)"
+            >
               <ChevronDown v-if="expandedField === field.ord" :size="14" />
               <ChevronRight v-else :size="14" />
-            </button>
-            <button
-              class="icon-btn icon-btn--danger"
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              square
               title="Remove field"
               :disabled="fields.length <= 1"
               @click="emit('removeField', field.ord)"
             >
               <Trash2 :size="14" />
-            </button>
+            </Button>
           </div>
         </div>
 
         <div v-if="expandedField === field.ord" class="field-options">
-          <label class="option-row">
-            <input
-              type="checkbox"
-              :checked="field.config.rtl"
-              @change="emit('updateFieldConfig', field.ord, { rtl: !field.config.rtl })"
+          <div class="option-row">
+            <Checkbox
+              :model-value="field.config.rtl"
+              size="sm"
+              label="Right-to-left"
+              @update:model-value="emit('updateFieldConfig', field.ord, { rtl: !field.config.rtl })"
             />
-            <span>Right-to-left</span>
-          </label>
-          <label class="option-row">
-            <input
-              type="checkbox"
-              :checked="field.config.sticky"
-              @change="emit('updateFieldConfig', field.ord, { sticky: !field.config.sticky })"
+          </div>
+          <div class="option-row">
+            <Checkbox
+              :model-value="field.config.sticky"
+              size="sm"
+              label="Sticky (remember last input)"
+              @update:model-value="
+                emit('updateFieldConfig', field.ord, { sticky: !field.config.sticky })
+              "
             />
-            <span>Sticky (remember last input)</span>
-          </label>
-          <label class="option-row">
-            <input
-              type="checkbox"
-              :checked="field.config.plainText"
-              @change="emit('updateFieldConfig', field.ord, { plainText: !field.config.plainText })"
+          </div>
+          <div class="option-row">
+            <Checkbox
+              :model-value="field.config.plainText"
+              size="sm"
+              label="Plain text (no HTML)"
+              @update:model-value="
+                emit('updateFieldConfig', field.ord, { plainText: !field.config.plainText })
+              "
             />
-            <span>Plain text (no HTML)</span>
-          </label>
-          <label class="option-row">
-            <input
-              type="checkbox"
-              :checked="field.config.excludeFromSearch"
-              @change="
+          </div>
+          <div class="option-row">
+            <Checkbox
+              :model-value="field.config.excludeFromSearch"
+              size="sm"
+              label="Exclude from search"
+              @update:model-value="
                 emit('updateFieldConfig', field.ord, {
                   excludeFromSearch: !field.config.excludeFromSearch,
                 })
               "
             />
-            <span>Exclude from search</span>
-          </label>
+          </div>
           <div class="option-row">
             <label>
               Description
-              <input
-                type="text"
+              <TextInput
+                size="sm"
                 class="desc-input"
-                :value="field.config.description"
+                :model-value="field.config.description"
                 placeholder="Field description..."
-                @change="
+                @update:model-value="
                   emit('updateFieldConfig', field.ord, {
-                    description: ($event.target as HTMLInputElement).value,
+                    description: $event,
                   })
                 "
               />
@@ -188,28 +200,29 @@ function handleDragEnd() {
           <div class="option-row">
             <label>
               Font
-              <input
-                type="text"
+              <TextInput
+                size="sm"
                 class="desc-input"
-                :value="field.config.fontName"
-                @change="
+                :model-value="field.config.fontName"
+                @update:model-value="
                   emit('updateFieldConfig', field.ord, {
-                    fontName: ($event.target as HTMLInputElement).value,
+                    fontName: $event,
                   })
                 "
               />
             </label>
             <label>
               Size
-              <input
-                type="number"
+              <TextInput
+                size="sm"
                 class="size-input"
-                :value="field.config.fontSize"
+                type="number"
+                :model-value="String(field.config.fontSize)"
                 min="8"
                 max="72"
-                @change="
+                @update:model-value="
                   emit('updateFieldConfig', field.ord, {
-                    fontSize: Number(($event.target as HTMLInputElement).value),
+                    fontSize: Number($event),
                   })
                 "
               />
@@ -220,9 +233,9 @@ function handleDragEnd() {
     </div>
 
     <div v-if="showAddField" class="add-field-form">
-      <input
+      <TextInput
         v-model="newFieldName"
-        class="field-name-input"
+        size="sm"
         placeholder="Field name..."
         @keydown.enter="handleAdd"
         @keydown.escape="showAddField = false"
@@ -290,50 +303,10 @@ function handleDragEnd() {
   cursor: default;
 }
 
-.field-name-input {
-  flex: 1;
-  padding: var(--spacing-1) var(--spacing-2);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  font-size: var(--font-size-sm);
-  background: var(--color-surface);
-  color: var(--color-text-primary);
-}
-
 .field-actions {
   display: flex;
   gap: var(--spacing-1);
   align-items: center;
-}
-
-.icon-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border: none;
-  background: transparent;
-  color: var(--color-text-secondary);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: var(--transition-colors);
-  padding: 0;
-  box-shadow: none;
-}
-
-.icon-btn:hover:not(:disabled) {
-  background: var(--color-surface-hover);
-  color: var(--color-text-primary);
-}
-
-.icon-btn--danger:hover:not(:disabled) {
-  color: var(--color-error-500);
-}
-
-.icon-btn:disabled {
-  opacity: 0.3;
-  cursor: default;
 }
 
 .field-options {
@@ -352,29 +325,13 @@ function handleDragEnd() {
   color: var(--color-text-secondary);
 }
 
-.option-row input[type="checkbox"] {
-  accent-color: var(--color-primary-500);
-}
-
 .desc-input {
-  padding: var(--spacing-1) var(--spacing-2);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  font-size: var(--font-size-sm);
-  background: var(--color-surface);
-  color: var(--color-text-primary);
   flex: 1;
   margin-left: var(--spacing-2);
 }
 
 .size-input {
   width: 60px;
-  padding: var(--spacing-1) var(--spacing-2);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  font-size: var(--font-size-sm);
-  background: var(--color-surface);
-  color: var(--color-text-primary);
   margin-left: var(--spacing-2);
 }
 

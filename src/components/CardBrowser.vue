@@ -18,7 +18,7 @@ import { isImageOcclusionCard, renderImageOcclusion } from "../utils/imageOcclus
 import { sanitizeHtmlForPreview } from "../utils/sanitize";
 import { stripHtml } from "../utils/stripHtml";
 import { playAudio } from "../utils/sound";
-import { Button, Modal } from "../design-system";
+import { Button, Checkbox, Modal, TextInput } from "../design-system";
 import NoteEditModal from "./NoteEditModal.vue";
 import TagTree from "./TagTree.vue";
 import { buildTagTree, tagMatchesOrIsChild } from "../utils/tagTree";
@@ -1265,8 +1265,8 @@ async function handleNoteSave(payload: { fields: Record<string, string | null>; 
     </div>
 
     <!-- Bulk operations toolbar -->
-    <div v-if="hasMultiSelection" class="bulk-toolbar">
-      <span class="bulk-count">{{ selectedRowKeys.size }} selected</span>
+    <div v-if="hasMultiSelection" class="bulk-toolbar" data-testid="bulk-toolbar">
+      <span class="bulk-count" data-testid="bulk-count">{{ selectedRowKeys.size }} selected</span>
       <Button variant="secondary" size="sm" @click="selectAll">Select All</Button>
       <Button variant="secondary" size="sm" @click="clearSelection">Clear</Button>
       <Button variant="secondary" size="sm" @click="openBulkTagModal('add')">Add tag</Button>
@@ -1333,12 +1333,13 @@ async function handleNoteSave(payload: { fields: Record<string, string | null>; 
       <!-- Virtualized table -->
       <div class="table-wrap" ref="scrollContainerRef" @scroll="onTableScroll">
         <div class="virtual-spacer" :style="{ height: virtualSlice.totalHeight + 'px' }">
-          <table class="browse-table">
+          <table class="browse-table" data-testid="browse-table">
             <thead>
               <tr>
                 <th
                   v-for="col in visibleColumns"
                   :key="col.key"
+                  scope="col"
                   class="th"
                   @click="handleSort(col.key)"
                 >
@@ -1357,6 +1358,7 @@ async function handleNoteSave(payload: { fields: Record<string, string | null>; 
                     'tr--multi-selected': selectedRowKeys.has(row.key),
                   },
                 ]"
+                :aria-selected="selectedRowKey === row.key || selectedRowKeys.has(row.key)"
                 class="tr-fixed-height"
                 @click="handleRowClick(row, $event)"
               >
@@ -1370,7 +1372,7 @@ async function handleNoteSave(payload: { fields: Record<string, string | null>; 
       </div>
 
       <!-- Preview / Detail pane -->
-      <div v-if="showPreviewPanel" class="detail-pane" @click="handleDetailClick">
+      <div v-if="showPreviewPanel" class="detail-pane" data-testid="detail-pane" @click="handleDetailClick">
         <template v-if="selectedCard">
           <div class="detail-header">
             <div class="detail-header-text">
@@ -1403,10 +1405,10 @@ async function handleNoteSave(payload: { fields: Record<string, string | null>; 
           <div class="detail-fields">
             <div v-for="(val, key) in selectedCard.values" :key="key" class="detail-field">
               <div class="detail-field-label">{{ key }}</div>
-              <div class="detail-field-value" v-html="renderFieldHtml(val)" />
+              <div class="detail-field-value" data-testid="detail-field-value" v-html="renderFieldHtml(val)" />
             </div>
           </div>
-          <div v-if="selectedCard.tags.length > 0" class="detail-tags">
+          <div v-if="selectedCard.tags.length > 0" class="detail-tags" data-testid="detail-tags">
             <span v-for="tag in selectedCard.tags" :key="tag" class="tag-badge">{{ tag }}</span>
           </div>
         </template>
@@ -1433,10 +1435,9 @@ async function handleNoteSave(payload: { fields: Record<string, string | null>; 
     >
       <div class="modal-field">
         <label class="modal-label">Tag name</label>
-        <input
+        <TextInput
           v-model="bulkTagInput"
-          class="modal-input"
-          type="text"
+          size="sm"
           placeholder="e.g. vocab::spanish"
           @keydown.enter="applyBulkTag"
         />
@@ -1458,16 +1459,11 @@ async function handleNoteSave(payload: { fields: Record<string, string | null>; 
     >
       <div class="modal-field">
         <label class="modal-label">Current tag</label>
-        <input class="modal-input" type="text" :value="tagRenameOld" disabled />
+        <TextInput size="sm" :model-value="tagRenameOld" disabled />
       </div>
       <div class="modal-field">
         <label class="modal-label">New tag name</label>
-        <input
-          v-model="tagRenameNew"
-          class="modal-input"
-          type="text"
-          @keydown.enter="applyTagRename"
-        />
+        <TextInput v-model="tagRenameNew" size="sm" @keydown.enter="applyTagRename" />
       </div>
       <template #footer>
         <Button variant="secondary" size="sm" @click="tagRenameModalOpen = false"> Cancel </Button>
@@ -1506,9 +1502,10 @@ async function handleNoteSave(payload: { fields: Record<string, string | null>; 
       </p>
       <div class="modal-field">
         <label class="modal-label">Starting position</label>
-        <input
-          v-model.number="repositionStart"
-          class="modal-input"
+        <TextInput
+          :model-value="String(repositionStart)"
+          @update:model-value="repositionStart = Number($event)"
+          size="sm"
           type="number"
           min="0"
           placeholder="0"
@@ -1517,9 +1514,10 @@ async function handleNoteSave(payload: { fields: Record<string, string | null>; 
       </div>
       <div class="modal-field">
         <label class="modal-label">Step (between cards)</label>
-        <input
-          v-model.number="repositionStep"
-          class="modal-input"
+        <TextInput
+          :model-value="String(repositionStep)"
+          @update:model-value="repositionStep = Number($event)"
+          size="sm"
           type="number"
           min="1"
           placeholder="1"
@@ -1527,10 +1525,7 @@ async function handleNoteSave(payload: { fields: Record<string, string | null>; 
         />
       </div>
       <div class="modal-field">
-        <label class="modal-checkbox-label">
-          <input v-model="repositionRandomize" type="checkbox" />
-          Randomize order
-        </label>
+        <Checkbox v-model="repositionRandomize" size="sm" label="Randomize order" />
       </div>
       <p v-if="repositionResultMsg" class="modal-result">{{ repositionResultMsg }}</p>
       <template #footer>
@@ -2090,38 +2085,10 @@ async function handleNoteSave(payload: { fields: Record<string, string | null>; 
   color: var(--color-text-secondary);
 }
 
-.modal-input {
-  padding: var(--spacing-1-5) var(--spacing-2);
-  font-size: var(--font-size-sm);
-  color: var(--color-text-primary);
-  background: var(--color-surface-elevated);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  outline: none;
-}
-
-.modal-input:focus {
-  border-color: var(--color-border-focus);
-  box-shadow: var(--shadow-focus-ring);
-}
-
-.modal-input:disabled {
-  opacity: 0.6;
-}
-
 .modal-text {
   font-size: var(--font-size-sm);
   color: var(--color-text-primary);
   margin: 0;
-}
-
-.modal-checkbox-label {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-2);
-  font-size: var(--font-size-sm);
-  color: var(--color-text-primary);
-  cursor: pointer;
 }
 
 .modal-result {

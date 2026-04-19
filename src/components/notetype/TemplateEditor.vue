@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from "vue";
 import { Plus, Trash2 } from "lucide-vue-next";
-import { Button } from "~/design-system";
+import { Button, TextInput, Textarea } from "~/design-system";
 
 export interface TemplateEntry {
   ord: number;
@@ -106,23 +106,25 @@ function handleAddTemplate() {
 
       <div class="template-actions">
         <template v-if="editingName">
-          <input
+          <TextInput
             v-model="nameInput"
-            class="tmpl-name-input"
+            size="sm"
             @keydown.enter="commitRenameTmpl"
             @keydown.escape="editingName = false"
             @blur="commitRenameTmpl"
             autofocus
           />
         </template>
-        <button
+        <Button
           v-if="templates.length > 1 && !isCloze"
-          class="icon-btn icon-btn--danger"
+          variant="ghost"
+          size="sm"
+          square
           title="Delete template"
           @click="selectedTemplate && emit('removeTemplate', selectedTemplate.ord)"
         >
           <Trash2 :size="14" />
-        </button>
+        </Button>
       </div>
     </div>
 
@@ -141,10 +143,10 @@ function handleAddTemplate() {
       </button>
     </div>
 
-    <textarea
+    <Textarea
       class="template-textarea"
-      :value="editContent"
-      @input="editContent = ($event.target as HTMLTextAreaElement).value"
+      :model-value="editContent"
+      @update:model-value="editContent = $event"
       spellcheck="false"
       placeholder="Enter template HTML..."
     />
@@ -240,15 +242,6 @@ function handleAddTemplate() {
   align-items: center;
 }
 
-.tmpl-name-input {
-  padding: var(--spacing-1) var(--spacing-2);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  font-size: var(--font-size-sm);
-  background: var(--color-surface);
-  color: var(--color-text-primary);
-}
-
 .side-tabs {
   display: flex;
   gap: var(--spacing-1);
@@ -263,6 +256,7 @@ function handleAddTemplate() {
   background: transparent;
   border: none;
   border-bottom: 2px solid transparent;
+  border-radius: 0;
   cursor: pointer;
   transition: var(--transition-colors);
   box-shadow: none;
@@ -279,45 +273,10 @@ function handleAddTemplate() {
 
 .template-textarea {
   min-height: 200px;
-  padding: var(--spacing-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
   font-family: var(--font-family-mono, monospace);
-  font-size: var(--font-size-sm);
   line-height: var(--line-height-relaxed);
-  background: var(--color-surface);
-  color: var(--color-text-primary);
   resize: vertical;
   tab-size: 2;
-}
-
-.template-textarea:focus {
-  outline: 2px solid var(--color-border-focus);
-  outline-offset: -1px;
-}
-
-.icon-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border: none;
-  background: transparent;
-  color: var(--color-text-secondary);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: var(--transition-colors);
-  padding: 0;
-  box-shadow: none;
-}
-
-.icon-btn:hover:not(:disabled) {
-  background: var(--color-surface-hover);
-}
-
-.icon-btn--danger:hover:not(:disabled) {
-  color: var(--color-error-500);
 }
 
 .template-help {

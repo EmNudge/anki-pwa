@@ -13,7 +13,7 @@ const periods: { value: StatsPeriod; label: string }[] = [
 </script>
 
 <template>
-  <div class="period-selector">
+  <div class="period-selector" data-testid="period-selector">
     <button
       v-for="p in periods"
       :key="p.value"

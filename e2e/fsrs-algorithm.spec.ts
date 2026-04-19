@@ -1,8 +1,8 @@
 import { test, expect } from './fixtures';
 
-// Helper to get the scheduler settings modal
+// Helper to check scheduler settings modal visibility
 const getSchedulerModal = (page: any) => {
-  return page.locator('.ds-modal-overlay:has(.ds-modal__title:has-text("Deck Settings"))');
+  return page.getByRole('heading', { name: 'Deck Settings' });
 };
 
 test.describe('FSRS Algorithm', () => {
@@ -12,7 +12,7 @@ test.describe('FSRS Algorithm', () => {
       await page.keyboard.press('Control+Comma');
 
       // Wait for modal to appear
-      await expect(page.locator('.ds-modal__title:has-text("Deck Settings")')).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Deck Settings' })).toBeVisible();
     });
 
     test('should open scheduler settings via command palette', async ({ loadedDeckPage: page }) => {
@@ -31,7 +31,7 @@ test.describe('FSRS Algorithm', () => {
 
       // Settings modal should appear
       await expect(getSchedulerModal(page)).toBeVisible();
-      await expect(page.locator('.ds-modal__title:has-text("Deck Settings")')).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Deck Settings' })).toBeVisible();
     });
 
     test('should close settings modal with Cancel button', async ({ loadedDeckPage: page }) => {
@@ -40,7 +40,7 @@ test.describe('FSRS Algorithm', () => {
       await expect(getSchedulerModal(page)).toBeVisible();
 
       // Click Cancel
-      await page.click('button:has-text("Cancel")');
+      await page.getByRole('button', { name: 'Cancel' }).click();
 
       // Modal should close
       await expect(getSchedulerModal(page)).not.toBeVisible();
@@ -52,7 +52,7 @@ test.describe('FSRS Algorithm', () => {
       await expect(getSchedulerModal(page)).toBeVisible();
 
       // Click close button
-      await page.click('.ds-modal__close');
+      await page.getByLabel('Close').click();
 
       // Modal should close
       await expect(getSchedulerModal(page)).not.toBeVisible();
@@ -64,7 +64,7 @@ test.describe('FSRS Algorithm', () => {
       await expect(getSchedulerModal(page)).toBeVisible();
 
       // Check that SM2 is selected by default
-      const algorithmSelect = page.locator('.form-select').first();
+      const algorithmSelect = page.locator('select').first();
       await expect(algorithmSelect).toBeVisible();
       expect(await algorithmSelect.inputValue()).toBe('sm2');
     });
@@ -75,12 +75,12 @@ test.describe('FSRS Algorithm', () => {
       await expect(getSchedulerModal(page)).toBeVisible();
 
       // Change to FSRS
-      await page.locator('select.form-select').first().selectOption('fsrs');
+      await page.locator('select').first().selectOption('fsrs');
 
       // FSRS parameters should appear
-      await expect(page.locator('text=FSRS Parameters')).toBeVisible();
-      await expect(page.locator('label:has-text("Target Retention")')).toBeVisible();
-      await expect(page.locator('label:has-text("Maximum Interval")')).toBeVisible();
+      await expect(page.getByText('FSRS Parameters')).toBeVisible();
+      await expect(page.getByText('Target Retention')).toBeVisible();
+      await expect(page.getByText('Maximum Interval')).toBeVisible();
     });
 
     test('should hide FSRS parameters when SM2 is selected', async ({ loadedDeckPage: page }) => {
@@ -89,14 +89,14 @@ test.describe('FSRS Algorithm', () => {
       await expect(getSchedulerModal(page)).toBeVisible();
 
       // Switch to FSRS first
-      await page.locator('select.form-select').first().selectOption('fsrs');
-      await expect(page.locator('text=FSRS Parameters')).toBeVisible();
+      await page.locator('select').first().selectOption('fsrs');
+      await expect(page.getByText('FSRS Parameters')).toBeVisible();
 
       // Switch back to SM2
-      await page.locator('select.form-select').first().selectOption('sm2');
+      await page.locator('select').first().selectOption('sm2');
 
       // FSRS parameters should be hidden
-      await expect(page.locator('text=FSRS Parameters')).not.toBeVisible();
+      await expect(page.getByText('FSRS Parameters')).not.toBeVisible();
     });
 
     test('should allow changing daily limits', async ({ loadedDeckPage: page }) => {
@@ -113,7 +113,7 @@ test.describe('FSRS Algorithm', () => {
       await reviewLimitInput.fill('300');
 
       // Save settings
-      await page.click('button:has-text("Save Settings")');
+      await page.getByRole('button', { name: 'Save Settings' }).click();
 
       // Modal should close
       await expect(getSchedulerModal(page)).not.toBeVisible();
@@ -133,7 +133,7 @@ test.describe('FSRS Algorithm', () => {
       await expect(getSchedulerModal(page)).toBeVisible();
 
       // Switch to FSRS
-      await page.locator('select.form-select').first().selectOption('fsrs');
+      await page.locator('select').first().selectOption('fsrs');
 
       // Wait for FSRS parameters to appear
       await page.waitForTimeout(200);
@@ -147,14 +147,14 @@ test.describe('FSRS Algorithm', () => {
       await maxIntervalInput.fill('1000');
 
       // Save settings
-      await page.click('button:has-text("Save Settings")');
+      await page.getByRole('button', { name: 'Save Settings' }).click();
 
       // Wait for modal to close
       await page.waitForTimeout(500);
 
       // Reopen settings to verify
       await page.keyboard.press('Control+Comma');
-      await page.locator('select.form-select').first().selectOption('fsrs');
+      await page.locator('select').first().selectOption('fsrs');
       await page.waitForTimeout(200);
 
       // Verify values persisted
@@ -167,15 +167,15 @@ test.describe('FSRS Algorithm', () => {
     test('should switch to FSRS and review cards', async ({ loadedDeckPage: page }) => {
       // Switch to FSRS
       await page.keyboard.press('Control+Comma');
-      await page.locator('select.form-select').first().selectOption('fsrs');
-      await page.click('button:has-text("Save Settings")');
+      await page.locator('select').first().selectOption('fsrs');
+      await page.getByRole('button', { name: 'Save Settings' }).click();
 
       // Wait for settings to apply
       await page.waitForTimeout(500);
 
       // Reveal and answer a card
-      await page.click('button:has-text("Reveal")');
-      await page.click('button:has-text("Good")');
+      await page.getByRole('button', { name: 'Reveal' }).click();
+      await page.getByRole('button', { name: /Good/ }).click();
 
       // Wait for DB update
       await page.waitForTimeout(500);
@@ -219,13 +219,13 @@ test.describe('FSRS Algorithm', () => {
     test('should not show SM2 metrics when using FSRS', async ({ loadedDeckPage: page }) => {
       // Switch to FSRS
       await page.keyboard.press('Control+Comma');
-      await page.locator('select.form-select').first().selectOption('fsrs');
-      await page.click('button:has-text("Save Settings")');
+      await page.locator('select').first().selectOption('fsrs');
+      await page.getByRole('button', { name: 'Save Settings' }).click();
       await page.waitForTimeout(500);
 
       // Check that SM2-specific metrics are not shown
-      await expect(page.locator('.info-label:has-text("Ease Factor")')).not.toBeVisible();
-      await expect(page.locator('.info-label:has-text("Interval")')).not.toBeVisible();
+      await expect(page.getByText('Ease Factor')).not.toBeVisible();
+      await expect(page.getByText('Interval', { exact: true })).not.toBeVisible();
     });
 
     test('should calculate different FSRS intervals for each answer', async ({
@@ -233,16 +233,16 @@ test.describe('FSRS Algorithm', () => {
     }) => {
       // Switch to FSRS
       await page.keyboard.press('Control+Comma');
-      await page.locator('select.form-select').first().selectOption('fsrs');
-      await page.click('button:has-text("Save Settings")');
+      await page.locator('select').first().selectOption('fsrs');
+      await page.getByRole('button', { name: 'Save Settings' }).click();
       await page.waitForTimeout(500);
 
       // Reveal card
-      await page.click('button:has-text("Reveal")');
+      await page.getByRole('button', { name: 'Reveal' }).click();
 
       // Get intervals for each answer
       const getInterval = async (answerText: string) => {
-        const button = page.locator(`button:has-text("${answerText}")`);
+        const button = page.getByRole('button', { name: new RegExp(answerText) });
         const timeSpan = button.locator('.time');
         return await timeSpan.textContent();
       };
@@ -267,14 +267,14 @@ test.describe('FSRS Algorithm', () => {
     test('should persist FSRS review logs', async ({ loadedDeckPage: page }) => {
       // Switch to FSRS
       await page.keyboard.press('Control+Comma');
-      await page.locator('select.form-select').first().selectOption('fsrs');
-      await page.click('button:has-text("Save Settings")');
+      await page.locator('select').first().selectOption('fsrs');
+      await page.getByRole('button', { name: 'Save Settings' }).click();
       await page.waitForTimeout(500);
 
       // Review several cards
       for (let i = 0; i < 3; i++) {
-        await page.click('button:has-text("Reveal")');
-        await page.click('button:has-text("Good")');
+        await page.getByRole('button', { name: 'Reveal' }).click();
+        await page.getByRole('button', { name: /Good/ }).click();
         await page.waitForTimeout(300);
       }
 
@@ -306,8 +306,8 @@ test.describe('FSRS Algorithm', () => {
   test.describe('Algorithm Switching', () => {
     test('should switch from SM2 to FSRS', async ({ loadedDeckPage: page }) => {
       // Start with SM2 (default)
-      await page.click('button:has-text("Reveal")');
-      await page.click('button:has-text("Good")');
+      await page.getByRole('button', { name: 'Reveal' }).click();
+      await page.getByRole('button', { name: /Good/ }).click();
       await page.waitForTimeout(300);
 
       // Verify SM2 was used
@@ -339,13 +339,13 @@ test.describe('FSRS Algorithm', () => {
 
       // Switch to FSRS
       await page.keyboard.press('Control+Comma');
-      await page.locator('select.form-select').first().selectOption('fsrs');
-      await page.click('button:has-text("Save Settings")');
+      await page.locator('select').first().selectOption('fsrs');
+      await page.getByRole('button', { name: 'Save Settings' }).click();
       await page.waitForTimeout(1000); // Wait for queue to reinitialize
 
       // Review another card
-      await page.click('button:has-text("Reveal")');
-      await page.click('button:has-text("Good")');
+      await page.getByRole('button', { name: 'Reveal' }).click();
+      await page.getByRole('button', { name: /Good/ }).click();
       await page.waitForTimeout(300);
 
       // Check that new cards use FSRS
@@ -381,8 +381,8 @@ test.describe('FSRS Algorithm', () => {
       loadedDeckPage: page,
     }) => {
       // Review a card with SM2
-      await page.click('button:has-text("Reveal")');
-      await page.click('button:has-text("Good")');
+      await page.getByRole('button', { name: 'Reveal' }).click();
+      await page.getByRole('button', { name: /Good/ }).click();
       await page.waitForTimeout(300);
 
       // Get initial card count
@@ -408,13 +408,13 @@ test.describe('FSRS Algorithm', () => {
 
       // Switch to FSRS
       await page.keyboard.press('Control+Comma');
-      await page.locator('select.form-select').first().selectOption('fsrs');
-      await page.click('button:has-text("Save Settings")');
+      await page.locator('select').first().selectOption('fsrs');
+      await page.getByRole('button', { name: 'Save Settings' }).click();
       await page.waitForTimeout(1000);
 
       // Review another card
-      await page.click('button:has-text("Reveal")');
-      await page.click('button:has-text("Good")');
+      await page.getByRole('button', { name: 'Reveal' }).click();
+      await page.getByRole('button', { name: /Good/ }).click();
       await page.waitForTimeout(300);
 
       // Card count should have increased
@@ -447,13 +447,13 @@ test.describe('FSRS Algorithm', () => {
     test('should persist FSRS settings in IndexedDB', async ({ loadedDeckPage: page }) => {
       // Set FSRS with custom parameters
       await page.keyboard.press('Control+Comma');
-      await page.locator('select.form-select').first().selectOption('fsrs');
+      await page.locator('select').first().selectOption('fsrs');
       await page.waitForTimeout(200);
 
       const retentionInput = page.locator('label:has-text("Target Retention") + input');
       await retentionInput.fill('0.88');
 
-      await page.click('button:has-text("Save Settings")');
+      await page.getByRole('button', { name: 'Save Settings' }).click();
       await page.waitForTimeout(1000); // Wait for settings to be saved to IndexedDB
 
       // Verify settings were saved to IndexedDB
@@ -497,9 +497,9 @@ test.describe('FSRS Algorithm', () => {
     test('should save settings per deck', async ({ loadedDeckPage: page }) => {
       // Configure settings for current deck
       await page.keyboard.press('Control+Comma');
-      await page.locator('select.form-select').first().selectOption('fsrs');
+      await page.locator('select').first().selectOption('fsrs');
       await page.locator('input[type="number"]').first().fill('25');
-      await page.click('button:has-text("Save Settings")');
+      await page.getByRole('button', { name: 'Save Settings' }).click();
       await page.waitForTimeout(500);
 
       // Verify settings in IndexedDB

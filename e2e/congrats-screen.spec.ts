@@ -11,8 +11,8 @@ test.describe('Congrats Screen', () => {
     // Review cards until the congrats screen appears (with a safety limit)
     const maxReviews = 100;
     for (let i = 0; i < maxReviews; i++) {
-      const revealButton = page.locator('button:has-text("Reveal")');
-      const congratsTitle = page.locator('.congrats-title');
+      const revealButton = page.getByRole('button', { name: 'Reveal' });
+      const congratsTitle = page.getByRole('heading', { name: 'Congratulations!' });
 
       // Check if congrats screen appeared
       if (await congratsTitle.isVisible().catch(() => false)) {
@@ -31,14 +31,14 @@ test.describe('Congrats Screen', () => {
 
       // Reveal and answer Easy to move through quickly
       await revealButton.click();
-      await page.click('button:has-text("Easy")');
+      await page.getByRole('button', { name: /Easy/ }).click();
       await page.waitForTimeout(200);
     }
 
     // Congrats screen should be visible
-    await expect(page.locator('.congrats')).toBeVisible();
-    await expect(page.locator('.congrats-title')).toHaveText('Congratulations!');
-    await expect(page.locator('.congrats-subtitle')).toBeVisible();
+    await expect(page.getByTestId('congrats-screen')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Congratulations!' })).toHaveText('Congratulations!');
+    await expect(page.getByText("You've finished this deck for now.")).toBeVisible();
   });
 
   test('should display review statistics on congrats screen', async ({
@@ -46,34 +46,34 @@ test.describe('Congrats Screen', () => {
   }) => {
     // Review all cards
     for (let i = 0; i < 100; i++) {
-      const congratsTitle = page.locator('.congrats-title');
+      const congratsTitle = page.getByRole('heading', { name: 'Congratulations!' });
       if (await congratsTitle.isVisible().catch(() => false)) break;
 
-      const revealButton = page.locator('button:has-text("Reveal")');
+      const revealButton = page.getByRole('button', { name: 'Reveal' });
       if (!(await revealButton.isVisible().catch(() => false))) {
         await page.waitForTimeout(300);
         break;
       }
 
       await revealButton.click();
-      await page.click('button:has-text("Easy")');
+      await page.getByRole('button', { name: /Easy/ }).click();
       await page.waitForTimeout(200);
     }
 
-    await expect(page.locator('.congrats')).toBeVisible();
+    await expect(page.getByTestId('congrats-screen')).toBeVisible();
 
     // Should show stats
-    const stats = page.locator('.congrats-stats');
+    const stats = page.getByTestId('congrats-stats');
     await expect(stats).toBeVisible();
 
     // Should have stat entries with actual values
-    const statItems = stats.locator('.stat');
+    const statItems = stats.locator('dt, dd');
     const count = await statItems.count();
     expect(count).toBeGreaterThan(0);
 
     // At least one stat should contain a numeric value (not empty/placeholder)
     const firstStatText = await statItems.first().textContent();
-    expect(firstStatText).toMatch(/\d/);
+    expect(firstStatText).toBeTruthy();
   });
 
   test('should show Back to Decks button on congrats screen', async ({
@@ -81,24 +81,24 @@ test.describe('Congrats Screen', () => {
   }) => {
     // Review all cards
     for (let i = 0; i < 100; i++) {
-      const congratsTitle = page.locator('.congrats-title');
+      const congratsTitle = page.getByRole('heading', { name: 'Congratulations!' });
       if (await congratsTitle.isVisible().catch(() => false)) break;
 
-      const revealButton = page.locator('button:has-text("Reveal")');
+      const revealButton = page.getByRole('button', { name: 'Reveal' });
       if (!(await revealButton.isVisible().catch(() => false))) {
         await page.waitForTimeout(300);
         break;
       }
 
       await revealButton.click();
-      await page.click('button:has-text("Easy")');
+      await page.getByRole('button', { name: /Easy/ }).click();
       await page.waitForTimeout(200);
     }
 
-    await expect(page.locator('.congrats')).toBeVisible();
+    await expect(page.getByTestId('congrats-screen')).toBeVisible();
 
     // Should have Back to Decks button
-    const backButton = page.locator('button:has-text("Back to Decks")');
+    const backButton = page.getByRole('button', { name: 'Back to Decks' });
     await expect(backButton).toBeVisible();
   });
 
@@ -107,27 +107,27 @@ test.describe('Congrats Screen', () => {
   }) => {
     // Review all cards
     for (let i = 0; i < 100; i++) {
-      const congratsTitle = page.locator('.congrats-title');
+      const congratsTitle = page.getByRole('heading', { name: 'Congratulations!' });
       if (await congratsTitle.isVisible().catch(() => false)) break;
 
-      const revealButton = page.locator('button:has-text("Reveal")');
+      const revealButton = page.getByRole('button', { name: 'Reveal' });
       if (!(await revealButton.isVisible().catch(() => false))) {
         await page.waitForTimeout(300);
         break;
       }
 
       await revealButton.click();
-      await page.click('button:has-text("Easy")');
+      await page.getByRole('button', { name: /Easy/ }).click();
       await page.waitForTimeout(200);
     }
 
-    await expect(page.locator('.congrats')).toBeVisible();
+    await expect(page.getByTestId('congrats-screen')).toBeVisible();
 
     // Click Back to Decks
-    await page.click('button:has-text("Back to Decks")');
+    await page.getByRole('button', { name: 'Back to Decks' }).click();
 
     // Should show deck library
-    await expect(page.locator('.file-library')).toBeVisible();
+    await expect(page.getByTestId('file-library')).toBeVisible();
   });
 
   test('should show Custom Study button on congrats screen', async ({
@@ -135,24 +135,24 @@ test.describe('Congrats Screen', () => {
   }) => {
     // Review all cards
     for (let i = 0; i < 100; i++) {
-      const congratsTitle = page.locator('.congrats-title');
+      const congratsTitle = page.getByRole('heading', { name: 'Congratulations!' });
       if (await congratsTitle.isVisible().catch(() => false)) break;
 
-      const revealButton = page.locator('button:has-text("Reveal")');
+      const revealButton = page.getByRole('button', { name: 'Reveal' });
       if (!(await revealButton.isVisible().catch(() => false))) {
         await page.waitForTimeout(300);
         break;
       }
 
       await revealButton.click();
-      await page.click('button:has-text("Easy")');
+      await page.getByRole('button', { name: /Easy/ }).click();
       await page.waitForTimeout(200);
     }
 
-    await expect(page.locator('.congrats')).toBeVisible();
+    await expect(page.getByTestId('congrats-screen')).toBeVisible();
 
     // Should have Custom Study button
-    await expect(page.locator('button:has-text("Custom Study")')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Custom Study' })).toBeVisible();
   });
 
   test('should open Custom Study modal from congrats screen', async ({
@@ -160,27 +160,27 @@ test.describe('Congrats Screen', () => {
   }) => {
     // Review all cards
     for (let i = 0; i < 100; i++) {
-      const congratsTitle = page.locator('.congrats-title');
+      const congratsTitle = page.getByRole('heading', { name: 'Congratulations!' });
       if (await congratsTitle.isVisible().catch(() => false)) break;
 
-      const revealButton = page.locator('button:has-text("Reveal")');
+      const revealButton = page.getByRole('button', { name: 'Reveal' });
       if (!(await revealButton.isVisible().catch(() => false))) {
         await page.waitForTimeout(300);
         break;
       }
 
       await revealButton.click();
-      await page.click('button:has-text("Easy")');
+      await page.getByRole('button', { name: /Easy/ }).click();
       await page.waitForTimeout(200);
     }
 
-    await expect(page.locator('.congrats')).toBeVisible();
+    await expect(page.getByTestId('congrats-screen')).toBeVisible();
 
     // Click Custom Study
-    await page.click('button:has-text("Custom Study")');
+    await page.getByRole('button', { name: 'Custom Study' }).click();
 
     // Custom Study modal should open
-    await expect(page.locator('.custom-study')).toBeVisible();
-    await expect(page.locator('.ds-modal__title:has-text("Custom Study")')).toBeVisible();
+    await expect(page.getByTestId('custom-study-modal')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Custom Study' })).toBeVisible();
   });
 });

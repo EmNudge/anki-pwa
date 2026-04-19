@@ -8,7 +8,7 @@ test.describe('Browse View', () => {
   test('should navigate to Browse tab and show card table', async ({
     loadedDeckPage: page,
   }) => {
-    await page.click('.tab:has-text("Browse")');
+    await page.getByRole('tab', { name: 'Browse' }).click();
 
     await expect(page.locator('.browse-table')).toBeVisible();
 
@@ -19,7 +19,7 @@ test.describe('Browse View', () => {
   });
 
   test('should toggle between Cards and Notes view', async ({ loadedDeckPage: page }) => {
-    await page.click('.tab:has-text("Browse")');
+    await page.getByRole('tab', { name: 'Browse' }).click();
     await expect(page.locator('.browse-table')).toBeVisible();
 
     // Get initial row count in Cards mode
@@ -43,7 +43,7 @@ test.describe('Browse View', () => {
   });
 
   test('should select a card and show detail pane', async ({ loadedDeckPage: page }) => {
-    await page.click('.tab:has-text("Browse")');
+    await page.getByRole('tab', { name: 'Browse' }).click();
     await expect(page.locator('.browse-table')).toBeVisible();
 
     // Click first row
@@ -62,7 +62,7 @@ test.describe('Browse View', () => {
   test('should show empty state when no card is selected', async ({
     loadedDeckPage: page,
   }) => {
-    await page.click('.tab:has-text("Browse")');
+    await page.getByRole('tab', { name: 'Browse' }).click();
     await expect(page.locator('.browse-table')).toBeVisible();
 
     // No row selected initially — detail pane should show empty message
@@ -70,7 +70,7 @@ test.describe('Browse View', () => {
   });
 
   test('should sort table by clicking column headers', async ({ loadedDeckPage: page }) => {
-    await page.click('.tab:has-text("Browse")');
+    await page.getByRole('tab', { name: 'Browse' }).click();
     await expect(page.locator('.browse-table')).toBeVisible();
 
     // Get initial first cell text
@@ -101,7 +101,7 @@ test.describe('Browse View', () => {
   });
 
   test('should show card preview in detail pane', async ({ loadedDeckPage: page }) => {
-    await page.click('.tab:has-text("Browse")');
+    await page.getByRole('tab', { name: 'Browse' }).click();
     await page.locator('.browse-table tbody tr').first().click();
 
     // Detail pane should contain field values
@@ -115,7 +115,7 @@ test.describe('Browse View', () => {
   });
 
   test('should show tags section in detail pane', async ({ loadedDeckPage: page }) => {
-    await page.click('.tab:has-text("Browse")');
+    await page.getByRole('tab', { name: 'Browse' }).click();
     await page.locator('.browse-table tbody tr').first().click();
 
     // Tags area should exist in the detail pane
@@ -125,7 +125,7 @@ test.describe('Browse View', () => {
   test('should update detail pane when selecting different cards', async ({
     loadedDeckPage: page,
   }) => {
-    await page.click('.tab:has-text("Browse")');
+    await page.getByRole('tab', { name: 'Browse' }).click();
     await expect(page.locator('.browse-table')).toBeVisible();
 
     const rows = page.locator('.browse-table tbody tr');

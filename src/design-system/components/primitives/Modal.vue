@@ -61,7 +61,7 @@ function handleContentClick(e: MouseEvent) {
 
 <template>
   <div v-if="isOpen" class="ds-modal-overlay" @click="handleOverlayClick">
-    <div :class="['ds-modal', `ds-modal--${size}`]" @click="handleContentClick">
+    <div :class="['ds-modal', `ds-modal--${size}`]" role="dialog" aria-modal="true" :aria-label="title" @click="handleContentClick">
       <div v-if="title || showCloseButton" class="ds-modal__header">
         <h2 v-if="title" class="ds-modal__title">{{ title }}</h2>
         <div v-else />

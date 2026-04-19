@@ -3,13 +3,13 @@ import { test, expect } from './fixtures';
 test.describe('SRS Algorithm', () => {
   test('should display interval times for each answer option', async ({ loadedDeckPage: page }) => {
     // Reveal card to see answer buttons with intervals
-    await page.click('button:has-text("Reveal")');
+    await page.getByRole('button', { name: 'Reveal' }).click();
 
     // Check that each answer button has a time interval
     const answerButtons = ['Again', 'Hard', 'Good', 'Easy'];
 
     for (const buttonText of answerButtons) {
-      const button = page.locator(`button:has-text("${buttonText}")`);
+      const button = page.getByRole('button', { name: new RegExp(buttonText) });
       await expect(button).toBeVisible();
 
       // Get button content
@@ -29,11 +29,11 @@ test.describe('SRS Algorithm', () => {
     loadedDeckPage: page,
   }) => {
     // Reveal card
-    await page.click('button:has-text("Reveal")');
+    await page.getByRole('button', { name: 'Reveal' }).click();
 
     // Get intervals for each answer
     const getInterval = async (answerText: string) => {
-      const button = page.locator(`button:has-text("${answerText}")`);
+      const button = page.getByRole('button', { name: new RegExp(answerText) });
       const timeSpan = button.locator('.time');
       return await timeSpan.textContent();
     };
@@ -61,8 +61,8 @@ test.describe('SRS Algorithm', () => {
 
   test('should persist card review state in IndexedDB', async ({ loadedDeckPage: page }) => {
     // Answer a card
-    await page.click('button:has-text("Reveal")');
-    await page.click('button:has-text("Good")');
+    await page.getByRole('button', { name: 'Reveal' }).click();
+    await page.getByRole('button', { name: /Good/ }).click();
 
     // Wait for DB to update
     await page.waitForTimeout(500);
@@ -102,10 +102,10 @@ test.describe('SRS Algorithm', () => {
 
   test('should update intervals after reviewing a card', async ({ loadedDeckPage: page }) => {
     // Reveal card and get initial intervals
-    await page.click('button:has-text("Reveal")');
+    await page.getByRole('button', { name: 'Reveal' }).click();
 
     // Answer with "Good"
-    await page.click('button:has-text("Good")');
+    await page.getByRole('button', { name: /Good/ }).click();
 
     // Verify the system is tracking reviews
 
@@ -145,8 +145,8 @@ test.describe('SRS Algorithm', () => {
   test('should track daily statistics', async ({ loadedDeckPage: page }) => {
     // Answer a few cards
     for (let i = 0; i < 3; i++) {
-      await page.click('button:has-text("Reveal")');
-      await page.click('button:has-text("Good")');
+      await page.getByRole('button', { name: 'Reveal' }).click();
+      await page.getByRole('button', { name: /Good/ }).click();
       await page.waitForTimeout(300);
     }
 
@@ -185,27 +185,27 @@ test.describe('SRS Algorithm', () => {
 
   test('should handle different answer ratings correctly', async ({ loadedDeckPage: page }) => {
     // Test "Again" (rating 0 - card should come back soon)
-    await page.click('button:has-text("Reveal")');
-    const againButton = page.locator('button:has-text("Again")');
+    await page.getByRole('button', { name: 'Reveal' }).click();
+    const againButton = page.getByRole('button', { name: /Again/ });
     const againInterval = await againButton.locator('.time').textContent();
 
     // "Again" interval should be very short (typically <1m or similar)
     expect(againInterval).toBeTruthy();
 
-    await page.click('button:has-text("Again")');
+    await page.getByRole('button', { name: /Again/ }).click();
 
     // Verify the review was recorded
     await page.waitForTimeout(300);
 
     // Now test with "Easy"
-    await page.click('button:has-text("Reveal")');
-    const easyButton = page.locator('button:has-text("Easy")');
+    await page.getByRole('button', { name: 'Reveal' }).click();
+    const easyButton = page.getByRole('button', { name: /Easy/ });
     const easyInterval = await easyButton.locator('.time').textContent();
 
     // "Easy" interval should be longer
     expect(easyInterval).toBeTruthy();
 
-    await page.click('button:has-text("Easy")');
+    await page.getByRole('button', { name: /Easy/ }).click();
     await page.waitForTimeout(300);
 
     // Both reviews should be tracked

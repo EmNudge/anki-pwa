@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from "vue";
-import { Button, Modal } from "../design-system";
+import { Button, Checkbox, Modal, Select, TextInput } from "../design-system";
 import { ankiDataSig, countFilteredDeckCards, createFilteredDeck } from "../stores";
 import type { FilteredDeckSortOrder } from "../scheduler/types";
 
@@ -81,53 +81,49 @@ const SORT_OPTIONS: { value: FilteredDeckSortOrder; label: string }[] = [
 
 <template>
   <Modal :is-open="isOpen" title="Create Filtered Deck" size="md" @close="emit('close')">
-    <div class="filtered-form">
-      <label class="field">
+    <div class="filtered-form" data-testid="filtered-form">
+      <div class="field">
         <span class="field-label">Name</span>
-        <input v-model="name" type="text" class="field-input" placeholder="Filtered Deck 1" />
-      </label>
+        <TextInput v-model="name" type="text" placeholder="Filtered Deck 1" />
+      </div>
 
-      <label class="field">
+      <div class="field">
         <span class="field-label">Search query</span>
-        <input
+        <TextInput
           v-model="query"
           type="text"
-          class="field-input"
           placeholder="e.g. is:due deck:Biology"
           @keydown.enter.prevent="handleCreate"
         />
         <span class="field-hint">
           {{ previewCount }} matching card{{ previewCount === 1 ? "" : "s" }}
         </span>
-      </label>
+      </div>
 
       <div class="field-row">
-        <label class="field field--half">
+        <div class="field field--half">
           <span class="field-label">Limit</span>
-          <input v-model.number="limit" type="number" min="1" max="9999" class="field-input" />
-        </label>
+          <TextInput v-model="limit" type="number" min="1" max="9999" />
+        </div>
 
-        <label class="field field--half">
+        <div class="field field--half">
           <span class="field-label">Sort order</span>
-          <select v-model="sortOrder" class="field-input">
+          <Select v-model="sortOrder">
             <option v-for="opt in SORT_OPTIONS" :key="opt.value" :value="opt.value">
               {{ opt.label }}
             </option>
-          </select>
-        </label>
+          </Select>
+        </div>
       </div>
 
-      <label class="field field--checkbox">
-        <input v-model="reschedule" type="checkbox" />
-        <span>Reschedule cards based on my answers</span>
-      </label>
+      <Checkbox v-model="reschedule" label="Reschedule cards based on my answers" />
       <span class="field-hint" style="margin-top: -8px">
         {{
           reschedule ? "Cards will be rescheduled normally." : "Cram mode: scheduling won't change."
         }}
       </span>
 
-      <div class="preview-bar">
+      <div class="preview-bar" data-testid="preview-bar">
         Will study <strong>{{ effectiveCount }}</strong> card{{ effectiveCount === 1 ? "" : "s" }}
       </div>
 
@@ -158,37 +154,10 @@ const SORT_OPTIONS: { value: FilteredDeckSortOrder; label: string }[] = [
   flex: 1;
 }
 
-.field--checkbox {
-  flex-direction: row;
-  align-items: center;
-  gap: var(--spacing-2);
-  cursor: pointer;
-}
-
-.field--checkbox input {
-  margin: 0;
-}
-
 .field-label {
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
   color: var(--color-text-secondary);
-}
-
-.field-input {
-  padding: var(--spacing-2) var(--spacing-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  color: var(--color-text-primary);
-  font-size: var(--font-size-sm);
-  font-family: inherit;
-}
-
-.field-input:focus {
-  outline: none;
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px var(--color-primary-alpha);
 }
 
 .field-hint {
