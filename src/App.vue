@@ -55,6 +55,10 @@ const BackupPanel = defineAsyncComponent(() => import("./components/BackupPanel.
 const DatabaseCheckPanel = defineAsyncComponent(
   () => import("./components/DatabaseCheckPanel.vue"),
 );
+const isDev = import.meta.env.DEV;
+const DesignSystemPage = isDev
+  ? defineAsyncComponent(() => import("./components/DesignSystemPage.vue"))
+  : null;
 import CongratsScreen from "./components/CongratsScreen.vue";
 import SchedulerSettings from "./components/SchedulerSettings.vue";
 import FlagSettings from "./components/FlagSettings.vue";
@@ -525,6 +529,9 @@ onUnmounted(clearAutoAdvanceTimer);
 
   <!-- DATABASE CHECK VIEW -->
   <DatabaseCheckPanel v-else-if="activeViewSig === 'check-db'" />
+
+  <!-- DESIGN SYSTEM VIEW (dev only) -->
+  <DesignSystemPage v-else-if="isDev && activeViewSig === 'design-system'" />
 
   <!-- REVIEW VIEW: deck list or studying -->
   <FileLibrary v-else-if="reviewModeSig === 'deck-list'" />

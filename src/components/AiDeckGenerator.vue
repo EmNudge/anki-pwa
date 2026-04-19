@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
-import { Button } from "../design-system";
+import { Button, Select, Textarea } from "../design-system";
 import {
   checkOllamaAvailable,
   getOllamaModels,
@@ -195,9 +195,9 @@ function formatDate(timestamp: number): string {
       <div class="controls">
         <label class="control-label">
           Model:
-          <select v-model="selectedModel" class="control-select">
+          <Select v-model="selectedModel" size="sm">
             <option v-for="m in models" :key="m" :value="m">{{ m }}</option>
-          </select>
+          </Select>
         </label>
 
         <label class="control-label">
@@ -211,14 +211,14 @@ function formatDate(timestamp: number): string {
         </label>
       </div>
 
-      <textarea
+      <Textarea
         v-model="documentText"
         class="input-area"
         placeholder="Paste your document content here..."
         rows="10"
       />
 
-      <textarea
+      <Textarea
         v-model="instructions"
         class="input-area input-area--small"
         placeholder="Optional: extra instructions (e.g. 'focus on vocabulary', 'make cloze cards', 'create 20 cards max')"
@@ -362,15 +362,6 @@ function formatDate(timestamp: number): string {
   color: var(--color-text-secondary);
 }
 
-.control-select {
-  padding: var(--spacing-1) var(--spacing-2);
-  font-size: var(--font-size-sm);
-  background: var(--color-surface);
-  color: var(--color-text-primary);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-}
-
 .file-input {
   display: none;
 }
@@ -394,32 +385,15 @@ function formatDate(timestamp: number): string {
 .input-area {
   width: 100%;
   min-height: 200px;
-  padding: var(--spacing-3);
   font-family: var(--font-family-mono);
-  font-size: var(--font-size-sm);
-  color: var(--color-text-primary);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
   resize: vertical;
   box-sizing: border-box;
-  transition: var(--transition-colors);
 }
 
 .input-area--small {
   min-height: auto;
   margin-top: var(--spacing-3);
   font-family: var(--font-family-sans);
-}
-
-.input-area::placeholder {
-  color: var(--color-text-tertiary);
-}
-
-.input-area:focus {
-  outline: none;
-  border-color: var(--color-border-focus);
-  box-shadow: var(--shadow-focus-ring);
 }
 
 .actions {

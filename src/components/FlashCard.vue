@@ -50,7 +50,7 @@ onUnmounted(() => document.removeEventListener("keydown", handleKeyDown));
 
 <template>
   <div
-    :class="['card', `card--${activeSide}`]"
+    :class="['card', `card--${activeSide}`]" data-testid="flash-card"
     :style="cardBackground ? { background: cardBackground } : undefined"
   >
     <div :class="['card-indicator', `card-indicator--${activeSide}`]">
@@ -80,8 +80,11 @@ onUnmounted(() => document.removeEventListener("keydown", handleKeyDown));
   width: 500px;
   max-width: 100%;
   min-height: 500px;
+  max-height: calc(100vh - 160px);
   position: relative;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 @media (min-width: 1200px) {
   .card {
@@ -125,6 +128,9 @@ onUnmounted(() => document.removeEventListener("keydown", handleKeyDown));
 }
 .card-content {
   padding: var(--spacing-8) var(--spacing-4) var(--spacing-4);
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
 }
 h1 {
   margin: 0;

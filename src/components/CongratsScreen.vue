@@ -78,12 +78,12 @@ function handleRebuild() {
 </script>
 
 <template>
-  <div class="congrats">
+  <div class="congrats" data-testid="congrats-screen">
     <div class="congrats-card">
       <h2 class="congrats-title">Congratulations!</h2>
       <p class="congrats-subtitle">You've finished this deck for now.</p>
 
-      <dl class="congrats-stats">
+      <dl class="congrats-stats" data-testid="congrats-stats">
         <div class="stat">
           <dt>Reviewed today</dt>
           <dd>{{ reviewed }} card{{ reviewed === 1 ? "" : "s" }}</dd>

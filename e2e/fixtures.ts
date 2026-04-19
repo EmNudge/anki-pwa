@@ -42,10 +42,10 @@ export async function loadAnkiDeck(page: Page, filename = 'example_music_interva
 
   await page.waitForLoadState('networkidle');
 
-  const deckRow = page.locator('.deck-row').first();
+  const deckRow = page.getByTestId('deck-row').first();
   await deckRow.waitFor({ timeout: 30000 });
   await deckRow.click();
-  await page.waitForSelector('.card', { timeout: 30000 });
+  await page.getByTestId('flash-card').waitFor({ timeout: 30000 });
 }
 
 // ─── Synced SQLite collection ────────────────────────────────────────
@@ -152,11 +152,11 @@ export async function loadSyncedDb(page: Page, bytes: number[]) {
     await loadSyncedCollection(new Uint8Array(bytes));
   }, bytes);
 
-  const el = page.locator('.card, .deck-row').first();
+  const el = page.locator('[data-testid="flash-card"], [data-testid="deck-row"]').first();
   await el.waitFor({ timeout: 30000 });
-  if (await page.locator('.deck-row').first().isVisible()) {
-    await page.locator('.deck-row').first().click();
-    await page.waitForSelector('.card', { timeout: 30000 });
+  if (await page.getByTestId('deck-row').first().isVisible()) {
+    await page.getByTestId('deck-row').first().click();
+    await page.getByTestId('flash-card').waitFor({ timeout: 30000 });
   }
 }
 

@@ -176,7 +176,7 @@ test.describe('Image Occlusion', () => {
     test('should display IO note with correct fields in browse', async ({ page }) => {
       await setupSyncedPage(page, [{ header: 'Browse IO Test' }]);
 
-      await page.click('.tab:has-text("Browse")');
+      await page.getByRole('tab', { name: 'Browse' }).click();
       await expect(page.locator('.browse-table')).toBeVisible();
       await page.locator('button.toggle-btn:has-text("Notes")').click();
       await page.waitForTimeout(300);
@@ -201,7 +201,7 @@ test.describe('Image Occlusion', () => {
     test('should create 3 cards from one IO note with 3 shapes', async ({ page }) => {
       await setupSyncedPage(page, [{ header: 'Multi-Card IO', numShapes: 3 }]);
 
-      await page.click('.tab:has-text("Browse")');
+      await page.getByRole('tab', { name: 'Browse' }).click();
       await page.locator('button.toggle-btn:has-text("Cards")').click();
       await page.waitForTimeout(300);
 
@@ -224,7 +224,7 @@ test.describe('Image Occlusion', () => {
     test('should open IO editor when editing an IO card', async ({ page }) => {
       await setupSyncedPage(page, [{ header: 'Edit IO Test' }]);
 
-      await page.click('.tab:has-text("Browse")');
+      await page.getByRole('tab', { name: 'Browse' }).click();
       await page.locator('button.toggle-btn:has-text("Notes")').click();
       await page.waitForTimeout(300);
 

@@ -27,6 +27,7 @@ import { normalSync, FullSyncRequiredError, type SyncSummary } from "../lib/norm
 import { acquireSyncLock, releaseSyncLock } from "../lib/autoSync";
 import { triggerPreSyncBackup } from "../backup/autoBackup";
 import { createProgress, type SyncProgress } from "../lib/syncProgress";
+import { Alert, Button, Page, TextInput } from "../design-system";
 import SyncProgressBar from "./SyncProgressBar.vue";
 import SyncConflictModal from "./SyncConflictModal.vue";
 import SyncSummaryPanel from "./SyncSummaryPanel.vue";
@@ -420,8 +421,7 @@ function formatLastSync(timestamp: number | null): string {
 </script>
 
 <template>
-  <div class="sync-panel">
-    <h2 class="sync-title">Sync Server</h2>
+  <Page title="Sync Server">
     <p class="sync-description">
       Pull your collection from a self-hosted Anki sync server. Compatible with
       <code>anki-sync-server</code>, Anki's built-in server, and other implementations.
@@ -430,43 +430,36 @@ function formatLastSync(timestamp: number | null): string {
     <!-- Server Configuration -->
     <div class="sync-section">
       <label class="sync-label" for="server-url">Server URL</label>
-      <input
+      <TextInput
         id="server-url"
         v-model="serverUrl"
         type="url"
-        class="sync-input"
         placeholder="https://sync.example.com"
         :disabled="isLoggedIn"
       />
 
       <label class="sync-label" for="username">Username</label>
-      <input
+      <TextInput
         id="username"
         v-model="username"
         type="text"
-        class="sync-input"
         placeholder="username"
         :disabled="isLoggedIn"
       />
 
       <template v-if="!isLoggedIn">
         <label class="sync-label" for="password">Password</label>
-        <input
+        <TextInput
           id="password"
           v-model="password"
           type="password"
-          class="sync-input"
           placeholder="password"
           @keydown.enter="handleLogin"
         />
 
-        <button
-          class="sync-btn sync-btn--primary"
-          :disabled="!serverUrl || !username || !password"
-          @click="handleLogin"
-        >
+        <Button size="sm" :disabled="!serverUrl || !username || !password" @click="handleLogin">
           Log In
-        </button>
+        </Button>
       </template>
 
       <template v-else>
@@ -482,32 +475,20 @@ function formatLastSync(timestamp: number | null): string {
         </div>
 
         <div class="sync-actions">
-          <button class="sync-btn sync-btn--primary" :disabled="isSyncing" @click="handleSync">
-            <svg
-              v-if="isSyncing"
-              class="sync-spinner"
-              viewBox="0 0 24 24"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <circle
-                cx="12"
-                cy="12"
-                r="10"
-                stroke="currentColor"
-                stroke-width="3"
-                stroke-linecap="round"
-                stroke-dasharray="50 20"
-              />
-            </svg>
+          <Button size="sm" :loading="isSyncing" :disabled="isSyncing" @click="handleSync">
             {{ isSyncing ? "Syncing..." : "Sync" }}
-          </button>
-          <button class="sync-btn sync-btn--secondary" :disabled="isSyncing" @click="handleLogout">
+          </Button>
+          <Button variant="secondary" size="sm" :disabled="isSyncing" @click="handleLogout">
             Log Out
-          </button>
-          <button class="sync-btn sync-btn--danger" :disabled="isSyncing" @click="handleDisconnect">
+          </Button>
+          <Button
+            variant="danger-outline"
+            size="sm"
+            :disabled="isSyncing"
+            @click="handleDisconnect"
+          >
             Disconnect
-          </button>
+          </Button>
         </div>
 
         <!-- Sync progress indicator -->
@@ -524,12 +505,8 @@ function formatLastSync(timestamp: number | null): string {
             first, those reviews will be lost.
           </p>
           <div class="sync-confirm-actions">
-            <button class="sync-btn sync-btn--danger" @click="handlePush">
-              Push &amp; Overwrite
-            </button>
-            <button class="sync-btn sync-btn--secondary" @click="showPushConfirm = false">
-              Cancel
-            </button>
+            <Button variant="danger" size="sm" @click="handlePush"> Push &amp; Overwrite </Button>
+            <Button variant="secondary" size="sm" @click="showPushConfirm = false"> Cancel </Button>
           </div>
         </div>
 
@@ -541,20 +518,17 @@ function formatLastSync(timestamp: number | null): string {
               Bypass incremental sync and transfer the entire collection.
             </p>
             <div class="sync-actions">
-              <button
-                class="sync-btn sync-btn--secondary"
-                :disabled="isSyncing"
-                @click="handlePull"
-              >
+              <Button variant="secondary" size="sm" :disabled="isSyncing" @click="handlePull">
                 Full Download
-              </button>
-              <button
-                class="sync-btn sync-btn--push"
+              </Button>
+              <Button
+                variant="warning"
+                size="sm"
                 :disabled="isSyncing"
                 @click="showPushConfirm = true"
               >
                 Full Upload
-              </button>
+              </Button>
             </div>
           </div>
         </details>
@@ -574,8 +548,8 @@ function formatLastSync(timestamp: number | null): string {
     />
 
     <!-- Status Messages -->
-    <div v-if="syncStatus" class="sync-status">{{ syncStatus }}</div>
-    <div v-if="syncError" class="sync-error">{{ syncError }}</div>
+    <Alert v-if="syncStatus" variant="info" class="sync-alert">{{ syncStatus }}</Alert>
+    <Alert v-if="syncError" variant="error" class="sync-alert">{{ syncError }}</Alert>
 
     <!-- Help Section -->
     <details class="sync-help">
@@ -614,24 +588,10 @@ function formatLastSync(timestamp: number | null): string {
         </p>
       </div>
     </details>
-  </div>
+  </Page>
 </template>
 
 <style scoped>
-.sync-panel {
-  max-width: 540px;
-  margin: 0 auto;
-  padding: var(--spacing-8) var(--spacing-4);
-  text-align: left;
-}
-
-.sync-title {
-  font-size: var(--font-size-xl);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text-primary);
-  margin: 0 0 var(--spacing-2) 0;
-}
-
 .sync-description {
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
@@ -656,28 +616,6 @@ function formatLastSync(timestamp: number | null): string {
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
   color: var(--color-text-primary);
-}
-
-.sync-input {
-  padding: var(--spacing-2) var(--spacing-3);
-  font-size: var(--font-size-sm);
-  font-family: inherit;
-  color: var(--color-text-primary);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  outline: none;
-  transition: var(--transition-colors);
-}
-
-.sync-input:focus {
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 25%, transparent);
-}
-
-.sync-input:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
 }
 
 .sync-connected {
@@ -707,78 +645,6 @@ function formatLastSync(timestamp: number | null): string {
   flex-wrap: wrap;
 }
 
-.sync-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--spacing-1);
-  padding: var(--spacing-2) var(--spacing-4);
-  font-size: var(--font-size-sm);
-  font-family: inherit;
-  font-weight: var(--font-weight-medium);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: var(--transition-colors);
-  box-shadow: none;
-}
-
-.sync-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.sync-spinner {
-  width: 14px;
-  height: 14px;
-  animation: spin 0.8s linear infinite;
-  flex-shrink: 0;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.sync-btn--primary {
-  color: white;
-  background: var(--color-primary);
-  border-color: var(--color-primary);
-}
-
-.sync-btn--primary:hover:not(:disabled) {
-  filter: brightness(1.1);
-}
-
-.sync-btn--secondary {
-  color: var(--color-text-primary);
-  background: var(--color-surface);
-}
-
-.sync-btn--secondary:hover:not(:disabled) {
-  background: var(--color-surface-hover);
-}
-
-.sync-btn--push {
-  color: white;
-  background: var(--color-warning-500);
-  border-color: var(--color-warning-500);
-}
-
-.sync-btn--push:hover:not(:disabled) {
-  filter: brightness(1.1);
-}
-
-.sync-btn--danger {
-  color: #ef4444;
-  background: var(--color-surface);
-  border-color: #ef4444;
-}
-
-.sync-btn--danger:hover:not(:disabled) {
-  background: color-mix(in srgb, #ef4444 10%, var(--color-surface));
-}
-
 .sync-confirm {
   margin-top: var(--spacing-3);
   padding: var(--spacing-3);
@@ -799,22 +665,8 @@ function formatLastSync(timestamp: number | null): string {
   gap: var(--spacing-2);
 }
 
-.sync-status {
+.sync-alert {
   margin-top: var(--spacing-4);
-  padding: var(--spacing-3);
-  font-size: var(--font-size-sm);
-  color: var(--color-primary);
-  background: color-mix(in srgb, var(--color-primary) 8%, var(--color-surface));
-  border-radius: var(--radius-md);
-}
-
-.sync-error {
-  margin-top: var(--spacing-4);
-  padding: var(--spacing-3);
-  font-size: var(--font-size-sm);
-  color: #ef4444;
-  background: color-mix(in srgb, #ef4444 8%, var(--color-surface));
-  border-radius: var(--radius-md);
 }
 
 .sync-advanced {

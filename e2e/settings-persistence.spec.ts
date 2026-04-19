@@ -9,7 +9,7 @@ test.describe('Settings Persistence', () => {
     // Open settings and set custom limits
     await page.keyboard.press('Control+Comma');
     await expect(
-      page.locator('.ds-modal__title:has-text("Deck Settings")'),
+      page.getByRole('heading', { name: 'Deck Settings' }),
     ).toBeVisible();
 
     const newLimitInput = page.locator('input[type="number"]').first();
@@ -18,22 +18,22 @@ test.describe('Settings Persistence', () => {
     const reviewLimitInput = page.locator('input[type="number"]').nth(1);
     await reviewLimitInput.fill('250');
 
-    await page.click('button:has-text("Save Settings")');
+    await page.getByRole('button', { name: 'Save Settings' }).click();
     await page.waitForTimeout(1000);
 
     // Reload the page
     await page.reload({ waitUntil: 'networkidle' });
 
     // Wait for the deck to be available, then click it
-    const deckRow = page.locator('.deck-row').first();
+    const deckRow = page.getByTestId('deck-row').first();
     await deckRow.waitFor({ timeout: 30000 });
     await deckRow.click();
-    await page.waitForSelector('.card', { timeout: 30000 });
+    await page.getByTestId('flash-card').waitFor({ timeout: 30000 });
 
     // Reopen settings and verify values persisted
     await page.keyboard.press('Control+Comma');
     await expect(
-      page.locator('.ds-modal__title:has-text("Deck Settings")'),
+      page.getByRole('heading', { name: 'Deck Settings' }),
     ).toBeVisible();
 
     expect(await page.locator('input[type="number"]').first().inputValue()).toBe('42');
@@ -45,21 +45,21 @@ test.describe('Settings Persistence', () => {
   }) => {
     // Switch to FSRS
     await page.keyboard.press('Control+Comma');
-    await page.locator('select.form-select').first().selectOption('fsrs');
-    await page.click('button:has-text("Save Settings")');
+    await page.locator('select').first().selectOption('fsrs');
+    await page.getByRole('button', { name: 'Save Settings' }).click();
     await page.waitForTimeout(1000);
 
     // Reload
     await page.reload({ waitUntil: 'networkidle' });
 
-    const deckRow = page.locator('.deck-row').first();
+    const deckRow = page.getByTestId('deck-row').first();
     await deckRow.waitFor({ timeout: 30000 });
     await deckRow.click();
-    await page.waitForSelector('.card', { timeout: 30000 });
+    await page.getByTestId('flash-card').waitFor({ timeout: 30000 });
 
     // Reopen settings and verify FSRS is still selected
     await page.keyboard.press('Control+Comma');
-    const algorithmSelect = page.locator('select.form-select').first();
+    const algorithmSelect = page.locator('select').first();
     expect(await algorithmSelect.inputValue()).toBe('fsrs');
   });
 });

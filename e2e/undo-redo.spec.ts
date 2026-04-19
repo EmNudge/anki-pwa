@@ -6,8 +6,8 @@ import { test, expect } from './fixtures';
 
 test.describe('Undo/Redo', () => {
   test('should show disabled undo/redo buttons initially', async ({ loadedDeckPage: page }) => {
-    const undoBtn = page.locator('.undo-redo-btn').first();
-    const redoBtn = page.locator('.undo-redo-btn').nth(1);
+    const undoBtn = page.getByRole('button', { name: /undo/i });
+    const redoBtn = page.getByRole('button', { name: /redo/i });
 
     await expect(undoBtn).toBeVisible();
     await expect(redoBtn).toBeVisible();
@@ -17,19 +17,19 @@ test.describe('Undo/Redo', () => {
 
   test('should enable undo button after reviewing a card', async ({ loadedDeckPage: page }) => {
     // Review a card
-    await page.click('button:has-text("Reveal")');
-    await page.click('button:has-text("Good")');
+    await page.getByRole('button', { name: 'Reveal' }).click();
+    await page.getByRole('button', { name: /Good/ }).click();
     await page.waitForTimeout(500);
 
     // Undo button should now be enabled
-    const undoBtn = page.locator('.undo-redo-btn').first();
+    const undoBtn = page.getByRole('button', { name: /undo/i });
     await expect(undoBtn).toBeEnabled();
   });
 
   test('should undo a review with Ctrl+Z', async ({ loadedDeckPage: page }) => {
     // Review a card
-    await page.click('button:has-text("Reveal")');
-    await page.click('button:has-text("Good")');
+    await page.getByRole('button', { name: 'Reveal' }).click();
+    await page.getByRole('button', { name: /Good/ }).click();
     await page.waitForTimeout(500);
 
     // Undo the review
@@ -37,37 +37,37 @@ test.describe('Undo/Redo', () => {
     await page.waitForTimeout(500);
 
     // Should be back on the previous card's front (Reveal button visible)
-    await expect(page.locator('button:has-text("Reveal")')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Reveal' })).toBeVisible();
   });
 
   test('should undo multiple reviews', async ({ loadedDeckPage: page }) => {
     // Review two cards
-    await page.click('button:has-text("Reveal")');
-    await page.click('button:has-text("Good")');
+    await page.getByRole('button', { name: 'Reveal' }).click();
+    await page.getByRole('button', { name: /Good/ }).click();
     await page.waitForTimeout(500);
 
-    await page.click('button:has-text("Reveal")');
-    await page.click('button:has-text("Good")');
+    await page.getByRole('button', { name: 'Reveal' }).click();
+    await page.getByRole('button', { name: /Good/ }).click();
     await page.waitForTimeout(500);
 
     // Undo once
     await page.keyboard.press('Control+z');
     await page.waitForTimeout(500);
-    await expect(page.locator('button:has-text("Reveal")')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Reveal' })).toBeVisible();
 
     // Undo again
     await page.keyboard.press('Control+z');
     await page.waitForTimeout(500);
-    await expect(page.locator('button:has-text("Reveal")')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Reveal' })).toBeVisible();
 
     // Undo button should still be enabled (there might be more entries)
     // or disabled if we've undone everything
-    await expect(page.locator('.card')).toBeVisible();
+    await expect(page.getByTestId('flash-card')).toBeVisible();
   });
 
   test('should undo a note edit', async ({ loadedDeckPage: page }) => {
     // Go to Browse and edit a note
-    await page.click('.tab:has-text("Browse")');
+    await page.getByRole('tab', { name: 'Browse' }).click();
     await page.locator('.browse-table tbody tr').first().click();
 
     const originalValue = await page.locator('.detail-field-value').first().textContent();

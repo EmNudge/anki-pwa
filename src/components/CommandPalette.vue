@@ -252,6 +252,7 @@ onUnmounted(() => window.removeEventListener("keydown", onGlobalKeydown));
                   'command-palette-item',
                   { selected: filteredCommands.indexOf(cmd) === selectedIndex },
                 ]"
+                data-testid="command-palette-item"
                 @click="executeCommand(cmd)"
                 @mouseenter="selectedIndex = filteredCommands.indexOf(cmd)"
               >

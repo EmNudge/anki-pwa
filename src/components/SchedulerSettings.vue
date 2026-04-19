@@ -30,7 +30,7 @@ import {
   DEFAULT_EASY_DAYS,
   DEFAULT_LOAD_BALANCER,
 } from "../scheduler/types";
-import { Button, Modal } from "../design-system";
+import { Button, Checkbox, Modal, Select, TextInput, Textarea } from "../design-system";
 import { Pencil } from "lucide-vue-next";
 
 const DAY_NAMES: Record<DayOfWeek, string> = {
@@ -327,11 +327,10 @@ async function handleImportPreset() {
         <!-- Create new preset -->
         <div class="form-group">
           <div class="rename-row">
-            <input
+            <TextInput
               v-model="newPresetName"
-              type="text"
-              class="form-input"
               placeholder="New preset name..."
+              size="sm"
               @keyup.enter="handleCreatePreset"
             />
             <Button variant="primary" size="sm" @click="handleCreatePreset">
@@ -344,10 +343,9 @@ async function handleImportPreset() {
         <div v-if="presets.length === 0" class="help-text">No presets yet.</div>
         <div v-for="preset of presets" :key="preset.id" class="preset-item">
           <div v-if="renamingPresetId === preset.id" class="rename-row">
-            <input
+            <TextInput
               v-model="renamingPresetName"
-              type="text"
-              class="form-input"
+              size="sm"
               @keyup.enter="confirmRenamePreset"
               @keyup.escape="renamingPresetId = null"
             />
@@ -366,13 +364,15 @@ async function handleImportPreset() {
               <Button variant="secondary" size="sm" @click="handleClonePreset(preset.id)">
                 Clone
               </Button>
-              <button
-                class="rename-icon-btn"
+              <Button
+                variant="ghost"
+                size="xs"
+                square
                 title="Rename preset"
                 @click="startRenamingPreset(preset.id, preset.name)"
               >
                 <Pencil :size="14" />
-              </button>
+              </Button>
               <Button variant="secondary" size="sm" @click="handleExportPreset(preset.id)">
                 Export
               </Button>
@@ -392,10 +392,10 @@ async function handleImportPreset() {
             Import Preset from JSON
           </Button>
           <template v-else>
-            <textarea
+            <Textarea
               v-model="importJsonText"
-              class="form-input"
               rows="4"
+              size="sm"
               placeholder="Paste preset JSON here..."
             />
             <div class="rename-row" style="margin-top: var(--spacing-2)">
@@ -425,9 +425,9 @@ async function handleImportPreset() {
         <div v-if="!isRenaming" class="deck-name-display">
           <div class="deck-name-row">
             <span class="deck-full-name">{{ deckNode.fullName }}</span>
-            <button class="rename-icon-btn" title="Rename deck" @click="startRename">
+            <Button variant="ghost" size="xs" square title="Rename deck" @click="startRename">
               <Pencil :size="14" />
-            </button>
+            </Button>
           </div>
           <span class="deck-card-count">{{ deckNode.cardCount }} cards</span>
         </div>
@@ -436,10 +436,9 @@ async function handleImportPreset() {
         <div v-if="isRenaming" class="form-group">
           <label class="form-label">New Name</label>
           <div class="rename-row">
-            <input
+            <TextInput
               v-model="renameValue"
-              type="text"
-              class="form-input"
+              size="sm"
               @keyup.enter="confirmRename"
               @keyup.escape="isRenaming = false"
             />
@@ -453,35 +452,29 @@ async function handleImportPreset() {
         <div v-if="!isRenaming" class="export-section">
           <div class="form-group">
             <label class="form-label">Export Format</label>
-            <select v-model="exportFormat" class="form-select">
+            <Select v-model="exportFormat" size="sm">
               <option value="apkg">Anki Package (.apkg)</option>
               <option value="csv">CSV (.csv)</option>
               <option value="json">JSON (.json)</option>
-            </select>
+            </Select>
           </div>
 
           <template v-if="exportFormat !== 'apkg'">
             <div class="form-group">
               <label class="form-label">Scope</label>
-              <select v-model="exportScope" class="form-select">
+              <Select v-model="exportScope" size="sm">
                 <option value="deck">Current Deck</option>
                 <option value="all">All Cards</option>
-              </select>
+              </Select>
             </div>
 
             <div class="form-group">
-              <label class="toggle-row">
-                <span class="form-label" style="margin-bottom: 0">Include Scheduling</span>
-                <input type="checkbox" v-model="exportIncludeScheduling" />
-              </label>
+              <Checkbox v-model="exportIncludeScheduling" label="Include Scheduling" size="sm" />
               <div class="help-text">Include review history and scheduling data</div>
             </div>
 
             <div class="form-group">
-              <label class="toggle-row">
-                <span class="form-label" style="margin-bottom: 0">Include HTML</span>
-                <input type="checkbox" v-model="exportIncludeHtml" />
-              </label>
+              <Checkbox v-model="exportIncludeHtml" label="Include HTML" size="sm" />
               <div class="help-text">Keep HTML markup in field values</div>
             </div>
           </template>
@@ -497,14 +490,12 @@ async function handleImportPreset() {
       <div class="form-section">
         <div class="section-title">Scheduler</div>
         <div class="form-group">
-          <label class="toggle-row">
-            <span class="form-label" style="margin-bottom: 0">Enable Scheduler</span>
-            <input
-              type="checkbox"
-              :checked="settings.enabled"
-              @change="updateSetting('enabled', ($event.target as HTMLInputElement).checked)"
-            />
-          </label>
+          <Checkbox
+            :model-value="settings.enabled"
+            label="Enable Scheduler"
+            size="sm"
+            @update:model-value="updateSetting('enabled', $event)"
+          />
           <div class="help-text">
             When disabled, cards are shown sequentially without spaced repetition
           </div>
@@ -515,19 +506,14 @@ async function handleImportPreset() {
         <div class="section-title">Algorithm</div>
         <div class="form-group">
           <label class="form-label">Scheduling Algorithm</label>
-          <select
-            class="form-select"
-            :value="settings.algorithm"
-            @change="
-              updateSetting(
-                'algorithm',
-                ($event.target as HTMLSelectElement).value as 'sm2' | 'fsrs',
-              )
-            "
+          <Select
+            :model-value="settings.algorithm"
+            size="sm"
+            @update:model-value="updateSetting('algorithm', $event as 'sm2' | 'fsrs')"
           >
             <option value="sm2">SM-2 (Anki)</option>
             <option value="fsrs">FSRS (Modern)</option>
-          </select>
+          </Select>
           <div class="help-text">
             {{
               settings.algorithm === "sm2"
@@ -542,34 +528,24 @@ async function handleImportPreset() {
         <div class="section-title">Daily Limits</div>
         <div class="form-group">
           <label class="form-label">New Cards per Day</label>
-          <input
+          <TextInput
             type="number"
-            class="form-input"
-            :value="settings.dailyNewLimit"
+            size="sm"
+            :model-value="settings.dailyNewLimit"
             min="0"
             max="999"
-            @change="
-              updateSetting(
-                'dailyNewLimit',
-                parseInt(($event.target as HTMLInputElement).value, 10),
-              )
-            "
+            @update:model-value="updateSetting('dailyNewLimit', Number($event))"
           />
         </div>
         <div class="form-group">
           <label class="form-label">Reviews per Day</label>
-          <input
+          <TextInput
             type="number"
-            class="form-input"
-            :value="settings.dailyReviewLimit"
+            size="sm"
+            :model-value="settings.dailyReviewLimit"
             min="0"
             max="9999"
-            @change="
-              updateSetting(
-                'dailyReviewLimit',
-                parseInt(($event.target as HTMLInputElement).value, 10),
-              )
-            "
+            @update:model-value="updateSetting('dailyReviewLimit', Number($event))"
           />
         </div>
       </div>
@@ -578,18 +554,13 @@ async function handleImportPreset() {
         <div class="section-title">Schedule</div>
         <div class="form-group">
           <label class="form-label">Learn Ahead Limit (minutes)</label>
-          <input
+          <TextInput
             type="number"
-            class="form-input"
-            :value="settings.learnAheadMins ?? 20"
+            size="sm"
+            :model-value="settings.learnAheadMins ?? 20"
             min="0"
             max="120"
-            @change="
-              updateSetting(
-                'learnAheadMins',
-                parseInt(($event.target as HTMLInputElement).value, 10),
-              )
-            "
+            @update:model-value="updateSetting('learnAheadMins', Number($event))"
           />
           <div class="help-text">
             When the queue is empty, study cards due within this many minutes (0 = off)
@@ -597,15 +568,13 @@ async function handleImportPreset() {
         </div>
         <div class="form-group">
           <label class="form-label">Day Rollover Hour</label>
-          <input
+          <TextInput
             type="number"
-            class="form-input"
-            :value="settings.rolloverHour ?? 4"
+            size="sm"
+            :model-value="settings.rolloverHour ?? 4"
             min="0"
             max="23"
-            @change="
-              updateSetting('rolloverHour', parseInt(($event.target as HTMLInputElement).value, 10))
-            "
+            @update:model-value="updateSetting('rolloverHour', Number($event))"
           />
           <div class="help-text">
             Hour (0-23) when "today" starts. Set to 4 so late-night reviews count as the same day.
@@ -618,47 +587,35 @@ async function handleImportPreset() {
         <div class="section-title">Learning</div>
         <div class="form-group">
           <label class="form-label">Learning Steps</label>
-          <input
+          <TextInput
             type="text"
-            class="form-input"
-            :value="formatSteps(sm2.learningSteps)"
-            @change="
-              updateSm2Param('learningSteps', parseSteps(($event.target as HTMLInputElement).value))
-            "
+            size="sm"
+            :model-value="formatSteps(sm2.learningSteps)"
+            @update:model-value="updateSm2Param('learningSteps', parseSteps(String($event)))"
           />
           <div class="help-text">Steps for new cards (e.g., "1m 10m" or "1m 10m 1h")</div>
         </div>
         <div class="form-group">
           <label class="form-label">Graduating Interval (days)</label>
-          <input
+          <TextInput
             type="number"
-            class="form-input"
-            :value="sm2.graduatingInterval"
+            size="sm"
+            :model-value="sm2.graduatingInterval"
             min="1"
             max="365"
-            @change="
-              updateSm2Param(
-                'graduatingInterval',
-                parseInt(($event.target as HTMLInputElement).value, 10),
-              )
-            "
+            @update:model-value="updateSm2Param('graduatingInterval', Number($event))"
           />
           <div class="help-text">Interval when a learning card graduates via Good</div>
         </div>
         <div class="form-group">
           <label class="form-label">Easy Interval (days)</label>
-          <input
+          <TextInput
             type="number"
-            class="form-input"
-            :value="sm2.easyInterval"
+            size="sm"
+            :model-value="sm2.easyInterval"
             min="1"
             max="365"
-            @change="
-              updateSm2Param(
-                'easyInterval',
-                parseInt(($event.target as HTMLInputElement).value, 10),
-              )
-            "
+            @update:model-value="updateSm2Param('easyInterval', Number($event))"
           />
           <div class="help-text">Interval when a learning card graduates via Easy</div>
         </div>
@@ -668,51 +625,36 @@ async function handleImportPreset() {
         <div class="section-title">Lapses</div>
         <div class="form-group">
           <label class="form-label">Relearning Steps</label>
-          <input
+          <TextInput
             type="text"
-            class="form-input"
-            :value="formatSteps(sm2.relearningSteps)"
-            @change="
-              updateSm2Param(
-                'relearningSteps',
-                parseSteps(($event.target as HTMLInputElement).value),
-              )
-            "
+            size="sm"
+            :model-value="formatSteps(sm2.relearningSteps)"
+            @update:model-value="updateSm2Param('relearningSteps', parseSteps(String($event)))"
           />
           <div class="help-text">Steps when a review card is failed (e.g., "10m")</div>
         </div>
         <div class="form-group">
           <label class="form-label">New Interval</label>
-          <input
+          <TextInput
             type="number"
-            class="form-input"
-            :value="sm2.lapseNewInterval"
+            size="sm"
+            :model-value="sm2.lapseNewInterval"
             min="0"
             max="1"
             step="0.05"
-            @change="
-              updateSm2Param(
-                'lapseNewInterval',
-                parseFloat(($event.target as HTMLInputElement).value),
-              )
-            "
+            @update:model-value="updateSm2Param('lapseNewInterval', Number($event))"
           />
           <div class="help-text">Interval multiplier after a lapse (0 = reset, 0.5 = halve)</div>
         </div>
         <div class="form-group">
           <label class="form-label">Minimum Interval (days)</label>
-          <input
+          <TextInput
             type="number"
-            class="form-input"
-            :value="sm2.minLapseInterval"
+            size="sm"
+            :model-value="sm2.minLapseInterval"
             min="1"
             max="365"
-            @change="
-              updateSm2Param(
-                'minLapseInterval',
-                parseInt(($event.target as HTMLInputElement).value, 10),
-              )
-            "
+            @update:model-value="updateSm2Param('minLapseInterval', Number($event))"
           />
           <div class="help-text">Minimum interval after a lapse</div>
         </div>
@@ -722,84 +664,65 @@ async function handleImportPreset() {
         <div class="section-title">Advanced</div>
         <div class="form-group">
           <label class="form-label">Starting Ease</label>
-          <input
+          <TextInput
             type="number"
-            class="form-input"
-            :value="sm2.startingEase"
+            size="sm"
+            :model-value="sm2.startingEase"
             min="1.3"
             max="5"
             step="0.1"
-            @change="
-              updateSm2Param('startingEase', parseFloat(($event.target as HTMLInputElement).value))
-            "
+            @update:model-value="updateSm2Param('startingEase', Number($event))"
           />
           <div class="help-text">Initial ease factor for new cards (2.5 = 250%)</div>
         </div>
         <div class="form-group">
           <label class="form-label">Easy Bonus</label>
-          <input
+          <TextInput
             type="number"
-            class="form-input"
-            :value="sm2.easyBonus"
+            size="sm"
+            :model-value="sm2.easyBonus"
             min="1"
             max="3"
             step="0.05"
-            @change="
-              updateSm2Param('easyBonus', parseFloat(($event.target as HTMLInputElement).value))
-            "
+            @update:model-value="updateSm2Param('easyBonus', Number($event))"
           />
           <div class="help-text">Extra multiplier for Easy on review cards (1.3 = 130%)</div>
         </div>
         <div class="form-group">
           <label class="form-label">Hard Interval</label>
-          <input
+          <TextInput
             type="number"
-            class="form-input"
-            :value="sm2.hardMultiplier"
+            size="sm"
+            :model-value="sm2.hardMultiplier"
             min="1"
             max="2"
             step="0.05"
-            @change="
-              updateSm2Param(
-                'hardMultiplier',
-                parseFloat(($event.target as HTMLInputElement).value),
-              )
-            "
+            @update:model-value="updateSm2Param('hardMultiplier', Number($event))"
           />
           <div class="help-text">Multiplier for Hard on review cards (1.2 = 120%)</div>
         </div>
         <div class="form-group">
           <label class="form-label">Interval Modifier</label>
-          <input
+          <TextInput
             type="number"
-            class="form-input"
-            :value="sm2.intervalModifier"
+            size="sm"
+            :model-value="sm2.intervalModifier"
             min="0.5"
             max="2"
             step="0.05"
-            @change="
-              updateSm2Param(
-                'intervalModifier',
-                parseFloat(($event.target as HTMLInputElement).value),
-              )
-            "
+            @update:model-value="updateSm2Param('intervalModifier', Number($event))"
           />
           <div class="help-text">Global multiplier for all intervals (1.0 = no change)</div>
         </div>
         <div class="form-group">
           <label class="form-label">Maximum Interval (days)</label>
-          <input
+          <TextInput
             type="number"
-            class="form-input"
-            :value="sm2.maximumInterval"
+            size="sm"
+            :model-value="sm2.maximumInterval"
             min="1"
             max="36500"
-            @change="
-              updateSm2Param(
-                'maximumInterval',
-                parseInt(($event.target as HTMLInputElement).value, 10),
-              )
-            "
+            @update:model-value="updateSm2Param('maximumInterval', Number($event))"
           />
           <div class="help-text">Maximum days between reviews (36500 = 100 years)</div>
         </div>
@@ -810,19 +733,14 @@ async function handleImportPreset() {
         <div class="section-title">FSRS Parameters</div>
         <div class="form-group">
           <label class="form-label">Target Retention (0-1)</label>
-          <input
+          <TextInput
             type="number"
-            class="form-input"
-            :value="settings.fsrsParams?.requestRetention ?? 0.9"
+            size="sm"
+            :model-value="settings.fsrsParams?.requestRetention ?? 0.9"
             min="0"
             max="1"
             step="0.01"
-            @change="
-              updateFsrsParam(
-                'requestRetention',
-                parseFloat(($event.target as HTMLInputElement).value),
-              )
-            "
+            @update:model-value="updateFsrsParam('requestRetention', Number($event))"
           />
           <div class="help-text">
             How much you want to remember (0.9 = 90% retention recommended)
@@ -830,18 +748,13 @@ async function handleImportPreset() {
         </div>
         <div class="form-group">
           <label class="form-label">Maximum Interval (days)</label>
-          <input
+          <TextInput
             type="number"
-            class="form-input"
-            :value="settings.fsrsParams?.maximumInterval ?? 36500"
+            size="sm"
+            :model-value="settings.fsrsParams?.maximumInterval ?? 36500"
             min="1"
             max="36500"
-            @change="
-              updateFsrsParam(
-                'maximumInterval',
-                parseInt(($event.target as HTMLInputElement).value, 10),
-              )
-            "
+            @update:model-value="updateFsrsParam('maximumInterval', Number($event))"
           />
           <div class="help-text">Maximum days between reviews (36500 = 100 years default)</div>
         </div>
@@ -855,55 +768,42 @@ async function handleImportPreset() {
         </div>
         <div class="form-group">
           <label class="form-label">Auto-Flip Delay (seconds)</label>
-          <input
+          <TextInput
             type="number"
-            class="form-input"
-            :value="autoAdvance.autoFlipDelaySecs"
+            size="sm"
+            :model-value="autoAdvance.autoFlipDelaySecs"
             min="0"
             max="300"
-            @change="
-              updateAutoAdvance(
-                'autoFlipDelaySecs',
-                parseInt(($event.target as HTMLInputElement).value, 10),
-              )
-            "
+            @update:model-value="updateAutoAdvance('autoFlipDelaySecs', Number($event))"
           />
           <div class="help-text">Seconds before auto-flipping the card (0 = off)</div>
         </div>
         <div class="form-group">
           <label class="form-label">Auto-Advance Delay (seconds)</label>
-          <input
+          <TextInput
             type="number"
-            class="form-input"
-            :value="autoAdvance.autoAdvanceDelaySecs"
+            size="sm"
+            :model-value="autoAdvance.autoAdvanceDelaySecs"
             min="0"
             max="300"
-            @change="
-              updateAutoAdvance(
-                'autoAdvanceDelaySecs',
-                parseInt(($event.target as HTMLInputElement).value, 10),
-              )
-            "
+            @update:model-value="updateAutoAdvance('autoAdvanceDelaySecs', Number($event))"
           />
           <div class="help-text">Seconds after flip before moving to next card (0 = off)</div>
         </div>
         <div class="form-group">
           <label class="form-label">Auto-Advance Answer</label>
-          <select
-            class="form-select"
-            :value="autoAdvance.autoAdvanceAnswer"
-            @change="
-              updateAutoAdvance(
-                'autoAdvanceAnswer',
-                ($event.target as HTMLSelectElement).value as 'again' | 'hard' | 'good' | 'easy',
-              )
+          <Select
+            :model-value="autoAdvance.autoAdvanceAnswer"
+            size="sm"
+            @update:model-value="
+              updateAutoAdvance('autoAdvanceAnswer', $event as 'again' | 'hard' | 'good' | 'easy')
             "
           >
             <option value="again">Again</option>
             <option value="hard">Hard</option>
             <option value="good">Good</option>
             <option value="easy">Easy</option>
-          </select>
+          </Select>
           <div class="help-text">Answer to auto-submit when auto-advancing</div>
         </div>
       </div>
@@ -939,33 +839,26 @@ async function handleImportPreset() {
       <div v-if="settings.enabled" class="form-section">
         <div class="section-title">Load Balancer</div>
         <div class="form-group">
-          <label class="toggle-row">
-            <span class="form-label" style="margin-bottom: 0">Enable Load Balancer</span>
-            <input
-              type="checkbox"
-              :checked="loadBalancer.enabled"
-              @change="updateLoadBalancer('enabled', ($event.target as HTMLInputElement).checked)"
-            />
-          </label>
+          <Checkbox
+            :model-value="loadBalancer.enabled"
+            label="Enable Load Balancer"
+            size="sm"
+            @update:model-value="updateLoadBalancer('enabled', $event)"
+          />
           <div class="help-text">
             Spread reviews across days to avoid large spikes on any single day
           </div>
         </div>
         <div v-if="loadBalancer.enabled" class="form-group">
           <label class="form-label">Fuzz Factor</label>
-          <input
+          <TextInput
             type="number"
-            class="form-input"
-            :value="loadBalancer.fuzzFactor"
+            size="sm"
+            :model-value="loadBalancer.fuzzFactor"
             min="0"
             max="0.25"
             step="0.01"
-            @change="
-              updateLoadBalancer(
-                'fuzzFactor',
-                parseFloat(($event.target as HTMLInputElement).value),
-              )
-            "
+            @update:model-value="updateLoadBalancer('fuzzFactor', Number($event))"
           />
           <div class="help-text">
             Fraction of interval to randomize (0.05 = +/-5%). Higher = more spread.
@@ -1021,6 +914,7 @@ async function handleImportPreset() {
   background: none;
   border: none;
   border-bottom: 2px solid transparent;
+  border-radius: 0;
   cursor: pointer;
   transition: var(--transition-colors);
   box-shadow: none;
@@ -1093,33 +987,10 @@ async function handleImportPreset() {
   font-size: var(--font-size-sm);
   color: var(--color-text-primary);
 }
-.form-input,
-.form-select {
-  width: 100%;
-  padding: var(--spacing-2);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface-elevated);
-  font-size: var(--font-size-sm);
-  color: var(--color-text-primary);
-  transition: var(--transition-colors);
-}
-.form-input:focus,
-.form-select:focus {
-  outline: none;
-  border-color: var(--color-border-focus);
-  box-shadow: var(--shadow-focus-ring);
-}
 .help-text {
   font-size: var(--font-size-xs);
   color: var(--color-text-secondary);
   margin-top: var(--spacing-1);
-}
-.toggle-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  cursor: pointer;
 }
 .deck-name-display {
   display: flex;
@@ -1137,26 +1008,6 @@ async function handleImportPreset() {
   font-weight: var(--font-weight-medium);
   color: var(--color-text-primary);
   word-break: break-word;
-}
-.rename-icon-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  color: var(--color-text-tertiary);
-  background: none;
-  border: none;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: var(--transition-colors);
-  box-shadow: none;
-}
-.rename-icon-btn:hover {
-  color: var(--color-text-primary);
-  background: var(--color-surface-hover);
 }
 .deck-card-count {
   font-size: var(--font-size-xs);

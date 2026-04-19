@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from "vue";
-import { Button } from "../design-system";
+import { Button, Checkbox, Select, TextInput } from "../design-system";
 import { createApkg } from "../ankiExporter";
 import { addCachedFile } from "../stores";
 import { downloadBlob } from "../utils/downloadBlob";
@@ -232,7 +232,7 @@ function handleReset() {
 </script>
 
 <template>
-  <div class="csv-wizard">
+  <div class="csv-wizard" data-testid="csv-wizard">
     <!-- Step indicators -->
     <div class="steps">
       <button
@@ -277,55 +277,47 @@ function handleReset() {
     <div v-if="step === 'configure'" class="step-content">
       <p class="file-name">{{ fileName }}</p>
 
-      <div class="config-grid">
+      <div class="config-grid" data-testid="config-grid">
         <label class="config-label">
           Delimiter
-          <select v-model="delimiterName" class="config-select">
+          <Select v-model="delimiterName" size="sm">
             <option value="comma">Comma (,)</option>
             <option value="tab">Tab</option>
             <option value="semicolon">Semicolon (;)</option>
             <option value="pipe">Pipe (|)</option>
             <option value="custom">Custom</option>
-          </select>
+          </Select>
         </label>
 
         <label v-if="delimiterName === 'custom'" class="config-label">
           Custom delimiter
-          <input
-            v-model="customDelimiter"
-            class="config-input"
-            maxlength="4"
-            placeholder="e.g. ::"
-          />
+          <TextInput v-model="customDelimiter" size="sm" maxlength="4" placeholder="e.g. ::" />
         </label>
 
-        <label class="config-label config-label--row">
-          <input v-model="hasHeaderRow" type="checkbox" class="config-checkbox" />
-          First row is a header
-        </label>
+        <Checkbox v-model="hasHeaderRow" size="sm" label="First row is a header" />
 
         <label class="config-label">
           Deck name
-          <input v-model="deckName" class="config-input" placeholder="My Deck" />
+          <TextInput v-model="deckName" size="sm" placeholder="My Deck" />
         </label>
 
         <label class="config-label">
           Duplicate handling (by first field)
-          <select v-model="duplicatePolicy" class="config-select">
+          <Select v-model="duplicatePolicy" size="sm">
             <option value="create">Import all (allow duplicates)</option>
             <option value="skip">Skip duplicates</option>
             <option value="update">Update duplicates (keep latest)</option>
-          </select>
+          </Select>
         </label>
       </div>
 
       <!-- Quick preview of parsed data -->
-      <div v-if="allRows.length > 0" class="quick-preview">
+      <div v-if="allRows.length > 0" class="quick-preview" data-testid="quick-preview">
         <p class="quick-preview-info">
           {{ dataRows.length }} data rows detected, {{ headers.length }} columns
         </p>
         <div class="table-wrapper">
-          <table class="preview-table">
+          <table class="preview-table" data-testid="preview-table">
             <thead>
               <tr>
                 <th v-for="(h, i) in headers" :key="i">{{ h }}</th>
@@ -360,19 +352,19 @@ function handleReset() {
     <div v-if="step === 'map'" class="step-content">
       <p class="description">Map each CSV column to an Anki field.</p>
 
-      <div class="mapping-grid">
+      <div class="mapping-grid" data-testid="mapping-grid">
         <div class="mapping-header">CSV Column</div>
         <div class="mapping-header">Anki Field</div>
 
         <template v-for="(header, i) in headers" :key="i">
           <div class="mapping-col-name">{{ header }}</div>
-          <select v-model="fieldMap[i]" class="config-select">
+          <Select v-model="fieldMap[i]" size="sm">
             <option v-for="field in ankiFields" :key="field" :value="field">{{ field }}</option>
-          </select>
+          </Select>
         </template>
       </div>
 
-      <p v-if="!hasFrontMapping" class="validation-error">
+      <p v-if="!hasFrontMapping" class="validation-error" data-testid="validation-error">
         You must map at least one column to "Front".
       </p>
       <p v-else-if="!hasBackMapping" class="validation-warning">
@@ -396,7 +388,7 @@ function handleReset() {
     <div v-if="step === 'preview'" class="step-content">
       <div class="preview-header">
         <h3 class="preview-title">{{ deckName }}</h3>
-        <span class="preview-count">
+        <span class="preview-count" data-testid="preview-count">
           {{ dedupedCards.length }} cards
           <template v-if="duplicateCount > 0">
             ({{ duplicateCount }} duplicates
@@ -406,7 +398,7 @@ function handleReset() {
       </div>
 
       <div class="table-wrapper">
-        <table class="preview-table">
+        <table class="preview-table" data-testid="preview-table">
           <thead>
             <tr>
               <th class="col-num">#</th>
@@ -604,43 +596,6 @@ function handleReset() {
   gap: var(--spacing-1);
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
-}
-
-.config-label--row {
-  flex-direction: row;
-  align-items: center;
-  gap: var(--spacing-2);
-}
-
-.config-select {
-  padding: var(--spacing-1-5) var(--spacing-2);
-  font-size: var(--font-size-sm);
-  background: var(--color-surface);
-  color: var(--color-text-primary);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  max-width: 300px;
-}
-
-.config-input {
-  padding: var(--spacing-1-5) var(--spacing-2);
-  font-size: var(--font-size-sm);
-  background: var(--color-surface);
-  color: var(--color-text-primary);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  max-width: 300px;
-}
-
-.config-input:focus,
-.config-select:focus {
-  outline: none;
-  border-color: var(--color-border-focus);
-  box-shadow: var(--shadow-focus-ring);
-}
-
-.config-checkbox {
-  accent-color: var(--color-primary-500);
 }
 
 .quick-preview {

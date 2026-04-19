@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
-import { Button } from "../design-system";
+import { Button, Page } from "../design-system";
 import AiDeckGenerator from "./AiDeckGenerator.vue";
 import CsvImportWizard from "./CsvImportWizard.vue";
 import { downloadBlob } from "../utils/downloadBlob";
@@ -17,7 +17,10 @@ const parsedRows = computed(() => {
     .filter((line) => line.length > 0)
     .map((line) => {
       const parts = line.split(sep);
-      return { front: (parts[0] ?? "").trim(), back: (parts[1] ?? "").trim() };
+      return {
+        front: (parts[0] ?? "").trim(),
+        back: (parts[1] ?? "").trim(),
+      };
     })
     .filter((row) => row.front.length > 0);
 });
@@ -31,23 +34,29 @@ function exportDeck() {
 </script>
 
 <template>
-  <div class="deck-creator">
-    <h2 class="title">Create Deck</h2>
-
-    <div class="mode-toggle">
-      <button
-        :class="['mode-btn', { 'mode-btn--active': mode === 'manual' }]"
-        @click="mode = 'manual'"
-      >
-        Manual
-      </button>
-      <button :class="['mode-btn', { 'mode-btn--active': mode === 'csv' }]" @click="mode = 'csv'">
-        CSV Import
-      </button>
-      <button :class="['mode-btn', { 'mode-btn--active': mode === 'ai' }]" @click="mode = 'ai'">
-        AI Generate
-      </button>
-    </div>
+  <Page>
+    <template #title>
+      <div>
+        <h2>Create Deck</h2>
+        <div class="mode-toggle">
+          <button
+            :class="['mode-btn', { 'mode-btn--active': mode === 'manual' }]"
+            @click="mode = 'manual'"
+          >
+            Manual
+          </button>
+          <button
+            :class="['mode-btn', { 'mode-btn--active': mode === 'csv' }]"
+            @click="mode = 'csv'"
+          >
+            CSV Import
+          </button>
+          <button :class="['mode-btn', { 'mode-btn--active': mode === 'ai' }]" @click="mode = 'ai'">
+            AI Generate
+          </button>
+        </div>
+      </div>
+    </template>
 
     <template v-if="mode === 'manual'">
       <p class="description">
@@ -72,7 +81,7 @@ function exportDeck() {
         rows="10"
       />
 
-      <div v-if="parsedRows.length > 0" class="preview-section">
+      <div v-if="parsedRows.length > 0" class="preview-section" data-testid="preview-section">
         <div class="preview-header">
           <h3 class="preview-title">Preview ({{ parsedRows.length }} cards)</h3>
           <Button variant="primary" size="sm" @click="exportDeck"> Export .txt </Button>
@@ -101,23 +110,10 @@ function exportDeck() {
     <CsvImportWizard v-else-if="mode === 'csv'" />
 
     <AiDeckGenerator v-else />
-  </div>
+  </Page>
 </template>
 
 <style scoped>
-.deck-creator {
-  max-width: 800px;
-  margin: 0 auto;
-  padding: var(--spacing-8) var(--spacing-4);
-}
-
-.title {
-  font-size: var(--font-size-xl);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text-primary);
-  margin: 0 0 var(--spacing-4) 0;
-}
-
 .mode-toggle {
   display: flex;
   gap: var(--spacing-1);

@@ -3,7 +3,7 @@ import { ref, computed, watch } from "vue";
 import { ankiDataSig, bulkUpdateNoteFields } from "../stores";
 import { stripHtml } from "../utils/stripHtml";
 import { escapeHtml, truncate } from "../utils/format";
-import { Button, Modal } from "../design-system";
+import { Button, Checkbox, Modal, Select, TextInput } from "../design-system";
 
 type Scope = "all" | "selected" | "deck";
 
@@ -258,10 +258,9 @@ async function applyChanges() {
         <div class="fr-row">
           <div class="fr-field fr-field--grow">
             <label class="fr-label">Find</label>
-            <input
+            <TextInput
               v-model="findText"
-              class="fr-input"
-              type="text"
+              size="sm"
               placeholder="Search text or regex..."
               @keydown.enter="applyChanges"
             />
@@ -271,10 +270,9 @@ async function applyChanges() {
         <div class="fr-row">
           <div class="fr-field fr-field--grow">
             <label class="fr-label">Replace with</label>
-            <input
+            <TextInput
               v-model="replaceText"
-              class="fr-input"
-              type="text"
+              size="sm"
               placeholder="Replacement text..."
               @keydown.enter="applyChanges"
             />
@@ -282,45 +280,36 @@ async function applyChanges() {
         </div>
 
         <div class="fr-row fr-row--options">
-          <label class="fr-toggle">
-            <input v-model="useRegex" type="checkbox" />
-            <span>Regex</span>
-          </label>
-          <label class="fr-toggle">
-            <input v-model="caseSensitive" type="checkbox" />
-            <span>Case sensitive</span>
-          </label>
-          <label class="fr-toggle">
-            <input v-model="wholeWord" type="checkbox" />
-            <span>Whole word</span>
-          </label>
+          <Checkbox v-model="useRegex" label="Regex" size="sm" />
+          <Checkbox v-model="caseSensitive" label="Case sensitive" size="sm" />
+          <Checkbox v-model="wholeWord" label="Whole word" size="sm" />
         </div>
 
         <div class="fr-row">
           <div class="fr-field">
             <label class="fr-label">In field</label>
-            <select v-model="targetField" class="fr-select">
+            <Select v-model="targetField" size="sm" :full-width="false" style="min-width: 140px">
               <option value="__all__">All fields</option>
               <option v-for="name in fieldNames" :key="name" :value="name">{{ name }}</option>
-            </select>
+            </Select>
           </div>
 
           <div class="fr-field">
             <label class="fr-label">Scope</label>
-            <select v-model="scope" class="fr-select">
+            <Select v-model="scope" size="sm" :full-width="false" style="min-width: 140px">
               <option value="all">Entire collection</option>
               <option v-if="selectedGuids.length > 0" value="selected">
                 Selected notes ({{ selectedGuids.length }})
               </option>
               <option value="deck">Current deck</option>
-            </select>
+            </Select>
           </div>
 
           <div v-if="scope === 'deck'" class="fr-field">
             <label class="fr-label">Deck</label>
-            <select v-model="scopeDeck" class="fr-select">
+            <Select v-model="scopeDeck" size="sm" :full-width="false" style="min-width: 140px">
               <option v-for="d in deckNames" :key="d" :value="d">{{ d }}</option>
-            </select>
+            </Select>
           </div>
         </div>
 
@@ -328,7 +317,7 @@ async function applyChanges() {
       </div>
 
       <!-- Preview -->
-      <div class="fr-preview">
+      <div class="fr-preview" data-testid="fr-preview">
         <div class="fr-preview-header">
           <span v-if="findText && preview.length > 0" class="fr-preview-count">
             {{ totalChanges }} change{{ totalChanges === 1 ? "" : "s" }} in
@@ -414,41 +403,6 @@ async function applyChanges() {
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
   color: var(--color-text-secondary);
-}
-
-.fr-input,
-.fr-select {
-  padding: var(--spacing-1-5) var(--spacing-2);
-  font-size: var(--font-size-sm);
-  color: var(--color-text-primary);
-  background: var(--color-surface-elevated);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  outline: none;
-}
-
-.fr-input:focus,
-.fr-select:focus {
-  border-color: var(--color-border-focus);
-  box-shadow: var(--shadow-focus-ring);
-}
-
-.fr-select {
-  min-width: 140px;
-}
-
-.fr-toggle {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-1);
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  user-select: none;
-}
-
-.fr-toggle input[type="checkbox"] {
-  accent-color: var(--color-primary);
 }
 
 .fr-error {

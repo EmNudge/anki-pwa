@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from "vue";
 import { getFlags, getDefaultFlagLabel, renameFlag, customFlagLabelsSig } from "../lib/flags";
-import { Button, Modal } from "../design-system";
+import { Button, Modal, TextInput } from "../design-system";
 
 const props = defineProps<{
   isOpen: boolean;
@@ -39,13 +39,9 @@ function save() {
 <template>
   <Modal :is-open="isOpen" title="Flag Labels" size="sm" @close="emit('close')">
     <div class="flag-list">
-      <div v-for="f in getFlags()" :key="f.flag" class="flag-row">
-        <span class="flag-color" :style="{ backgroundColor: f.color }" />
-        <input
-          v-model="labels[f.flag]"
-          class="flag-input"
-          :placeholder="getDefaultFlagLabel(f.flag)"
-        />
+      <div v-for="f in getFlags()" :key="f.flag" class="flag-row" data-testid="flag-row">
+        <span class="flag-color" data-testid="flag-color" :style="{ backgroundColor: f.color }" />
+        <TextInput v-model="labels[f.flag]" size="sm" :placeholder="getDefaultFlagLabel(f.flag)" />
       </div>
     </div>
     <p class="flag-hint">Leave blank to use the default color name.</p>
@@ -75,21 +71,6 @@ function save() {
   height: 16px;
   border-radius: var(--radius-sm);
   flex-shrink: 0;
-}
-
-.flag-input {
-  flex: 1;
-  padding: var(--spacing-2) var(--spacing-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface);
-  color: var(--color-text-primary);
-  font-size: var(--font-size-sm);
-}
-
-.flag-input:focus {
-  outline: none;
-  border-color: var(--color-primary);
 }
 
 .flag-hint {

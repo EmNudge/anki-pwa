@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from "vue";
 import { Copy, Plus, Trash2 } from "lucide-vue-next";
-import { Button, Modal } from "~/design-system";
+import { Button, Modal, Select, TextInput } from "~/design-system";
 import FieldEditor, { type FieldEntry } from "./notetype/FieldEditor.vue";
 import TemplateEditor, { type TemplateEntry } from "./notetype/TemplateEditor.vue";
 import CssEditor from "./notetype/CssEditor.vue";
@@ -319,8 +319,8 @@ function commitRename() {
   <Modal :is-open="isOpen" title="Manage Note Types" size="xl" @close="emit('close')">
     <div class="manager-layout">
       <!-- Left sidebar -->
-      <div class="sidebar">
-        <input v-model="searchQuery" class="search-input" placeholder="Search note types..." />
+      <div class="sidebar" data-testid="sidebar">
+        <TextInput v-model="searchQuery" size="sm" placeholder="Search note types..." />
 
         <div class="notetype-list">
           <button
@@ -352,8 +352,9 @@ function commitRename() {
         <div class="detail-header">
           <div class="header-left">
             <template v-if="editingName">
-              <input
+              <TextInput
                 v-model="nameInput"
+                size="sm"
                 class="name-edit-input"
                 @keydown.enter="commitRename"
                 @keydown.escape="editingName = false"
@@ -463,19 +464,19 @@ function commitRename() {
       <div class="new-form">
         <div class="form-group">
           <label class="form-label">Name</label>
-          <input
+          <TextInput
             v-model="newNotetypeName"
-            class="form-input"
+            size="sm"
             placeholder="e.g., Basic, Vocabulary..."
             @keydown.enter="handleCreate"
           />
         </div>
         <div class="form-group">
           <label class="form-label">Type</label>
-          <select v-model="newNotetypeKind" class="form-select">
+          <Select v-model="newNotetypeKind" size="sm">
             <option :value="0">Normal</option>
             <option :value="1">Cloze</option>
-          </select>
+          </Select>
         </div>
         <p class="form-hint">
           Creates a note type with Front and Back fields and one card template.
@@ -522,20 +523,6 @@ function commitRename() {
   gap: var(--spacing-2);
   border-right: 1px solid var(--color-border);
   padding: var(--spacing-3);
-}
-
-.search-input {
-  padding: var(--spacing-2) var(--spacing-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  font-size: var(--font-size-sm);
-  background: var(--color-surface);
-  color: var(--color-text-primary);
-}
-
-.search-input:focus {
-  outline: 2px solid var(--color-border-focus);
-  outline-offset: -1px;
 }
 
 .notetype-list {
@@ -633,13 +620,8 @@ function commitRename() {
 }
 
 .name-edit-input {
-  padding: var(--spacing-1) var(--spacing-2);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
   font-size: var(--font-size-lg);
   font-weight: var(--font-weight-semibold);
-  background: var(--color-surface);
-  color: var(--color-text-primary);
 }
 
 .kind-badge {
@@ -674,6 +656,7 @@ function commitRename() {
   background: transparent;
   border: none;
   border-bottom: 2px solid transparent;
+  border-radius: 0;
   cursor: pointer;
   transition: var(--transition-colors);
   box-shadow: none;
@@ -717,24 +700,6 @@ function commitRename() {
 .form-label {
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
-  color: var(--color-text-primary);
-}
-
-.form-input {
-  padding: var(--spacing-2) var(--spacing-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  font-size: var(--font-size-sm);
-  background: var(--color-surface);
-  color: var(--color-text-primary);
-}
-
-.form-select {
-  padding: var(--spacing-2) var(--spacing-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  font-size: var(--font-size-sm);
-  background: var(--color-surface);
   color: var(--color-text-primary);
 }
 

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
-import { Button, Modal } from "../design-system";
+import { Button, Modal, TextInput } from "../design-system";
 import { ankiDataSig, selectedDeckIdSig } from "../stores";
 
 const props = defineProps<{
@@ -94,7 +94,7 @@ function selectPreset(preset: Preset) {
 
 <template>
   <Modal :is-open="isOpen" title="Custom Study" size="sm" @close="emit('close')">
-    <div class="custom-study">
+    <div class="custom-study" data-testid="custom-study-modal">
       <p v-if="currentDeckName" class="deck-context">
         Deck: <strong>{{ currentDeckName }}</strong>
       </p>
@@ -114,8 +114,10 @@ function selectPreset(preset: Preset) {
       <div v-if="presets.some((p) => p.label.includes('ahead'))" class="ahead-config">
         <label class="ahead-label">
           Review ahead days:
-          <input
-            v-model.number="reviewAheadDays"
+          <TextInput
+            :model-value="String(reviewAheadDays)"
+            @update:model-value="reviewAheadDays = Number($event)"
+            size="sm"
             type="number"
             min="1"
             max="30"
@@ -196,13 +198,6 @@ function selectPreset(preset: Preset) {
 
 .ahead-input {
   width: 60px;
-  padding: var(--spacing-1) var(--spacing-2);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  color: var(--color-text-primary);
-  font-size: var(--font-size-sm);
-  font-family: inherit;
 }
 
 .custom-study-footer {

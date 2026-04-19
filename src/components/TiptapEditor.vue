@@ -5,6 +5,7 @@ import StarterKit from "@tiptap/starter-kit";
 import Image from "@tiptap/extension-image";
 
 const props = defineProps<{
+  id?: string;
   modelValue: string;
   mediaFiles?: Map<string, string>;
   fieldDescription?: string;
@@ -132,7 +133,7 @@ function onHtmlSourceInput(e: Event) {
 </script>
 
 <template>
-  <div v-if="editor" class="tiptap-wrapper">
+  <div v-if="editor" :id="props.id" class="tiptap-wrapper">
     <div class="tiptap-toolbar">
       <template v-if="!showHtmlSource">
         <button

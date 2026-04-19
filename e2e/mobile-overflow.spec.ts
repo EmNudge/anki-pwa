@@ -127,7 +127,7 @@ test.describe('Mobile responsiveness', () => {
   test('sync view has no horizontal overflow', async ({ page }) => {
     await page.goto('/', { waitUntil: 'networkidle' });
     // Navigate to sync tab
-    const syncTab = page.locator('button.tab:has-text("Sync")');
+    const syncTab = page.getByRole('tab', { name: 'Sync' });
     if (await syncTab.isVisible()) {
       await syncTab.click();
       await page.waitForTimeout(500);
@@ -143,7 +143,7 @@ test.describe('Mobile responsiveness', () => {
 
   test('create deck view has no horizontal overflow', async ({ page }) => {
     await page.goto('/', { waitUntil: 'networkidle' });
-    const createTab = page.locator('button.tab:has-text("Create Deck")');
+    const createTab = page.getByRole('tab', { name: 'Create Deck' });
     if (await createTab.isVisible()) {
       await createTab.click();
       await page.waitForTimeout(500);
@@ -159,7 +159,7 @@ test.describe('Mobile responsiveness', () => {
 
   test('backup view has no horizontal overflow', async ({ page }) => {
     await page.goto('/', { waitUntil: 'networkidle' });
-    const backupTab = page.locator('button.tab:has-text("Backup")');
+    const backupTab = page.getByRole('tab', { name: 'Backup' });
     if (await backupTab.isVisible()) {
       await backupTab.click();
       await page.waitForTimeout(500);

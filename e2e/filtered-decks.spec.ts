@@ -9,43 +9,43 @@ test.describe('Filtered Decks', () => {
     loadedDeckPage: page,
   }) => {
     // Navigate to deck list
-    await page.click('.tab:has-text("Review")');
-    await expect(page.locator('.file-library')).toBeVisible();
+    await page.getByRole('tab', { name: 'Review' }).click();
+    await expect(page.getByTestId('file-library')).toBeVisible();
 
     // Click Create Filtered Deck
-    await page.click('button:has-text("Create Filtered Deck")');
+    await page.getByRole('button', { name: 'Create Filtered Deck' }).click();
 
     // Modal should open
     await expect(
-      page.locator('.ds-modal__title:has-text("Create Filtered Deck")'),
+      page.getByRole('heading', { name: 'Create Filtered Deck' }),
     ).toBeVisible();
-    await expect(page.locator('.filtered-form')).toBeVisible();
+    await expect(page.getByTestId('filtered-form')).toBeVisible();
   });
 
   test('should show form fields in filtered deck modal', async ({ loadedDeckPage: page }) => {
-    await page.click('.tab:has-text("Review")');
-    await page.click('button:has-text("Create Filtered Deck")');
+    await page.getByRole('tab', { name: 'Review' }).click();
+    await page.getByRole('button', { name: 'Create Filtered Deck' }).click();
 
     // Check form fields
-    await expect(page.locator('.field-label:has-text("Name")')).toBeVisible();
-    await expect(page.locator('.field-label:has-text("Search query")')).toBeVisible();
-    await expect(page.locator('.field-label:has-text("Limit")')).toBeVisible();
-    await expect(page.locator('.field-label:has-text("Sort order")')).toBeVisible();
+    await expect(page.getByText('Name')).toBeVisible();
+    await expect(page.getByText('Search query')).toBeVisible();
+    await expect(page.getByText('Limit')).toBeVisible();
+    await expect(page.getByText('Sort order')).toBeVisible();
 
     // Check reschedule checkbox
     await expect(
-      page.locator('text=Reschedule cards based on my answers'),
+      page.getByText('Reschedule cards based on my answers'),
     ).toBeVisible();
   });
 
   test('should show matching card count as user types query', async ({
     loadedDeckPage: page,
   }) => {
-    await page.click('.tab:has-text("Review")');
-    await page.click('button:has-text("Create Filtered Deck")');
+    await page.getByRole('tab', { name: 'Review' }).click();
+    await page.getByRole('button', { name: 'Create Filtered Deck' }).click();
 
     // Type a wildcard query to match all cards
-    const queryInput = page.locator('.filtered-form .field-input').nth(1);
+    const queryInput = page.getByTestId('filtered-form').getByRole('textbox').nth(1);
     await queryInput.fill('is:new');
 
     // Should show matching card count in the hint
@@ -57,50 +57,50 @@ test.describe('Filtered Decks', () => {
   });
 
   test('should show preview bar with card count', async ({ loadedDeckPage: page }) => {
-    await page.click('.tab:has-text("Review")');
-    await page.click('button:has-text("Create Filtered Deck")');
+    await page.getByRole('tab', { name: 'Review' }).click();
+    await page.getByRole('button', { name: 'Create Filtered Deck' }).click();
 
-    const queryInput = page.locator('.filtered-form .field-input').nth(1);
+    const queryInput = page.getByTestId('filtered-form').getByRole('textbox').nth(1);
     await queryInput.fill('is:new');
     await page.waitForTimeout(500);
 
     // Preview bar should show card count
-    const previewBar = page.locator('.preview-bar');
+    const previewBar = page.getByTestId('preview-bar');
     await expect(previewBar).toBeVisible();
     const previewText = await previewBar.textContent();
     expect(previewText).toMatch(/will study \d+ card/i);
   });
 
   test('should close filtered deck modal on Cancel', async ({ loadedDeckPage: page }) => {
-    await page.click('.tab:has-text("Review")');
-    await page.click('button:has-text("Create Filtered Deck")');
+    await page.getByRole('tab', { name: 'Review' }).click();
+    await page.getByRole('button', { name: 'Create Filtered Deck' }).click();
 
-    await expect(page.locator('.filtered-form')).toBeVisible();
+    await expect(page.getByTestId('filtered-form')).toBeVisible();
 
     // Click Cancel
-    await page.locator('.form-actions button:has-text("Cancel")').click();
+    await page.getByRole('button', { name: 'Cancel' }).click();
 
     // Modal should close
-    await expect(page.locator('.filtered-form')).not.toBeVisible();
+    await expect(page.getByTestId('filtered-form')).not.toBeVisible();
   });
 
   test('should create a filtered deck and start studying it', async ({
     loadedDeckPage: page,
   }) => {
-    await page.click('.tab:has-text("Review")');
-    await page.click('button:has-text("Create Filtered Deck")');
+    await page.getByRole('tab', { name: 'Review' }).click();
+    await page.getByRole('button', { name: 'Create Filtered Deck' }).click();
 
     // Fill in the form
-    const nameInput = page.locator('.filtered-form .field-input').first();
+    const nameInput = page.getByTestId('filtered-form').getByRole('textbox').first();
     await nameInput.fill('Test Filtered Deck');
 
     // Use a query that matches card content
-    const queryInput = page.locator('.filtered-form .field-input').nth(1);
+    const queryInput = page.getByTestId('filtered-form').getByRole('textbox').nth(1);
     await queryInput.fill('is:new');
     await page.waitForTimeout(500);
 
     // Wait for the Create button to become enabled (effectiveCount > 0)
-    const createBtn = page.locator('.form-actions button:has-text("Create")');
+    const createBtn = page.getByTestId('filtered-form').getByRole('button', { name: 'Create' });
     if (await createBtn.isDisabled()) {
       await queryInput.fill('deck:*');
       await page.waitForTimeout(500);
@@ -115,33 +115,33 @@ test.describe('Filtered Decks', () => {
 
     // After creation, app starts studying the filtered deck immediately
     await page.waitForTimeout(1000);
-    await expect(page.locator('.filtered-form')).not.toBeVisible();
+    await expect(page.getByTestId('filtered-form')).not.toBeVisible();
 
     // Should be in study mode — card or congrats screen visible
-    const studyVisible = await page.locator('.card').isVisible().catch(() => false);
-    const congratsVisible = await page.locator('.congrats').isVisible().catch(() => false);
+    const studyVisible = await page.getByTestId('flash-card').isVisible().catch(() => false);
+    const congratsVisible = await page.getByTestId('congrats-screen').isVisible().catch(() => false);
     expect(studyVisible || congratsVisible).toBe(true);
 
     // Go back to deck list to verify the filtered deck appears there
-    await page.click('.tab:has-text("Review")');
-    await expect(page.locator('.file-library')).toBeVisible({ timeout: 5000 });
-    await expect(page.locator('.file-card--filtered')).toBeVisible({ timeout: 5000 });
-    await expect(page.locator('.file-name:has-text("Test Filtered Deck")')).toBeVisible();
+    await page.getByRole('tab', { name: 'Review' }).click();
+    await expect(page.getByTestId('file-library')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByTestId('filtered-deck-card')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('Test Filtered Deck')).toBeVisible();
   });
 
   test('should delete a filtered deck', async ({ loadedDeckPage: page }) => {
     // First create a filtered deck
-    await page.click('.tab:has-text("Review")');
-    await page.click('button:has-text("Create Filtered Deck")');
+    await page.getByRole('tab', { name: 'Review' }).click();
+    await page.getByRole('button', { name: 'Create Filtered Deck' }).click();
 
-    const nameInput = page.locator('.filtered-form .field-input').first();
+    const nameInput = page.getByTestId('filtered-form').getByRole('textbox').first();
     await nameInput.fill('Deck To Delete');
 
-    const queryInput = page.locator('.filtered-form .field-input').nth(1);
+    const queryInput = page.getByTestId('filtered-form').getByRole('textbox').nth(1);
     await queryInput.fill('is:new');
     await page.waitForTimeout(500);
 
-    const createBtn = page.locator('.form-actions button:has-text("Create")');
+    const createBtn = page.getByTestId('filtered-form').getByRole('button', { name: 'Create' });
     if (await createBtn.isDisabled()) {
       await queryInput.fill('deck:*');
       await page.waitForTimeout(500);
@@ -156,18 +156,18 @@ test.describe('Filtered Decks', () => {
     await page.waitForTimeout(1000);
 
     // After creation, go back to deck list
-    await page.click('.tab:has-text("Review")');
-    await expect(page.locator('.file-library')).toBeVisible({ timeout: 5000 });
+    await page.getByRole('tab', { name: 'Review' }).click();
+    await expect(page.getByTestId('file-library')).toBeVisible({ timeout: 5000 });
 
     // Verify it exists
-    await expect(page.locator('.file-name:has-text("Deck To Delete")')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('Deck To Delete')).toBeVisible({ timeout: 5000 });
 
     // Click delete button on the filtered deck
-    const filteredCard = page.locator('.file-card--filtered:has(.file-name:has-text("Deck To Delete"))');
-    await filteredCard.locator('.delete-btn').click();
+    const filteredCard = page.getByTestId('filtered-deck-card').filter({ hasText: 'Deck To Delete' });
+    await filteredCard.locator('button[title="Delete"]').click();
 
     // Filtered deck should be removed
-    await expect(page.locator('.file-name:has-text("Deck To Delete")')).not.toBeVisible();
+    await expect(page.getByText('Deck To Delete')).not.toBeVisible();
   });
 });
 
@@ -175,61 +175,63 @@ test.describe('Custom Study Modal', () => {
   test('should display all preset options', async ({ loadedDeckPage: page }) => {
     // Get to congrats screen first by reviewing all cards
     for (let i = 0; i < 100; i++) {
-      const congratsTitle = page.locator('.congrats-title');
+      const congratsTitle = page.getByRole('heading', { name: 'Congratulations!' });
       if (await congratsTitle.isVisible().catch(() => false)) break;
 
-      const revealButton = page.locator('button:has-text("Reveal")');
+      const revealButton = page.getByRole('button', { name: 'Reveal' });
       if (!(await revealButton.isVisible().catch(() => false))) {
         await page.waitForTimeout(300);
         break;
       }
 
       await revealButton.click();
-      await page.click('button:has-text("Easy")');
+      await page.getByRole('button', { name: /Easy/ }).click();
       await page.waitForTimeout(200);
     }
 
-    await expect(page.locator('.congrats')).toBeVisible();
+    await expect(page.getByTestId('congrats-screen')).toBeVisible();
 
     // Open Custom Study modal
-    await page.click('button:has-text("Custom Study")');
-    await expect(page.locator('.custom-study')).toBeVisible();
+    await page.getByRole('button', { name: 'Custom Study' }).click();
+    await expect(page.getByTestId('custom-study-modal')).toBeVisible();
 
     // Check all presets are shown
-    const presets = page.locator('.preset-btn');
+    const modal = page.getByTestId('custom-study-modal');
+    const presets = modal.getByRole('button');
     const count = await presets.count();
-    expect(count).toBe(5);
+    // 5 presets + Cancel button
+    expect(count).toBeGreaterThanOrEqual(5);
 
     // Verify preset labels
-    await expect(page.locator('.preset-label:has-text("Review forgotten cards")')).toBeVisible();
-    await expect(page.locator('.preset-label:has-text("Review ahead")')).toBeVisible();
-    await expect(page.locator('.preset-label:has-text("Preview new cards")')).toBeVisible();
-    await expect(page.locator('.preset-label:has-text("Study by state: due")')).toBeVisible();
-    await expect(page.locator('.preset-label:has-text("Cram all cards")')).toBeVisible();
+    await expect(modal.getByText('Review forgotten cards')).toBeVisible();
+    await expect(modal.getByText('Review ahead').first()).toBeVisible();
+    await expect(modal.getByText('Preview new cards')).toBeVisible();
+    await expect(modal.getByText('Study by state: due')).toBeVisible();
+    await expect(modal.getByText('Cram all cards')).toBeVisible();
   });
 
   test('should close Custom Study modal on Cancel', async ({ loadedDeckPage: page }) => {
     // Get to congrats screen
     for (let i = 0; i < 100; i++) {
-      const congratsTitle = page.locator('.congrats-title');
+      const congratsTitle = page.getByRole('heading', { name: 'Congratulations!' });
       if (await congratsTitle.isVisible().catch(() => false)) break;
 
-      const revealButton = page.locator('button:has-text("Reveal")');
+      const revealButton = page.getByRole('button', { name: 'Reveal' });
       if (!(await revealButton.isVisible().catch(() => false))) {
         await page.waitForTimeout(300);
         break;
       }
 
       await revealButton.click();
-      await page.click('button:has-text("Easy")');
+      await page.getByRole('button', { name: /Easy/ }).click();
       await page.waitForTimeout(200);
     }
 
-    await page.click('button:has-text("Custom Study")');
+    await page.getByRole('button', { name: 'Custom Study' }).click();
     await expect(page.locator('.custom-study')).toBeVisible();
 
     // Click Cancel
-    await page.click('.custom-study-footer button:has-text("Cancel")');
+    await page.getByRole('button', { name: 'Cancel' }).click();
     await expect(page.locator('.custom-study')).not.toBeVisible();
   });
 
@@ -238,21 +240,21 @@ test.describe('Custom Study Modal', () => {
   }) => {
     // Get to congrats screen
     for (let i = 0; i < 100; i++) {
-      const congratsTitle = page.locator('.congrats-title');
+      const congratsTitle = page.getByRole('heading', { name: 'Congratulations!' });
       if (await congratsTitle.isVisible().catch(() => false)) break;
 
-      const revealButton = page.locator('button:has-text("Reveal")');
+      const revealButton = page.getByRole('button', { name: 'Reveal' });
       if (!(await revealButton.isVisible().catch(() => false))) {
         await page.waitForTimeout(300);
         break;
       }
 
       await revealButton.click();
-      await page.click('button:has-text("Easy")');
+      await page.getByRole('button', { name: /Easy/ }).click();
       await page.waitForTimeout(200);
     }
 
-    await page.click('button:has-text("Custom Study")');
+    await page.getByRole('button', { name: 'Custom Study' }).click();
     await expect(page.locator('.custom-study')).toBeVisible();
 
     // Click "Cram all cards" preset

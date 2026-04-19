@@ -18,6 +18,8 @@ const tabs: { id: AppView; label: string }[] = [
   { id: "backup", label: "Backup" },
 ];
 
+const isDev = import.meta.env.DEV;
+
 function handleTabClick(tabId: AppView) {
   if (tabId === "review" && activeViewSig.value === "review") {
     reviewModeSig.value = "deck-list";
@@ -39,10 +41,16 @@ async function handleRedo() {
 
 <template>
   <nav class="status-bar">
-    <div class="tabs">
+    <div class="tabs" role="tablist">
       <button
         v-for="tab in tabs"
         :key="tab.id"
+        role="tab"
+        :aria-selected="
+          activeViewSig === tab.id ||
+          (tab.id === 'browse' &&
+            (activeViewSig === 'duplicates' || activeViewSig === 'check-db'))
+        "
         :class="[
           'tab',
           {
@@ -56,17 +64,26 @@ async function handleRedo() {
       >
         {{ tab.label }}
       </button>
+      <button
+        v-if="isDev"
+        role="tab"
+        :aria-selected="activeViewSig === 'design-system'"
+        :class="['tab', { 'tab--active': activeViewSig === 'design-system' }]"
+        @click="handleTabClick('design-system')"
+      >
+        Design System
+      </button>
     </div>
     <div class="status-bar-actions">
       <Tooltip :text="undoDescription ? `Undo: ${undoDescription} (Ctrl+Z)` : 'Nothing to undo'">
-        <button class="undo-redo-btn" :disabled="!canUndo" @click="handleUndo">
+        <button class="undo-redo-btn" aria-label="Undo" :disabled="!canUndo" @click="handleUndo">
           <Undo2 :size="16" />
         </button>
       </Tooltip>
       <Tooltip
         :text="redoDescription ? `Redo: ${redoDescription} (Ctrl+Shift+Z)` : 'Nothing to redo'"
       >
-        <button class="undo-redo-btn" :disabled="!canRedo" @click="handleRedo">
+        <button class="undo-redo-btn" aria-label="Redo" :disabled="!canRedo" @click="handleRedo">
           <Redo2 :size="16" />
         </button>
       </Tooltip>

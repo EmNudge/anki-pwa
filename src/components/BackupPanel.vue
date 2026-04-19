@@ -2,7 +2,7 @@
 import { ref, onMounted } from "vue";
 import { formatFileSize } from "../utils/format";
 import { Download, Upload, Archive, Trash2, RotateCcw } from "lucide-vue-next";
-import { Modal } from "../design-system";
+import { Alert, Button, Checkbox, Modal, Page, Select, TextInput } from "../design-system";
 import {
   exportToFile,
   importFromFile,
@@ -171,44 +171,35 @@ const intervalOptions = [
 </script>
 
 <template>
-  <div class="backup-panel">
-    <h2 class="backup-title">Collection Backup</h2>
+  <Page title="Collection Backup">
     <p class="backup-description">
       Export and restore your collection as <code>.colpkg</code> files. Backups include the full
       database and all media files.
     </p>
 
     <!-- Export / Import Actions -->
-    <div class="backup-section">
+    <div class="backup-section" data-testid="backup-section">
       <h3 class="backup-section-title">Export &amp; Import</h3>
       <div class="backup-actions">
-        <button class="backup-btn backup-btn--primary" :disabled="isBusy" @click="handleExport">
-          <Download :size="14" />
+        <Button size="sm" :disabled="isBusy" @click="handleExport">
+          <template #iconLeft><Download :size="14" /></template>
           Export Collection
-        </button>
-        <button
-          class="backup-btn backup-btn--secondary"
-          :disabled="isBusy"
-          @click="handleImportClick"
-        >
-          <Upload :size="14" />
+        </Button>
+        <Button variant="secondary" size="sm" :disabled="isBusy" @click="handleImportClick">
+          <template #iconLeft><Upload :size="14" /></template>
           Import Collection
-        </button>
+        </Button>
       </div>
     </div>
 
     <!-- Stored Backups -->
-    <div class="backup-section">
+    <div class="backup-section" data-testid="backup-section">
       <div class="backup-section-header">
         <h3 class="backup-section-title">Stored Backups</h3>
-        <button
-          class="backup-btn backup-btn--primary"
-          :disabled="isBusy"
-          @click="handleCreateBackup"
-        >
-          <Archive :size="14" />
+        <Button size="sm" :disabled="isBusy" @click="handleCreateBackup">
+          <template #iconLeft><Archive :size="14" /></template>
           Create Backup
-        </button>
+        </Button>
       </div>
 
       <div v-if="backups.length === 0" class="backup-empty">No backups stored yet.</div>
@@ -222,30 +213,36 @@ const intervalOptions = [
             </span>
           </div>
           <div class="backup-item-actions">
-            <button
-              class="backup-icon-btn"
+            <Button
+              variant="secondary"
+              size="sm"
+              square
               title="Restore"
               :disabled="isBusy"
               @click="handleRestoreClick(backup.id)"
             >
               <RotateCcw :size="14" />
-            </button>
-            <button
-              class="backup-icon-btn"
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              square
               title="Download"
               :disabled="isBusy"
               @click="handleDownload(backup.id)"
             >
               <Download :size="14" />
-            </button>
-            <button
-              class="backup-icon-btn backup-icon-btn--danger"
+            </Button>
+            <Button
+              variant="danger-outline"
+              size="sm"
+              square
               title="Delete"
               :disabled="isBusy"
               @click="handleDelete(backup.id)"
             >
               <Trash2 :size="14" />
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -255,38 +252,57 @@ const intervalOptions = [
     <details class="backup-settings">
       <summary>Auto-Backup Settings</summary>
       <div class="backup-settings-content">
-        <label class="backup-toggle">
-          <input type="checkbox" v-model="settings.autoBackupEnabled" @change="updateSettings" />
-          Enable periodic auto-backup
-        </label>
+        <Checkbox
+          :model-value="settings.autoBackupEnabled"
+          label="Enable periodic auto-backup"
+          size="sm"
+          @update:model-value="
+            settings.autoBackupEnabled = $event;
+            updateSettings();
+          "
+        />
 
-        <label class="backup-toggle">
-          <input type="checkbox" v-model="settings.backupBeforeSync" @change="updateSettings" />
-          Backup before sync
-        </label>
+        <Checkbox
+          :model-value="settings.backupBeforeSync"
+          label="Backup before sync"
+          size="sm"
+          @update:model-value="
+            settings.backupBeforeSync = $event;
+            updateSettings();
+          "
+        />
 
         <div class="backup-field">
           <label class="backup-field-label">Backup interval</label>
-          <select
-            class="backup-select"
-            v-model.number="settings.periodicIntervalMs"
-            @change="updateSettings"
+          <Select
+            :model-value="String(settings.periodicIntervalMs)"
+            size="sm"
+            :full-width="false"
+            @update:model-value="
+              settings.periodicIntervalMs = Number($event);
+              updateSettings();
+            "
           >
             <option v-for="opt in intervalOptions" :key="opt.value" :value="opt.value">
               {{ opt.label }}
             </option>
-          </select>
+          </Select>
         </div>
 
         <div class="backup-field">
           <label class="backup-field-label">Max stored backups</label>
-          <input
+          <TextInput
+            :model-value="settings.maxBackupCount"
             type="number"
-            class="backup-input backup-input--narrow"
-            v-model.number="settings.maxBackupCount"
+            size="sm"
+            :full-width="false"
             min="1"
             max="20"
-            @change="updateSettings"
+            style="max-width: 80px"
+            @update:model-value="
+              settings.maxBackupCount = Number($event);
+              updateSettings();
+            "
           />
         </div>
 
@@ -297,8 +313,8 @@ const intervalOptions = [
     </details>
 
     <!-- Status Messages -->
-    <div v-if="status" class="backup-status">{{ status }}</div>
-    <div v-if="error" class="backup-error">{{ error }}</div>
+    <Alert v-if="status" variant="info" class="backup-alert">{{ status }}</Alert>
+    <Alert v-if="error" variant="error" class="backup-alert">{{ error }}</Alert>
 
     <!-- Restore Confirmation Modal -->
     <Modal
@@ -312,10 +328,8 @@ const intervalOptions = [
         changes will be lost.
       </p>
       <div class="backup-confirm-actions">
-        <button class="backup-btn backup-btn--danger" @click="confirmRestore">Restore</button>
-        <button class="backup-btn backup-btn--secondary" @click="showRestoreConfirm = false">
-          Cancel
-        </button>
+        <Button variant="danger" size="sm" @click="confirmRestore">Restore</Button>
+        <Button variant="secondary" size="sm" @click="showRestoreConfirm = false">Cancel</Button>
       </div>
     </Modal>
 
@@ -331,30 +345,14 @@ const intervalOptions = [
         unsaved changes will be lost.
       </p>
       <div class="backup-confirm-actions">
-        <button class="backup-btn backup-btn--danger" @click="confirmImport">Import</button>
-        <button class="backup-btn backup-btn--secondary" @click="showImportConfirm = false">
-          Cancel
-        </button>
+        <Button variant="danger" size="sm" @click="confirmImport">Import</Button>
+        <Button variant="secondary" size="sm" @click="showImportConfirm = false">Cancel</Button>
       </div>
     </Modal>
-  </div>
+  </Page>
 </template>
 
 <style scoped>
-.backup-panel {
-  max-width: 540px;
-  margin: 0 auto;
-  padding: var(--spacing-8) var(--spacing-4);
-  text-align: left;
-}
-
-.backup-title {
-  font-size: var(--font-size-xl);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text-primary);
-  margin: 0 0 var(--spacing-2) 0;
-}
-
 .backup-description {
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
@@ -395,55 +393,6 @@ const intervalOptions = [
   display: flex;
   gap: var(--spacing-2);
   flex-wrap: wrap;
-}
-
-.backup-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--spacing-1-5);
-  padding: var(--spacing-2) var(--spacing-4);
-  font-size: var(--font-size-sm);
-  font-family: inherit;
-  font-weight: var(--font-weight-medium);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: var(--transition-colors);
-  box-shadow: none;
-}
-
-.backup-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.backup-btn--primary {
-  color: white;
-  background: var(--color-primary);
-  border-color: var(--color-primary);
-}
-
-.backup-btn--primary:hover:not(:disabled) {
-  filter: brightness(1.1);
-}
-
-.backup-btn--secondary {
-  color: var(--color-text-primary);
-  background: var(--color-surface);
-}
-
-.backup-btn--secondary:hover:not(:disabled) {
-  background: var(--color-surface-hover);
-}
-
-.backup-btn--danger {
-  color: #ef4444;
-  background: var(--color-surface);
-  border-color: #ef4444;
-}
-
-.backup-btn--danger:hover:not(:disabled) {
-  background: color-mix(in srgb, #ef4444 10%, var(--color-surface));
 }
 
 .backup-empty {
@@ -493,38 +442,6 @@ const intervalOptions = [
   flex-shrink: 0;
 }
 
-.backup-icon-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  padding: 0;
-  color: var(--color-text-secondary);
-  background: transparent;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: var(--transition-colors);
-  box-shadow: none;
-}
-
-.backup-icon-btn:hover:not(:disabled) {
-  color: var(--color-text-primary);
-  background: var(--color-surface-hover);
-}
-
-.backup-icon-btn:disabled {
-  opacity: 0.3;
-  cursor: not-allowed;
-}
-
-.backup-icon-btn--danger:hover:not(:disabled) {
-  color: #ef4444;
-  border-color: #ef4444;
-  background: color-mix(in srgb, #ef4444 8%, var(--color-surface));
-}
-
 .backup-settings {
   margin-top: var(--spacing-4);
   font-size: var(--font-size-sm);
@@ -544,19 +461,6 @@ const intervalOptions = [
   padding-top: var(--spacing-3);
 }
 
-.backup-toggle {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-2);
-  font-size: var(--font-size-sm);
-  color: var(--color-text-primary);
-  cursor: pointer;
-}
-
-.backup-toggle input[type="checkbox"] {
-  accent-color: var(--color-primary);
-}
-
 .backup-field {
   display: flex;
   flex-direction: column;
@@ -569,48 +473,13 @@ const intervalOptions = [
   color: var(--color-text-secondary);
 }
 
-.backup-select,
-.backup-input {
-  padding: var(--spacing-1-5) var(--spacing-2);
-  font-size: var(--font-size-sm);
-  font-family: inherit;
-  color: var(--color-text-primary);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  outline: none;
-}
-
-.backup-select:focus,
-.backup-input:focus {
-  border-color: var(--color-primary);
-}
-
-.backup-input--narrow {
-  max-width: 80px;
-}
-
 .backup-last-auto {
   font-size: var(--font-size-xs);
   color: var(--color-text-secondary);
 }
 
-.backup-status {
+.backup-alert {
   margin-top: var(--spacing-4);
-  padding: var(--spacing-3);
-  font-size: var(--font-size-sm);
-  color: var(--color-primary);
-  background: color-mix(in srgb, var(--color-primary) 8%, var(--color-surface));
-  border-radius: var(--radius-md);
-}
-
-.backup-error {
-  margin-top: var(--spacing-4);
-  padding: var(--spacing-3);
-  font-size: var(--font-size-sm);
-  color: #ef4444;
-  background: color-mix(in srgb, #ef4444 8%, var(--color-surface));
-  border-radius: var(--radius-md);
 }
 
 .backup-confirm-text {

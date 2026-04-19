@@ -9,7 +9,7 @@ import {
   type IssueSeverity,
 } from "../utils/integrityCheck";
 import { withDbMutation } from "../stores";
-import { Button, Modal } from "../design-system";
+import { Button, Modal, Page } from "../design-system";
 
 const issues = ref<IntegrityIssue[]>([]);
 const hasChecked = ref(false);
@@ -145,8 +145,8 @@ watch(ankiDataSig, () => {
 </script>
 
 <template>
-  <main class="db-check">
-    <div class="db-check__container">
+  <Page>
+    <template #title>
       <div class="db-check__header">
         <div class="db-check__title-row">
           <button class="db-check__back-btn" @click="goBack" title="Back to Browse">
@@ -168,130 +168,130 @@ watch(ankiDataSig, () => {
         </div>
         <p class="db-check__subtitle">Verify collection integrity and repair common issues.</p>
       </div>
+    </template>
 
-      <!-- Action bar -->
-      <div class="db-check__actions">
-        <Button
-          variant="primary"
-          size="md"
-          :loading="isChecking"
-          :disabled="!ankiDataSig || !getActiveSqliteBytes()"
-          @click="runCheck"
+    <!-- Action bar -->
+    <div class="db-check__actions">
+      <Button
+        variant="primary"
+        size="md"
+        :loading="isChecking"
+        :disabled="!ankiDataSig || !getActiveSqliteBytes()"
+        @click="runCheck"
+      >
+        {{ hasChecked ? "Re-run Check" : "Check Database" }}
+      </Button>
+
+      <div v-if="fixResult" class="db-check__fix-toast">
+        Fixed {{ fixResult.count }} item{{ fixResult.count !== 1 ? "s" : "" }} ({{
+          fixResult.type
+        }})
+      </div>
+    </div>
+
+    <!-- Results -->
+    <div v-if="hasChecked" class="db-check__results">
+      <!-- Summary -->
+      <div v-if="issues.length === 0" class="db-check__pass">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="40"
+          height="40"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
         >
-          {{ hasChecked ? "Re-run Check" : "Check Database" }}
-        </Button>
-
-        <div v-if="fixResult" class="db-check__fix-toast">
-          Fixed {{ fixResult.count }} item{{ fixResult.count !== 1 ? "s" : "" }} ({{
-            fixResult.type
-          }})
-        </div>
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+          <path d="m9 11 3 3L22 4" />
+        </svg>
+        <p>No issues found. Your collection looks healthy!</p>
       </div>
 
-      <!-- Results -->
-      <div v-if="hasChecked" class="db-check__results">
-        <!-- Summary -->
-        <div v-if="issues.length === 0" class="db-check__pass">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="40"
-            height="40"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
+      <template v-else>
+        <div class="db-check__summary">
+          <span
+            v-if="errorCount() > 0"
+            class="db-check__summary-badge db-check__summary-badge--error"
           >
-            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-            <path d="m9 11 3 3L22 4" />
-          </svg>
-          <p>No issues found. Your collection looks healthy!</p>
+            {{ errorCount() }} error{{ errorCount() !== 1 ? "s" : "" }}
+          </span>
+          <span
+            v-if="warningCount() > 0"
+            class="db-check__summary-badge db-check__summary-badge--warning"
+          >
+            {{ warningCount() }} warning{{ warningCount() !== 1 ? "s" : "" }}
+          </span>
+          <span class="db-check__summary-total">
+            {{ issues.length }} issue{{ issues.length !== 1 ? "s" : "" }} found
+          </span>
         </div>
 
-        <template v-else>
-          <div class="db-check__summary">
-            <span
-              v-if="errorCount() > 0"
-              class="db-check__summary-badge db-check__summary-badge--error"
+        <!-- Issue groups -->
+        <div v-for="issue in issues" :key="issue.type" class="db-check__issue">
+          <button class="db-check__issue-header" @click="toggleIssue(issue.type)">
+            <svg
+              :class="[
+                'db-check__chevron',
+                { 'db-check__chevron--open': expandedIssues.has(issue.type) },
+              ]"
+              xmlns="http://www.w3.org/2000/svg"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
             >
-              {{ errorCount() }} error{{ errorCount() !== 1 ? "s" : "" }}
-            </span>
+              <path d="m9 18 6-6-6-6" />
+            </svg>
+
             <span
-              v-if="warningCount() > 0"
-              class="db-check__summary-badge db-check__summary-badge--warning"
-            >
-              {{ warningCount() }} warning{{ warningCount() !== 1 ? "s" : "" }}
+              class="db-check__severity-dot"
+              :style="{ background: severityColor(issue.severity) }"
+              :title="severityLabel(issue.severity)"
+            />
+
+            <span class="db-check__issue-title">{{ issue.title }}</span>
+
+            <span class="db-check__issue-count">
+              {{ issue.count }} item{{ issue.count !== 1 ? "s" : "" }}
             </span>
-            <span class="db-check__summary-total">
-              {{ issues.length }} issue{{ issues.length !== 1 ? "s" : "" }} found
+
+            <span class="db-check__severity-tag" :data-severity="issue.severity">
+              {{ severityLabel(issue.severity) }}
             </span>
-          </div>
+          </button>
 
-          <!-- Issue groups -->
-          <div v-for="issue in issues" :key="issue.type" class="db-check__issue">
-            <button class="db-check__issue-header" @click="toggleIssue(issue.type)">
-              <svg
-                :class="[
-                  'db-check__chevron',
-                  { 'db-check__chevron--open': expandedIssues.has(issue.type) },
-                ]"
-                xmlns="http://www.w3.org/2000/svg"
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <path d="m9 18 6-6-6-6" />
-              </svg>
+          <div v-if="expandedIssues.has(issue.type)" class="db-check__issue-body">
+            <p class="db-check__issue-desc">{{ issue.description }}</p>
 
-              <span
-                class="db-check__severity-dot"
-                :style="{ background: severityColor(issue.severity) }"
-                :title="severityLabel(issue.severity)"
-              />
+            <ul class="db-check__details">
+              <li v-for="(detail, idx) in issue.details" :key="idx">
+                {{ detail }}
+              </li>
+              <li v-if="issue.count > issue.details.length" class="db-check__details-more">
+                ...and {{ issue.count - issue.details.length }} more
+              </li>
+            </ul>
 
-              <span class="db-check__issue-title">{{ issue.title }}</span>
-
-              <span class="db-check__issue-count">
-                {{ issue.count }} item{{ issue.count !== 1 ? "s" : "" }}
-              </span>
-
-              <span class="db-check__severity-tag" :data-severity="issue.severity">
-                {{ severityLabel(issue.severity) }}
-              </span>
-            </button>
-
-            <div v-if="expandedIssues.has(issue.type)" class="db-check__issue-body">
-              <p class="db-check__issue-desc">{{ issue.description }}</p>
-
-              <ul class="db-check__details">
-                <li v-for="(detail, idx) in issue.details" :key="idx">
-                  {{ detail }}
-                </li>
-                <li v-if="issue.count > issue.details.length" class="db-check__details-more">
-                  ...and {{ issue.count - issue.details.length }} more
-                </li>
-              </ul>
-
-              <div v-if="issue.fixable" class="db-check__issue-fix">
-                <Button variant="primary" size="sm" @click.stop="handleFix(issue)">
-                  Fix {{ issue.title }}
-                </Button>
-              </div>
+            <div v-if="issue.fixable" class="db-check__issue-fix">
+              <Button variant="primary" size="sm" @click.stop="handleFix(issue)">
+                Fix {{ issue.title }}
+              </Button>
             </div>
           </div>
-        </template>
-      </div>
+        </div>
+      </template>
+    </div>
 
-      <!-- No deck loaded -->
-      <div v-else-if="!ankiDataSig || !getActiveSqliteBytes()" class="db-check__empty">
-        <p>No synced collection loaded. Import or sync a collection first.</p>
-      </div>
+    <!-- No deck loaded -->
+    <div v-else-if="!ankiDataSig || !getActiveSqliteBytes()" class="db-check__empty">
+      <p>No synced collection loaded. Import or sync a collection first.</p>
     </div>
 
     <!-- Fix confirmation modal -->
@@ -316,22 +316,12 @@ watch(ankiDataSig, () => {
         </Button>
       </template>
     </Modal>
-  </main>
+  </Page>
 </template>
 
 <style scoped>
-.db-check {
-  min-height: calc(100vh - 44px);
-  padding: var(--spacing-6) var(--spacing-4);
-}
-
-.db-check__container {
-  max-width: 900px;
-  margin: 0 auto;
-}
-
 .db-check__header {
-  margin-bottom: var(--spacing-6);
+  margin-bottom: var(--spacing-4);
 }
 
 .db-check__title-row {
