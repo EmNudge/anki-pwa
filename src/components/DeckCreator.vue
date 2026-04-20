@@ -34,29 +34,24 @@ function exportDeck() {
 </script>
 
 <template>
-  <Page>
-    <template #title>
-      <div>
-        <h2>Create Deck</h2>
-        <div class="mode-toggle">
-          <button
-            :class="['mode-btn', { 'mode-btn--active': mode === 'manual' }]"
-            @click="mode = 'manual'"
-          >
-            Manual
-          </button>
-          <button
-            :class="['mode-btn', { 'mode-btn--active': mode === 'csv' }]"
-            @click="mode = 'csv'"
-          >
-            CSV Import
-          </button>
-          <button :class="['mode-btn', { 'mode-btn--active': mode === 'ai' }]" @click="mode = 'ai'">
-            AI Generate
-          </button>
-        </div>
-      </div>
-    </template>
+  <Page title="Create Deck">
+    <div class="mode-toggle">
+      <button
+        :class="['mode-btn', { 'mode-btn--active': mode === 'manual' }]"
+        @click="mode = 'manual'"
+      >
+        Manual
+      </button>
+      <button
+        :class="['mode-btn', { 'mode-btn--active': mode === 'csv' }]"
+        @click="mode = 'csv'"
+      >
+        CSV Import
+      </button>
+      <button :class="['mode-btn', { 'mode-btn--active': mode === 'ai' }]" @click="mode = 'ai'">
+        AI Generate
+      </button>
+    </div>
 
     <template v-if="mode === 'manual'">
       <p class="description">
